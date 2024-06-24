@@ -1,0 +1,4 @@
+FitCycles/FitCycles
+*.o
+*.dSYM
+.DS_Store
