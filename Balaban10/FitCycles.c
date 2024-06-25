@@ -451,8 +451,7 @@ uint8_t* adj_load(char* filename, uint16_t* num_vertices, uint16_t* num_edges) {
   fclose(fp);
 
   if (PRINT_PROGRESS) {
-    fprintf(stderr, "Read the adjacency list from %s\n",
-            ADJACENCY_LIST_FILENAME);
+    fprintf(stderr, "Read the adjacency list from %s\n", filename);
     fprintf(stderr, "\tNumber of vertices: %d\n", *num_vertices);
     fprintf(stderr, "\tNumber of edges: %d (%d directed)\n", *num_edges,
             2 * *num_edges);
@@ -537,7 +536,7 @@ uint8_t* cycle_load(char* filename, uint8_t* cycle_length,
   fclose(fp);
 
   if (PRINT_PROGRESS) {
-    fprintf(stderr, "Read the cycles from %s\n", CYCLES_FILENAME);
+    fprintf(stderr, "Read the cycles from %s\n", filename);
     fprintf(stderr, "\tCycle length: %d\n", *cycle_length);
     fprintf(stderr, "\tNumber of cycles: %d\n", *num_cycles);
     fprintf(stderr, "\tFirst 5 cycles:\n");
@@ -600,8 +599,7 @@ uint32_t* cbv_load(char* filename, uint16_t num_vertices, uint8_t* cycles,
   fclose(fp);
 
   if (PRINT_PROGRESS) {
-    fprintf(stderr, "Read the cycles by vertex from %s\n",
-            CYCLES_BY_VERTEX_FILENAME);
+    fprintf(stderr, "Read the cycles by vertex from %s\n", filename);
     fprintf(stderr, "\tMax cycles per vertex: %d\n", *max_cycles_per_vertex);
     fprintf(stderr, "\tFirst 2 cycles of vertex 0 and 1:\n");
     for (uint16_t i = 0; i < 2; i++) {

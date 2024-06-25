@@ -1,7 +1,7 @@
 all: FitCycles
 
 run: FitCycles
-	./FitCycles > FitCycles.out
+	./FitCycles
 
 FitCycles: FitCycles.c
 	gcc -Wall -std=c17 -pedantic -g -o FitCycles FitCycles.c
