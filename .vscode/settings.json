@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.sentryclirc": "txt",
+        "stdbool.h": "c"
+    }
+}
