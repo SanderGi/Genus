@@ -1,8 +1,8 @@
-// Attempts to fit length 10 cycles onto the given graph.
-// A fitting must use each directed edge exactly once.
-// Outputs a list of fitting cycles if they exist, or an error message if they
-// don't. Optionally prints progress messages to stderr.
-// Run with `make run`
+// Narrows down the genus of a 3 regular graph given its adjacency list.
+// Prints the maximum cycle fitting as evidence. A fitting is a set of simple
+// cycles (length greater than 2) that use each directed edge exactly once.
+// These are the faces in Euler's formula: F - E + V = 2 - 2g. Run with `make
+// run`
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -14,9 +14,9 @@
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
 #define DEBUG false          // whether to print debug messages
-#define ADJACENCY_LIST_FILENAME "adjacency_list.txt"  // input file
+#define ADJACENCY_LIST_FILENAME "adjacency_lists/balaban11.txt"  // input file
 #define ADJACENCY_LIST_START 0  // change if vertex numbering doesn't start at 0
-#define OUTPUT_FILENAME "FitCycles.out"  // output file
+#define OUTPUT_FILENAME "CalcGenus.out"  // output file
 
 // assumptions of the program (don't change these):
 #define VERTEX_DEGREE 3
@@ -27,6 +27,7 @@
 #define MAX_CYCLES 4294967295
 
 // consequences of assumptions:
+#define START_CYCLE_LENGTH 3
 typedef uint8_t degree_t;
 #define PRIdegree_t PRIu8
 typedef uint16_t vertex_t;
@@ -68,8 +69,8 @@ bool adj_has_edge(adj_t adjacency_list, vertex_t start_vertex,
 
 cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
                         cycle_length_t cycle_length, cycle_index_t* num_cycles);
-vertex_t* cycle_get(cycles_t cycles, cycle_length_t cycle_length,
-                    cycle_index_t cycle_index);
+vertex_t* cycle_get(cycles_t cycles, cycle_length_t max_cycle_length,
+                    cycle_index_t cycle_index, cycle_length_t* cycle_length);
 
 cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
                             cycle_index_t num_cycles,
@@ -83,15 +84,30 @@ cycle_index_t* cbv_get_cycle_indices(cbv_t cycles_by_vertex,
 void show_progress(double fraction);
 
 bool is_ijk_good(bool* used_cycles, cycles_t cycles,
-                 cycle_length_t cycle_length, cycle_index_t num_cycles,
+                 cycle_length_t max_cycle_length, cycle_index_t num_cycles,
                  cycle_index_t cycle_to_check);
-bool search(cycle_index_t cycles_to_use, bool* used_cycles,  // state
-            degree_t* vertex_uses, cycle_index_t* max_fit,   // state
-            uint64_t* num_search_calls,                      // state
+bool search(cycle_index_t cycles_to_use,                    // state
+            cycle_index_t max_used_cycles,                  // state
+            bool* used_cycles,                              // state
+            degree_t* vertex_uses, cycle_index_t* max_fit,  // state
+            uint64_t* num_search_calls,                     // state
             vertex_t num_vertices, edge_t num_edges, adj_t adjacency_list,
-            cycle_length_t cycle_length, cycle_index_t num_cycles,
+            cycle_length_t max_cycle_length, cycle_index_t num_cycles,
             cycles_t cycles, cycle_index_t max_cycles_per_vertex,
             cbv_t cycles_by_vertex);
+
+cycle_index_t implied_max_fit_for_genus(cycle_index_t genus,
+                                        vertex_t num_vertices,
+                                        edge_t num_edges) {
+  return num_edges - num_vertices + 2 - 2 * genus;
+}
+
+cycle_index_t implied_max_genus_for_fit(cycle_index_t fit,
+                                        vertex_t num_vertices,
+                                        edge_t num_edges) {
+  int64_t val = 1 - ((int64_t)fit - num_edges + num_vertices) / 2;
+  return val < 0 ? 0 : val;
+}
 
 int main(void) {
   if (PRINT_PROGRESS) {
@@ -103,84 +119,240 @@ int main(void) {
   adj_t adjacency_list =
       adj_load(ADJACENCY_LIST_FILENAME, &num_vertices, &num_edges);
 
-  if (PRINT_PROGRESS) {
-    fprintf(stderr, "Generating auxiliary data structures...\n");
-  }
-
-  cycle_length_t cycle_length = 10;
-  cycle_index_t num_cycles;
-  cycles_t cycles =
-      cycle_generate(adjacency_list, num_vertices, cycle_length, &num_cycles);
-
-  assert(cycle_length <= num_vertices,
-         "Cycle length (%" PRIcycle_length_t
-         ") must be less than or equal to the number of "
-         "vertices (%" PRIvertex_t ")\n",
-         cycle_length, num_vertices);
-
-  cycle_index_t max_cycles_per_vertex;
-  cbv_t cycles_by_vertex = cbv_generate(num_vertices, cycles, num_cycles,
-                                        cycle_length, &max_cycles_per_vertex);
-
   output_file = fopen(OUTPUT_FILENAME, "w");
 
+  cycle_index_t genus_lower_bound = implied_max_genus_for_fit(
+      2 * num_edges / START_CYCLE_LENGTH, num_vertices, num_edges);
+  cycle_index_t genus_lower_bound_implied_fit =
+      implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
+  cycle_index_t genus_upper_bound =
+      implied_max_genus_for_fit(0, num_vertices, num_edges);
+
   if (PRINT_PROGRESS) {
-    fprintf(stderr, "Starting search...\n");
+    fprintf(
+        stderr,
+        "Beginning to narrow down genus (currently between %" PRIcycle_index_t
+        " and %" PRIcycle_index_t " with implied fit %" PRIcycle_index_t
+        ")...\n",
+        genus_lower_bound, genus_upper_bound, genus_lower_bound_implied_fit);
   }
-  show_progress(0.0);
 
-  // keep track of used cycles and vertices
-  cycle_index_t cycles_to_use = 2 * num_edges / cycle_length;
-  bool* used_cycles = (bool*)malloc(num_cycles * sizeof(bool));
-  assert(used_cycles != NULL, "Error allocating memory for the used cycles\n");
-  for (cycle_index_t i = 0; i < num_cycles; i++) {
-    used_cycles[i] = false;
-  }
-  // vertices should be used exactly VERTEX_USE_LIMIT times
-  // so we keep track of the number of times each vertex has been used.
-  // this allows us to fail early if a vertex can't be used enough times
-  // and to prioritize vertices exploring vertices that have been used more
-  // since they constrain the number of possible cycles containing them more
-  degree_t* vertex_uses = (degree_t*)malloc(num_vertices * sizeof(degree_t));
-  assert(vertex_uses != NULL,
-         "Error allocating memory for the vertices most used order\n");
-
-  // search for a solution that starts with one of the cycles
   cycle_index_t max_fit = 0;
   uint64_t num_search_calls = 0;
-  for (cycle_index_t c = 0; c < num_cycles; c++) {
-    if (DEBUG) fprintf(stderr, "\nTrying cycle %d\n", c);
-
-    // default all vertices to 0 uses
-    for (vertex_t i = 0; i < num_vertices; i++) {
-      vertex_uses[i] = 0;
+  cycle_length_t smallest_cycle_length = num_vertices;
+  cycles_t cycles = NULL;
+  cycle_index_t num_cycles = 0;
+  cycle_length_t cycles_max_cycle_length = 0;
+  for (cycle_length_t cur_max_cycle_length = START_CYCLE_LENGTH;
+       cur_max_cycle_length <= num_vertices; cur_max_cycle_length++) {
+    if (PRINT_PROGRESS) {
+      fprintf(stderr,
+              "Loading auxiliary data structures for cycles of length "
+              "%" PRIcycle_length_t "... ",
+              cur_max_cycle_length);
     }
 
-    // mark start cycle as used
-    used_cycles[c] = true;
-    cycles_to_use--;
-    cycles_t cycle = cycle_get(cycles, cycle_length, c);
-    for (cycle_length_t i = 0; i < cycle_length; i++) {
-      adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+    cycle_index_t num_new_cycles;
+    cycles_t new_cycles = cycle_generate(adjacency_list, num_vertices,
+                                         cur_max_cycle_length, &num_new_cycles);
+    num_cycles += num_new_cycles;
 
-      // mark cycle vertices as used once
-      vertex_uses[cycle[i]] = 1;
-    }
-
-    if (search(cycles_to_use, used_cycles, vertex_uses, &max_fit,
-               &num_search_calls, num_vertices, num_edges, adjacency_list,
-               cycle_length, num_cycles, cycles, max_cycles_per_vertex,
-               cycles_by_vertex)) {
-      // Success!
-      show_progress(1.0);
+    // no cycles of this length, skip to the next length
+    if (num_new_cycles == 0) {
       if (PRINT_PROGRESS) {
-        fprintf(stderr, "\nFound a solution! Check the output to see it.\n");
+        fprintf(stderr,
+                "No cycles of length %" PRIcycle_length_t " found. Skipping.\n",
+                cur_max_cycle_length);
       }
-      fprintf(output_file, "Solution found in %" PRId64 " iterations:\n",
-              num_search_calls);
+      continue;
+    }
+    if (PRINT_PROGRESS) {
+      fprintf(stderr,
+              "Found %" PRIcycle_index_t " cycles of length %" PRIcycle_length_t
+              ".\n",
+              num_new_cycles, cur_max_cycle_length);
+    }
+
+    // keep the smallest cycle length up to date
+    if (cur_max_cycle_length < smallest_cycle_length) {
+      smallest_cycle_length = cur_max_cycle_length;
+    }
+
+    // the smallest cycle length limits how many cycles we can fit and hence the
+    // genus
+    cycle_index_t genus_lower_bound_from_smallest_cycle_length =
+        implied_max_genus_for_fit(2 * num_edges / smallest_cycle_length,
+                                  num_vertices, num_edges);
+    if (genus_lower_bound_from_smallest_cycle_length > genus_lower_bound) {
+      genus_lower_bound = genus_lower_bound_from_smallest_cycle_length;
+      genus_lower_bound_implied_fit =
+          implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
+    }
+
+    // add the new cycles to the old ones
+    if (cycles == NULL) {
+      cycles = new_cycles;
+      cycles_max_cycle_length = cur_max_cycle_length;
+    } else {
+      cycles_t combined = (cycles_t)malloc(
+          num_cycles * (cur_max_cycle_length + 2) * sizeof(vertex_t));
+      assert(combined != NULL,
+             "Error allocating memory for the combined cycles\n");
+      for (cycle_index_t i = 0; i < num_cycles - num_new_cycles; i++) {
+        for (cycle_length_t j = 0; j < cycles_max_cycle_length + 2; j++) {
+          combined[i * (cur_max_cycle_length + 2) + j] =
+              cycles[i * (cycles_max_cycle_length + 2) + j];
+        }
+      }
+      for (cycle_index_t i = 0; i < num_new_cycles; i++) {
+        for (cycle_length_t j = 0; j < cur_max_cycle_length + 2; j++) {
+          combined[(num_cycles - num_new_cycles + i) *
+                       (cur_max_cycle_length + 2) +
+                   j] = new_cycles[i * (cur_max_cycle_length + 2) + j];
+        }
+      }
+      cycles_max_cycle_length = cur_max_cycle_length;
+      free(cycles);
+      free(new_cycles);
+      cycles = combined;
+    }
+
+    // if (cur_max_cycle_length == 12) {
+    //   continue;
+    // }  // TODO
+
+    cycle_index_t max_cycles_per_vertex;
+    cbv_t cycles_by_vertex =
+        cbv_generate(num_vertices, cycles, num_cycles, cur_max_cycle_length,
+                     &max_cycles_per_vertex);
+
+    if (PRINT_PROGRESS) {
+      fprintf(
+          stderr,
+          "Starting search for fit with %" PRIcycle_index_t
+          " cycles or proof it doesn't exist (genus between %" PRIcycle_index_t
+          " and %" PRIcycle_index_t ")...\n",
+          genus_lower_bound_implied_fit, genus_lower_bound, genus_upper_bound);
+    }
+    show_progress(0.0);
+
+    // keep track of used cycles and vertices
+    bool* used_cycles = (bool*)malloc(num_cycles * sizeof(bool));
+    assert(used_cycles != NULL,
+           "Error allocating memory for the used cycles\n");
+    for (cycle_index_t i = 0; i < num_cycles; i++) {
+      used_cycles[i] = false;
+    }
+    // vertices should be used exactly VERTEX_USE_LIMIT times
+    // so we keep track of the number of times each vertex has been used.
+    // this allows us to fail early if a vertex can't be used enough times
+    // and to prioritize vertices exploring vertices that have been used more
+    // since they constrain the number of possible cycles containing them more
+    degree_t* vertex_uses = (degree_t*)malloc(num_vertices * sizeof(degree_t));
+    assert(vertex_uses != NULL,
+           "Error allocating memory for the vertices most used order\n");
+
+    // search for a solution that starts with one of the cycles
+    for (cycle_index_t c = 0; c < num_cycles; c++) {
+      // default all vertices to 0 uses
+      for (vertex_t i = 0; i < num_vertices; i++) {
+        vertex_uses[i] = 0;
+      }
+
+      // mark start cycle as used
+      used_cycles[c] = true;
+      cycle_length_t cycle_length;
+      cycles_t cycle =
+          cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
+      for (cycle_length_t i = 0; i < cycle_length; i++) {
+        adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+
+        // mark cycle vertices as used once
+        vertex_uses[cycle[i]] = 1;
+      }
+
+      if (search(genus_lower_bound_implied_fit - 1,
+                 genus_lower_bound_implied_fit, used_cycles, vertex_uses,
+                 &max_fit, &num_search_calls, num_vertices, num_edges,
+                 adjacency_list, cur_max_cycle_length, num_cycles, cycles,
+                 max_cycles_per_vertex, cycles_by_vertex)) {
+        // Success!
+        show_progress(1.0);
+        if (PRINT_PROGRESS) {
+          fprintf(stderr,
+                  "\nFound a solution! The genus is %" PRIcycle_index_t
+                  ". Check the output for the %" PRIcycle_index_t " cycles. \n",
+                  genus_lower_bound, genus_lower_bound_implied_fit);
+        }
+        fprintf(output_file,
+                "Solution with %" PRIcycle_index_t " cycles found in %" PRId64
+                " iterations:\n",
+                genus_lower_bound_implied_fit, num_search_calls);
+        for (cycle_index_t i = 0; i < num_cycles; i++) {
+          if (used_cycles[i]) {
+            cycles_t cycle =
+                cycle_get(cycles, cur_max_cycle_length, i, &cycle_length);
+            for (cycle_length_t j = 0; j < cycle_length + 1; j++) {
+              fprintf(output_file, "%" PRIvertex_t " ",
+                      cycle[j] + ADJACENCY_LIST_START);
+            }
+            fprintf(output_file, "\n");
+          }
+        }
+        free(adjacency_list);
+        free(cycles);
+        free(cycles_by_vertex);
+        free(used_cycles);
+        fclose(output_file);
+        return 0;
+      }
+
+      // mark start cycle as unused
+      used_cycles[c] = false;
+      for (cycle_length_t i = 0; i < cycle_length; i++) {
+        adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+      }
+
+      show_progress(c / (double)num_cycles);
+    }
+
+    show_progress(1.0);
+
+    // we weren't able to find the implied fit, so the bounds need adjusting
+    if ((2 * num_edges - cur_max_cycle_length - 1) / smallest_cycle_length <
+        genus_lower_bound_implied_fit - 1) {
+      genus_lower_bound++;
+      if (PRINT_PROGRESS) {
+        fprintf(stderr, "\nFound proof the implied fit does not exist. ");
+      }
+    } else if (PRINT_PROGRESS) {
+      fprintf(stderr,
+              "\nDid not find proof the fit does not exist, cannot increase "
+              "lowerbound. ");
+    }
+    genus_lower_bound_implied_fit =
+        implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
+    // as a bonus, we might have found a better upper bound
+    genus_upper_bound =
+        implied_max_genus_for_fit(max_fit, num_vertices, num_edges);
+
+    if (genus_lower_bound == genus_upper_bound) {
+      // we've found the genus!
+      if (PRINT_PROGRESS) {
+        fprintf(stderr,
+                "\nFound the genus! It is %" PRIcycle_index_t
+                ". Check the "
+                "output for the %" PRIcycle_index_t " cycles. \n",
+                genus_lower_bound, max_fit);
+      }
+      fprintf(output_file,
+              "Genus found: %" PRIcycle_index_t " in %" PRId64 " iterations:\n",
+              genus_lower_bound, num_search_calls);
       for (cycle_index_t i = 0; i < num_cycles; i++) {
         if (used_cycles[i]) {
-          cycles_t cycle = cycle_get(cycles, cycle_length, i);
+          cycle_length_t cycle_length;
+          cycles_t cycle =
+              cycle_get(cycles, cur_max_cycle_length, i, &cycle_length);
           for (cycle_length_t j = 0; j < cycle_length + 1; j++) {
             fprintf(output_file, "%" PRIvertex_t " ",
                     cycle[j] + ADJACENCY_LIST_START);
@@ -188,39 +360,33 @@ int main(void) {
           fprintf(output_file, "\n");
         }
       }
-      free(adjacency_list);
-      free(cycles);
-      free(cycles_by_vertex);
       free(used_cycles);
       free(vertex_uses);
+      free(adjacency_list);
       fclose(output_file);
       return 0;
     }
+    assert(genus_lower_bound < genus_upper_bound,
+           "Error: genus lower bound is greater than upper bound\n");
 
-    // mark start cycle as unused
-    cycles_to_use++;
-    used_cycles[c] = false;
-    for (cycle_length_t i = 0; i < cycle_length; i++) {
-      adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+    if (PRINT_PROGRESS) {
+      fprintf(stderr,
+              "Narrowing down the genus to "
+              "between %" PRIcycle_index_t " and %" PRIcycle_index_t
+              ". Used %" PRId64 " iterations so far.\n",
+              genus_lower_bound, genus_upper_bound, num_search_calls);
     }
-
-    show_progress(c / (double)num_cycles);
+    free(used_cycles);
+    free(vertex_uses);
   }
 
-  show_progress(1.0);
-  if (PRINT_PROGRESS) {
-    fprintf(stderr,
-            "\nDone. Did not find any solutions. Was only able to fit "
-            "%" PRIcycle_index_t " cycles. Used %" PRId64 " iterations.\n",
-            max_fit, num_search_calls);
-  }
+  fprintf(stderr,
+          "Was not able to fit any cycles. Double check the settings "
+          "and adjacency list.\n");
+
   free(adjacency_list);
-  free(cycles);
-  free(cycles_by_vertex);
-  free(used_cycles);
-  free(vertex_uses);
   fclose(output_file);
-  return 0;
+  return 1;
 }
 
 void show_progress(double fraction) {
@@ -246,9 +412,13 @@ void show_progress(double fraction) {
 // i occurs in the cycle_to_check return false
 // if no such sequence occurs return true
 bool is_ijk_good(bool* used_cycles, cycles_t cycles,
-                 cycle_length_t cycle_length, cycle_index_t num_cycles,
+                 cycle_length_t max_cycle_length, cycle_index_t num_cycles,
                  cycle_index_t cycle_to_check) {
-  vertex_t* cycle = cycle_get(cycles, cycle_length, cycle_to_check);
+  // TODO: optimize by storing the rotation in the adjacency list as cycles are
+  // added
+  cycle_length_t cycle_length;
+  vertex_t* cycle =
+      cycle_get(cycles, max_cycle_length, cycle_to_check, &cycle_length);
 
   vertex_t* padded_cycle =
       (vertex_t*)malloc((cycle_length + 2) * sizeof(vertex_t));
@@ -262,20 +432,22 @@ bool is_ijk_good(bool* used_cycles, cycles_t cycles,
 
   for (cycle_index_t c = 0; c < num_cycles; c++) {
     if (used_cycles[c]) {
-      vertex_t* other_cycle = cycle_get(cycles, cycle_length, c);
+      cycle_length_t other_cycle_length;
+      vertex_t* other_cycle =
+          cycle_get(cycles, max_cycle_length, c, &other_cycle_length);
 
       vertex_t* padded_other_cycle =
-          (vertex_t*)malloc((cycle_length + 2) * sizeof(vertex_t));
+          (vertex_t*)malloc((other_cycle_length + 2) * sizeof(vertex_t));
       assert(padded_other_cycle != NULL,
              "Error allocating memory for the padded other cycle\n");
-      for (cycle_length_t i = 0; i < cycle_length; i++) {
+      for (cycle_length_t i = 0; i < other_cycle_length; i++) {
         padded_other_cycle[i] = other_cycle[i];
       }
-      padded_other_cycle[cycle_length] = other_cycle[0];
-      padded_other_cycle[cycle_length + 1] = other_cycle[1];
+      padded_other_cycle[other_cycle_length] = other_cycle[0];
+      padded_other_cycle[other_cycle_length + 1] = other_cycle[1];
 
       for (cycle_length_t i = 0; i < cycle_length; i++) {
-        for (cycle_length_t j = 0; j < cycle_length; j++) {
+        for (cycle_length_t j = 0; j < other_cycle_length; j++) {
           if (padded_cycle[i] == padded_other_cycle[j + 2] &&
               padded_cycle[i + 1] == padded_other_cycle[j + 1] &&
               padded_cycle[i + 2] == padded_other_cycle[j]) {
@@ -294,11 +466,13 @@ bool is_ijk_good(bool* used_cycles, cycles_t cycles,
   return true;
 }
 
-bool search(cycle_index_t cycles_to_use, bool* used_cycles,  // state
-            degree_t* vertex_uses, cycle_index_t* max_fit,   // state
-            uint64_t* num_search_calls,                      // state
+bool search(cycle_index_t cycles_to_use,                    // state
+            cycle_index_t max_used_cycles,                  // state
+            bool* used_cycles,                              // state
+            degree_t* vertex_uses, cycle_index_t* max_fit,  // state
+            uint64_t* num_search_calls,                     // state
             vertex_t num_vertices, edge_t num_edges, adj_t adjacency_list,
-            cycle_length_t cycle_length, cycle_index_t num_cycles,
+            cycle_length_t max_cycle_length, cycle_index_t num_cycles,
             cycles_t cycles, cycle_index_t max_cycles_per_vertex,
             cbv_t cycles_by_vertex) {
   (*num_search_calls)++;
@@ -324,15 +498,16 @@ bool search(cycle_index_t cycles_to_use, bool* used_cycles,  // state
   }
 
   // if we've reached a new maximum fit, print it
-  if (2 * num_edges / cycle_length - cycles_to_use > *max_fit) {
-    *max_fit = 2 * num_edges / cycle_length - cycles_to_use;
+  if (max_used_cycles - cycles_to_use > *max_fit) {
+    *max_fit = max_used_cycles - cycles_to_use;
     fprintf(output_file,
             "New max fit: %" PRIcycle_index_t
             " (about to try vertex %" PRIvertex_t ")\n",
             *max_fit, vertex);
     for (cycle_index_t i = 0; i < num_cycles; i++) {
       if (used_cycles[i]) {
-        vertex_t* cycle = cycle_get(cycles, cycle_length, i);
+        cycle_length_t cycle_length;
+        vertex_t* cycle = cycle_get(cycles, max_cycle_length, i, &cycle_length);
         for (cycle_length_t j = 0; j < cycle_length + 1; j++) {
           fprintf(output_file, "%" PRIvertex_t " ",
                   cycle[j] + ADJACENCY_LIST_START);
@@ -357,7 +532,9 @@ bool search(cycle_index_t cycles_to_use, bool* used_cycles,  // state
       continue;
     }
 
-    vertex_t* cycle = cycle_get(cycles, cycle_length, cycle_index);
+    cycle_length_t cycle_length;
+    vertex_t* cycle =
+        cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
 
     // cycle is only usable if all edges are available
     bool can_use = true;
@@ -372,14 +549,12 @@ bool search(cycle_index_t cycles_to_use, bool* used_cycles,  // state
     }
 
     // make sure the cycle satisfies the ijk condition
-    if (!is_ijk_good(used_cycles, cycles, cycle_length, num_cycles,
+    if (!is_ijk_good(used_cycles, cycles, max_cycle_length, num_cycles,
                      cycle_index)) {
       continue;
     }
 
     // use the cycle
-    if (DEBUG)
-      fprintf(stderr, "Using cycle %" PRIcycle_index_t "\n", cycle_index);
     used_cycles[cycle_index] = true;
     for (cycle_length_t j = 0; j < cycle_length; j++) {
       adj_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
@@ -395,10 +570,10 @@ bool search(cycle_index_t cycles_to_use, bool* used_cycles,  // state
       return true;
     }
     // otherwise, continue adding cycles
-    if (search(cycles_to_use - 1, used_cycles, vertex_uses, max_fit,
-               num_search_calls, num_vertices, num_edges, adjacency_list,
-               cycle_length, num_cycles, cycles, max_cycles_per_vertex,
-               cycles_by_vertex)) {
+    if (search(cycles_to_use - 1, max_used_cycles, used_cycles, vertex_uses,
+               max_fit, num_search_calls, num_vertices, num_edges,
+               adjacency_list, max_cycle_length, num_cycles, cycles,
+               max_cycles_per_vertex, cycles_by_vertex)) {
       return true;  // as soon as we succeed, we're done
     }
 
@@ -556,14 +731,14 @@ void fifo_free(struct fifo* fifo) {
 cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
                         cycle_length_t cycle_length,
                         cycle_index_t* num_cycles) {
-  vertex_t* buffer = (vertex_t*)malloc((cycle_length + 1) * sizeof(vertex_t));
+  vertex_t* buffer = (vertex_t*)malloc((cycle_length + 2) * sizeof(vertex_t));
 
   struct fifo cycle_list;
-  fifo_init(&cycle_list, cycle_length * num_vertices, cycle_length + 1);
+  fifo_init(&cycle_list, cycle_length * num_vertices, cycle_length + 2);
   struct fifo queue;
-  fifo_init(&queue, cycle_length * num_vertices, cycle_length + 1);
+  fifo_init(&queue, cycle_length * num_vertices, cycle_length + 2);
 
-  for (cycle_length_t i = 2; i < cycle_length + 1; i++) {
+  for (cycle_length_t i = 2; i < cycle_length + 2; i++) {
     buffer[i] = 0;
   }
   for (vertex_t i = 0; i < num_vertices; i++) {
@@ -580,10 +755,7 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
     if (path_length == cycle_length) {
       for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
         if (neighbors[i] == path[0]) {
-          for (cycle_length_t j = 0; j < cycle_length; j++) {
-            buffer[j] = path[j];
-          }
-          buffer[cycle_length] = buffer[0];
+          buffer[cycle_length + 1] = path[0];
           fifo_push(&cycle_list, buffer);
           break;
         }
@@ -614,12 +786,12 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
   free(buffer);
   *num_cycles = fifo_size(&cycle_list);
   vertex_t* cycles = (vertex_t*)realloc(
-      cycle_list.data, *num_cycles * (cycle_length + 1) * sizeof(vertex_t));
+      cycle_list.data, *num_cycles * (cycle_length + 2) * sizeof(vertex_t));
   assert(cycles != NULL, "Error reallocating memory for the cycles\n");
   cycle_list.data = NULL;
   fifo_free(&cycle_list);
 
-  if (PRINT_PROGRESS) {
+  if (DEBUG) {
     fprintf(stderr, "Generated cycles of length: %" PRIcycle_length_t "\n",
             cycle_length);
     fprintf(stderr, "\tNumber of cycles: %" PRIcycle_index_t "\n", *num_cycles);
@@ -628,7 +800,7 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
       fprintf(stderr, "\t\t%d: ", i);
       for (cycle_length_t j = 0; j < cycle_length + 1; j++) {
         fprintf(stderr, "%02" PRIvertex_t " ",
-                cycle_get(cycles, cycle_length, i)[j]);
+                cycle_get(cycles, cycle_length, i, NULL)[j]);
       }
       fprintf(stderr, "\n");
     }
@@ -637,23 +809,29 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
   return cycles;
 }
 
-vertex_t* cycle_get(cycles_t cycles, cycle_length_t cycle_length,
-                    cycle_index_t cycle_index) {
-  return &cycles[cycle_index * (cycle_length + 1)];
+vertex_t* cycle_get(cycles_t cycles, cycle_length_t max_cycle_length,
+                    cycle_index_t cycle_index, cycle_length_t* cycle_length) {
+  vertex_t* row = &cycles[cycle_index * (max_cycle_length + 2)];
+  if (cycle_length != NULL) {
+    *cycle_length = row[0];
+  }
+  return &row[1];
 }
 
 cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
                             cycle_index_t num_cycles,
-                            cycle_length_t cycle_length,
+                            cycle_length_t max_cycle_length,
                             cycle_index_t* max_cycles_per_vertex) {
   // find the number of cycles per vertex
   cycle_index_t* cycles_per_vertex =
       (cycle_index_t*)malloc(num_vertices * sizeof(cycle_index_t));
   assert(cycles_per_vertex != NULL,
          "Error allocating memory for the cycles per vertex\n");
+  cycle_length_t cycle_length;
   for (cycle_index_t i = 0; i < num_cycles; i++) {
+    vertex_t* cycle = cycle_get(cycles, max_cycle_length, i, &cycle_length);
     for (cycle_length_t j = 0; j < cycle_length; j++) {
-      cycles_per_vertex[cycle_get(cycles, cycle_length, i)[j]]++;
+      cycles_per_vertex[cycle[j]]++;
     }
   }
 
@@ -677,8 +855,9 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
     for (cycle_index_t j = 0;
          j < num_cycles && num_cycles_for_vertex < cycles_per_vertex[i]; j++) {
       bool cycle_contains_vertex = false;
+      vertex_t* cycle = cycle_get(cycles, max_cycle_length, j, &cycle_length);
       for (cycle_length_t k = 0; k < cycle_length; k++) {
-        if (cycle_get(cycles, cycle_length, j)[k] == i) {
+        if (cycle[k] == i) {
           cycle_contains_vertex = true;
           break;
         }
@@ -693,7 +872,7 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
            "Error filling in the cycles by vertex\n")
   }
 
-  if (PRINT_PROGRESS) {
+  if (DEBUG) {
     fprintf(stderr, "Organized cycles by vertex\n");
     fprintf(stderr, "\tMax cycles per vertex: %" PRIcycle_index_t "\n",
             *max_cycles_per_vertex);
@@ -706,9 +885,10 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
       for (cycle_index_t j = 0; j < num_cycles && j < 2; j++) {
         fprintf(stderr, "\t\t\t%" PRIcycle_index_t " / %" PRIcycle_index_t ": ",
                 j, num_cycles);
+        vertex_t* cycle = cycle_get(cycles, max_cycle_length, cycle_indices[j],
+                                    &cycle_length);
         for (cycle_length_t h = 0; h < cycle_length + 1; h++) {
-          fprintf(stderr, "%02" PRIvertex_t " ",
-                  cycle_get(cycles, cycle_length, cycle_indices[j])[h]);
+          fprintf(stderr, "%02" PRIvertex_t " ", cycle[h]);
         }
         fprintf(stderr, "\n");
       }

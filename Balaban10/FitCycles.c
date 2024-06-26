@@ -117,7 +117,7 @@ int main(void) {
     exit(1);
   }
 
-  // search for a solution that starts with one of the cycles in this work part
+  // search for a solution that starts with one of the cycles
   uint8_t max_fit = 0;
   uint64_t num_search_calls = 0;
   for (uint32_t c = 0; c < num_cycles; c++) {
