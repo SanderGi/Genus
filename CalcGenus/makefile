@@ -1,11 +1,16 @@
+CC=gcc
+CPPC=g++
+BTYPE=Development
+BDIR=.
+
 all: CalcGenus
 
 run: CalcGenus
-	./CalcGenus
+	$(BDIR)/CalcGenus
 
 CalcGenus: CalcGenus.c
-	gcc -Wall -std=c17 -pedantic -g -o CalcGenus CalcGenus.c
+	$(CC) -Wall -std=c17 -pedantic -g -o $(BDIR)/CalcGenus CalcGenus.c
 
 clean:
-	rm -f CalcGenus *.o
-	rm -rf *.dSYM
+	rm -f $(BDIR)/CalcGenus $(BDIR)/*.o
+	rm -rf $(BDIR)/*.dSYM
