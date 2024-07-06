@@ -40,16 +40,16 @@ jobs:
       run: make all CC=${{ matrix.c_compiler }} CPPC=${{ matrix.cpp_compiler }} BTYPE=${{ matrix.build_type }} BDIR=${{ steps.strings.outputs.build-output-dir }}
 
     - name: release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: ${{ steps.version.outputs.version }}
-          tag_name: ${{ github.ref }}
-          body_path: README.md
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      uses: actions/create-release@v1
+      id: create_release
+      with:
+        draft: false
+        prerelease: false
+        release_name: ${{ steps.version.outputs.version }}
+        tag_name: ${{ github.ref }}
+        body_path: README.md
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
     - name: upload linux artifact
       uses: actions/upload-release-asset@v1
       env:
