@@ -46,7 +46,7 @@ jobs:
         draft: false
         prerelease: false
         release_name: Build ${{ github.run_number }}
-        tag_name: v${{ github.run_number }}
+        tag_name: v${{ github.run_number }}-${{ matrix.os }}-${{ matrix.build_type }}
         body: |
           Changes in this Release
           - Build ${{ github.run_number }}
