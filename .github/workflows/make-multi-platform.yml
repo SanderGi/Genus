@@ -55,6 +55,11 @@ jobs:
     - name: Create build directory
       run: mkdir -p ${{ steps.strings.outputs.build-output-dir }}
 
+    - name: Add cl to path if windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64"
+
     - name: Build
       working-directory: ./CalcGenus
       run: make all CC=${{ matrix.c_compiler }} CPPC=${{ matrix.cpp_compiler }} BTYPE=${{ matrix.build_type }} BDIR=${{ steps.strings.outputs.build-output-dir }}
