@@ -9,7 +9,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
