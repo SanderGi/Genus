@@ -9,7 +9,11 @@ run: CalcGenus
 	$(BDIR)/CalcGenus
 
 CalcGenus: CalcGenus.c
-	$(CC) -Wall -std=c17 -pedantic -g -o "$(BDIR)/CalcGenus" CalcGenus.c
+	if [ $(CC) = "cl" ]; then\
+		cl /std:c17 /W4 /Za /Fe"$(BDIR)/CalcGenus" CalcGenus.c;\
+	else\
+		$(CC) -Wall -std=c17 -pedantic -g -o "$(BDIR)/CalcGenus" CalcGenus.c;\
+    fi
 
 clean:
 	rm -f $(BDIR)/CalcGenus $(BDIR)/*.o
