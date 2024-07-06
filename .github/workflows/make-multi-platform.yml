@@ -16,6 +16,17 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         build_type: [Release]
         c_compiler: [gcc]
+        output_name: [CalcGenus, CalcGenus.exe]
+      include:
+        - os: ubuntu-latest
+          output_name: CalcGenus
+        - os: windows-latest
+          output_name: CalcGenus.exe
+      exclude:
+        - os: windows-latest
+          output_name: CalcGenus
+        - os: ubuntu-latest
+          output_name: CalcGenus.exe
 
     steps:
     - uses: actions/checkout@v4
