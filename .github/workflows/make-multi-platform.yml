@@ -52,6 +52,9 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
+    - name: Create build directory
+      run: mkdir -p ${{ steps.strings.outputs.build-output-dir }}
+
     - name: Build
       working-directory: ./CalcGenus
       run: make all CC=${{ matrix.c_compiler }} CPPC=${{ matrix.cpp_compiler }} BTYPE=${{ matrix.build_type }} BDIR=${{ steps.strings.outputs.build-output-dir }}
