@@ -46,7 +46,6 @@ jobs:
         draft: false
         prerelease: false
         release_name: Build ${{ github.run_number }}
-        tag_name: ${{ github.ref }}
         body: |
           Changes in this Release
           - Build ${{ github.run_number }}
