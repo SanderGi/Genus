@@ -71,6 +71,6 @@ jobs:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ steps.strings.outputs.build-output-dir }}/CalcGenus
+        asset_path: ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.output_name }}
         asset_name: CalcGenus-${{ matrix.os }}-${{ matrix.build_type }}
         asset_content_type: application/octet-stream
