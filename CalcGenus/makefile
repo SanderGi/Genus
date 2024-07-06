@@ -10,7 +10,7 @@ run: CalcGenus
 
 CalcGenus: CalcGenus.c
 	if [ $(CC) = "cl" ]; then\
-		cl /std:c17 /W4 /Za /Fe"$(BDIR)/CalcGenus" CalcGenus.c;\
+		cl.exe /std:c17 /W4 /Za /Fe"$(BDIR)/CalcGenus" CalcGenus.c;\
 	else\
 		$(CC) -Wall -std=c17 -pedantic -g -o "$(BDIR)/CalcGenus" CalcGenus.c;\
     fi
