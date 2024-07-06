@@ -23,30 +23,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         build_type: [Release]
-        c_compiler: [gcc, clang, cl]
-        include:
-          - os: windows-latest
-            c_compiler: cl
-            cpp_compiler: cl
-          - os: ubuntu-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
-        exclude:
-          - os: windows-latest
-            c_compiler: gcc
-          - os: windows-latest
-            c_compiler: clang
-          - os: ubuntu-latest
-            c_compiler: cl
+        c_compiler: [gcc, clang]
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Set reusable strings
-      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
       shell: bash
       run: |
@@ -55,10 +37,11 @@ jobs:
     - name: Create build directory
       run: mkdir -p ${{ steps.strings.outputs.build-output-dir }}
 
-    - name: Add cl to path if windows
-      if: matrix.os == 'windows-latest'
-      run: |
-        $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64"
+    - name: Install compiler
+      id: install_cc
+      uses: rlalik/setup-cpp-compiler@master
+      with:
+        compiler: ${{ matrix.c_compiler }}
 
     - name: Build
       working-directory: ./CalcGenus
