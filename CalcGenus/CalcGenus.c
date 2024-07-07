@@ -158,6 +158,7 @@ int main(void) {
 
     // no cycles of this length, skip to the next length
     if (num_new_cycles == 0) {
+      free(new_cycles);
       if (PRINT_PROGRESS) {
         fprintf(stderr,
                 "No cycles of length %" PRIcycle_length_t " found. Skipping.\n",
@@ -299,6 +300,7 @@ int main(void) {
           }
         }
         free(adjacency_list);
+        free(vertex_uses);
         free(cycles);
         free(cycles_by_vertex);
         free(used_cycles);
@@ -362,6 +364,8 @@ int main(void) {
       free(used_cycles);
       free(vertex_uses);
       free(adjacency_list);
+      free(cycles);
+      free(cycles_by_vertex);
       fclose(output_file);
       return 0;
     }
@@ -375,8 +379,10 @@ int main(void) {
               ". Used %" PRId64 " iterations so far.\n",
               genus_lower_bound, genus_upper_bound, num_search_calls);
     }
+
     free(used_cycles);
     free(vertex_uses);
+    free(cycles_by_vertex);
   }
 
   fprintf(stderr,
@@ -894,6 +900,7 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
     }
   }
 
+  free(cycles_per_vertex);
   return cycles_by_vertex;
 }
 
