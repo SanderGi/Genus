@@ -527,6 +527,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
   // look through the possible cycles that contain this vertex
   // if none can be used, this is a failed end and we backtrack
   // otherwise, we have our solution
+  // TODO: skip the previously explored cycles
   cycle_index_t num_cycles_for_vertex;
   cbv_t cycle_indices = cbv_get_cycle_indices(
       cycles_by_vertex, max_cycles_per_vertex, vertex, &num_cycles_for_vertex);
