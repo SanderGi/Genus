@@ -13,9 +13,9 @@
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
 #define DEBUG false          // whether to print debug messages
-#define ADJACENCY_LIST_FILENAME "adjacency_lists/balaban11.txt"  // input file
+#define ADJACENCY_LIST_FILENAME "adjacency_lists/3-12-cage.txt"  // input file
 #define ADJACENCY_LIST_START 0  // change if vertex numbering doesn't start at 0
-#define OUTPUT_FILENAME "CalcGenus.out"  // output file
+#define OUTPUT_FILENAME "CalcGenus2.out"  // output file
 
 // assumptions of the program (don't change these):
 #define VERTEX_DEGREE 3
@@ -93,7 +93,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
             vertex_t num_vertices, edge_t num_edges, adj_t adjacency_list,
             cycle_length_t max_cycle_length, cycle_index_t num_cycles,
             cycles_t cycles, cycle_index_t max_cycles_per_vertex,
-            cbv_t cycles_by_vertex);
+            cbv_t cycles_by_vertex, cycle_index_t current_start_cycle);
 
 cycle_index_t implied_max_fit_for_genus(cycle_index_t genus,
                                         vertex_t num_vertices,
@@ -275,7 +275,7 @@ int main(void) {
                  genus_lower_bound_implied_fit, used_cycles, vertex_uses,
                  &max_fit, &num_search_calls, num_vertices, num_edges,
                  adjacency_list, cur_max_cycle_length, num_cycles, cycles,
-                 max_cycles_per_vertex, cycles_by_vertex)) {
+                 max_cycles_per_vertex, cycles_by_vertex, c)) {
         // Success!
         show_progress(1.0);
         if (PRINT_PROGRESS) {
@@ -479,7 +479,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
             vertex_t num_vertices, edge_t num_edges, adj_t adjacency_list,
             cycle_length_t max_cycle_length, cycle_index_t num_cycles,
             cycles_t cycles, cycle_index_t max_cycles_per_vertex,
-            cbv_t cycles_by_vertex) {
+            cbv_t cycles_by_vertex, cycle_index_t current_start_cycle) {
   (*num_search_calls)++;
 
   // pick a vertex to explore
@@ -527,11 +527,10 @@ bool search(cycle_index_t cycles_to_use,                    // state
   // look through the possible cycles that contain this vertex
   // if none can be used, this is a failed end and we backtrack
   // otherwise, we have our solution
-  // TODO: skip the previously explored cycles
   cycle_index_t num_cycles_for_vertex;
   cbv_t cycle_indices = cbv_get_cycle_indices(
       cycles_by_vertex, max_cycles_per_vertex, vertex, &num_cycles_for_vertex);
-  for (cycle_index_t i = 0; i < num_cycles_for_vertex; i++) {
+  for (cycle_index_t i = current_start_cycle; i < num_cycles_for_vertex; i++) {
     // skip if the cycle is already used
     cycle_index_t cycle_index = cycle_indices[i];
     if (used_cycles[cycle_index]) {
@@ -579,7 +578,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
     if (search(cycles_to_use - 1, max_used_cycles, used_cycles, vertex_uses,
                max_fit, num_search_calls, num_vertices, num_edges,
                adjacency_list, max_cycle_length, num_cycles, cycles,
-               max_cycles_per_vertex, cycles_by_vertex)) {
+               max_cycles_per_vertex, cycles_by_vertex, current_start_cycle)) {
       return true;  // as soon as we succeed, we're done
     }
 

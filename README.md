@@ -26,3 +26,56 @@ To run the C program for ruling out genus 8 for the Balaban 10 Cage, `cd Balaban
 To run the python scripts you must have [SageMath installed](https://doc.sagemath.org/html/en/installation/index.html) and select the SageMath kernel in Jupyter/VS Code/whatever you use. Then run the notebooks in the Balaban10 directory.
 
 To run the C program for any graph, `cd CalcGenus` and run `make run`. This will compile the C program and run it. The output will be in `CalcGenus.out`. To change the adjacency list, change the `ADJACENCY_LIST_FILENAME` in `CalcGenus.c` and run `make run` again. You will also need to provide said adjacency list. The format is simply the number of vertices and number of edges on the first line followed by the neighbors of each vertex on the following lines. See the examples in `CalcGenus/adjacency_lists/`.
+
+## Result Table
+The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), and genus.
+
+\#                                              | k   | g   | v    | e     | \|G\|      | genus 
+----------------------------------------------- | --- | --- | ---- | ----- | ---------- | -----
+[1/1](CalcGenus/adjacency_lists/3-3-cage.txt)   | 3   | 3   | 4    | 6     | 24         | 0
+[1/1](CalcGenus/adjacency_lists/3-4-cage.txt)   | 3   | 4   | 6    | 9     | 72         | 1
+[1/1](CalcGenus/adjacency_lists/3-5-cage.txt)   | 3   | 5   | 10   | 15    | 120        | 1
+[1/1](CalcGenus/adjacency_lists/3-6-cage.txt)   | 3   | 6   | 14   | 21    | 336        | 1
+[1/1](CalcGenus/adjacency_lists/3-7-cage.txt)   | 3   | 7   | 24   | 36    | 32         | 2
+[1/1](CalcGenus/adjacency_lists/3-8-cage.txt)   | 3   | 8   | 30   | 45    | 1440       | 4
+[1/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 4          | 7
+[2/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 2          | 7
+[3/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 24         | 7
+[4/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 4          | 7
+[5/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 4          | 7
+[6/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 2          | 7
+[7/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 1          | 7
+[8/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 2          | 7
+[9/18](CalcGenus/adjacency_lists/3-9-cage.txt)  | 3   | 9   | 58   | 87    | 1          | 7
+[10/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 2          | 7
+[11/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 1          | 7
+[12/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 2          | 7
+[13/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 1          | 7
+[14/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 12         | 7
+[15/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 8          | 7
+[16/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 2          | 7
+[17/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 6          | 7
+[18/18](CalcGenus/adjacency_lists/3-9-cage.txt) | 3   | 9   | 58   | 87    | 6          | 7
+[1/3](CalcGenus/adjacency_lists/3-10-cage1.txt) | 3   | 10  | 70   | 105   | 120        | 9
+[2/3](CalcGenus/adjacency_lists/3-10-cage2.txt) | 3   | 10  | 70   | 105   | 24         | 9
+[3/3](CalcGenus/adjacency_lists/3-10-cage3.txt) | 3   | 10  | 70   | 105   | 80         | 9
+[1/1](CalcGenus/adjacency_lists/3-11-cage.txt)  | 3   | 11  | 112  | 168   | 64         | [14, 18]
+[1/1](CalcGenus/adjacency_lists/3-12-cage.txt)  | 3   | 12  | 126  | 189   | 12096      | [17, 32]
+[1/1](CalcGenus/adjacency_lists/4-5-cage.txt)   | 4   | 5   | 19   | 38    | 24         | -----
+[1/1](CalcGenus/adjacency_lists/4-6-cage.txt)   | 4   | 6   | 26   | 52    | 11232      | -----
+[1/?](CalcGenus/adjacency_lists/4-7-cage.txt)   | 4   | 7   | 67   | 134   | 4          | -----
+[1/1](CalcGenus/adjacency_lists/4-8-cage.txt)   | 4   | 8   | 80   | 160   | 51840      | -----
+[1/?](CalcGenus/adjacency_lists/4-12-cage.txt)  | 4   | 12  | 728  | 1456  | 8491392    | -----
+[1/4](CalcGenus/adjacency_lists/5-5-cage1.txt)  | 5   | 5   | 30   | 75    | 120        | -----
+[2/4](CalcGenus/adjacency_lists/5-5-cage2.txt)  | 5   | 5   | 30   | 75    | 20         | -----
+[3/4](CalcGenus/adjacency_lists/5-5-cage3.txt)  | 5   | 5   | 30   | 75    | 30         | -----
+[4/4](CalcGenus/adjacency_lists/5-5-cage4.txt)  | 5   | 5   | 30   | 75    | 96         | -----
+[1/1](CalcGenus/adjacency_lists/5-6-cage.txt)   | 5   | 6   | 42   | 105   | 241920     | -----
+[1/1](CalcGenus/adjacency_lists/5-8-cage.txt)   | 5   | 8   | 170  | 425   | 3916800    | -----
+[1/?](CalcGenus/adjacency_lists/5-12-cage.txt)  | 5   | 12  | 2730 | 6825  | 503193600  | -----
+[1/1](CalcGenus/adjacency_lists/6-5-cage.txt)   | 6   | 5   | 40   | 120   | 480        | -----
+[1/1](CalcGenus/adjacency_lists/6-6-cage.txt)   | 6   | 6   | 62   | 186   | 744000     | -----
+[1/1](CalcGenus/adjacency_lists/6-8-cage.txt)   | 6   | 8   | 312  | 936   | 9360000    | -----
+[1/?](CalcGenus/adjacency_lists/6-12-cage.txt)  | 6   | 12  | 7812 | 23436 | 5859000000 | -----
+[1/1](CalcGenus/adjacency_lists/7-5-cage.txt)   | 7   | 5   | 50   | 175   | 252000     | -----
+[1/1](CalcGenus/adjacency_lists/7-6-cage.txt)   | 7   | 6   | 90   | 315   | 15120      | -----
