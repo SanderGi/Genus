@@ -2,6 +2,8 @@
     "files.associations": {
         "*.sentryclirc": "txt",
         "stdbool.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "inttypes.h": "c",
+        "stdint.h": "c"
     }
 }

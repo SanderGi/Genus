@@ -1,4 +1,4 @@
-// Narrows down the genus of a 3 regular graph given its adjacency list.
+// Narrows down the genus of a regular graph given its adjacency list.
 // Prints the maximum cycle fitting as evidence. A fitting is a set of simple
 // cycles (length greater than 2) that use each directed edge exactly once.
 // These are the faces in Euler's formula: F - E + V = 2 - 2g. Run with `make
@@ -13,12 +13,12 @@
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
 #define DEBUG false          // whether to print debug messages
-#define ADJACENCY_LIST_FILENAME "adjacency_lists/3-12-cage.txt"  // input file
+#define ADJACENCY_LIST_FILENAME "adjacency_lists/3-11-cage.txt"  // input file
 #define ADJACENCY_LIST_START 0  // change if vertex numbering doesn't start at 0
-#define OUTPUT_FILENAME "CalcGenus2.out"  // output file
+#define OUTPUT_FILENAME "CalcGenus.out"  // output file
+#define VERTEX_DEGREE 3                  // must be >= 2
 
 // assumptions of the program (don't change these):
-#define VERTEX_DEGREE 3
 #define VERTEX_USE_LIMIT VERTEX_DEGREE
 #define MAX_VERTICES 65535
 #define MAX_EDGES 65535
@@ -119,13 +119,33 @@ int main(void) {
       adj_load(ADJACENCY_LIST_FILENAME, &num_vertices, &num_edges);
 
   output_file = fopen(OUTPUT_FILENAME, "w");
+  assert(output_file != NULL, "Error opening file %s\n", OUTPUT_FILENAME);
+  fprintf(stderr, "Output file: %s\n", OUTPUT_FILENAME);
 
-  cycle_index_t genus_lower_bound = implied_max_genus_for_fit(
-      2 * num_edges / START_CYCLE_LENGTH, num_vertices, num_edges);
+  cycle_index_t genus_lower_bound =
+      implied_max_genus_for_fit((2 * num_edges + START_CYCLE_LENGTH - 1) /
+                                    START_CYCLE_LENGTH,  // 2E/3 rounded up
+                                num_vertices, num_edges);
   cycle_index_t genus_lower_bound_implied_fit =
       implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
   cycle_index_t genus_upper_bound =
       implied_max_genus_for_fit(0, num_vertices, num_edges);
+
+  if (genus_lower_bound == genus_upper_bound) {
+    // we've found the genus!
+    if (PRINT_PROGRESS) {
+      fprintf(stderr,
+              "Found the genus! It is %" PRIcycle_index_t
+              ". No computation needed when the genus is found via the "
+              "theoretical formula.\n",
+              genus_lower_bound);
+    }
+    fprintf(output_file,
+            "Genus found: %" PRIcycle_index_t " in 0 iterations:\n",
+            genus_lower_bound);
+    fclose(output_file);
+    return 0;
+  }
 
   if (PRINT_PROGRESS) {
     fprintf(
@@ -217,7 +237,7 @@ int main(void) {
       cycles = combined;
     }
 
-    // if (cur_max_cycle_length == 12) {
+    // if (cur_max_cycle_length <= 24) {
     //   continue;
     // }  // TODO
 
@@ -285,9 +305,11 @@ int main(void) {
                   genus_lower_bound, genus_lower_bound_implied_fit);
         }
         fprintf(output_file,
-                "Solution with %" PRIcycle_index_t " cycles found in %" PRId64
+                "Solution with %" PRIcycle_index_t
+                " cycles (genus %" PRIcycle_index_t ") found in %" PRId64
                 " iterations:\n",
-                genus_lower_bound_implied_fit, num_search_calls);
+                genus_lower_bound_implied_fit, genus_lower_bound,
+                num_search_calls);
         for (cycle_index_t i = 0; i < num_cycles; i++) {
           if (used_cycles[i]) {
             cycles_t cycle =
@@ -370,7 +392,10 @@ int main(void) {
       return 0;
     }
     assert(genus_lower_bound < genus_upper_bound,
-           "Error: genus lower bound is greater than upper bound\n");
+           "Error: genus lower bound (%" PRIcycle_index_t
+           ") is greater than upper bound (%" PRIcycle_index_t
+           " from max_fit %" PRIcycle_index_t ")\n",
+           genus_lower_bound, genus_upper_bound, max_fit);
 
     if (PRINT_PROGRESS) {
       fprintf(stderr,
@@ -530,9 +555,12 @@ bool search(cycle_index_t cycles_to_use,                    // state
   cycle_index_t num_cycles_for_vertex;
   cbv_t cycle_indices = cbv_get_cycle_indices(
       cycles_by_vertex, max_cycles_per_vertex, vertex, &num_cycles_for_vertex);
-  for (cycle_index_t i = current_start_cycle; i < num_cycles_for_vertex; i++) {
+  for (cycle_index_t i = 0; i < num_cycles_for_vertex; i++) {
     // skip if the cycle is already used
     cycle_index_t cycle_index = cycle_indices[i];
+    if (cycle_index <= current_start_cycle) {
+      continue;
+    }
     if (used_cycles[cycle_index]) {
       continue;
     }
@@ -554,8 +582,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
     }
 
     // make sure the cycle satisfies the ijk condition
-    if (!is_ijk_good(used_cycles, cycles, max_cycle_length, num_cycles,
-                     cycle_index)) {
+    if (VERTEX_DEGREE > 2 && !is_ijk_good(used_cycles, cycles, max_cycle_length,
+                                          num_cycles, cycle_index)) {
       continue;
     }
 
@@ -571,7 +599,11 @@ bool search(cycle_index_t cycles_to_use,                    // state
     }
 
     // if this is the final cycle needed to cover all edges, we're done
-    if (cycles_to_use == 1) {
+    if (cycles_to_use == 1 ||
+        implied_max_genus_for_fit(max_used_cycles - cycles_to_use + 1,
+                                  num_vertices, num_edges) ==
+            implied_max_genus_for_fit(max_used_cycles, num_vertices,
+                                      num_edges)) {
       return true;
     }
     // otherwise, continue adding cycles
@@ -874,7 +906,7 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
       }
     }
     assert(num_cycles_for_vertex == cycles_per_vertex[i],
-           "Error filling in the cycles by vertex\n")
+           "Error filling in the cycles by vertex %" PRIvertex_t "\n", i);
   }
 
   if (DEBUG) {
