@@ -13,7 +13,7 @@
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
 #define DEBUG false          // whether to print debug messages
-#define ADJACENCY_LIST_FILENAME "adjacency_lists/3-11-cage.txt"  // input file
+#define ADJACENCY_LIST_FILENAME "adjacency_lists/gray.txt"  // input file
 #define ADJACENCY_LIST_START 0  // change if vertex numbering doesn't start at 0
 #define OUTPUT_FILENAME "CalcGenus.out"  // output file
 #define VERTEX_DEGREE 3                  // must be >= 2
@@ -237,9 +237,9 @@ int main(void) {
       cycles = combined;
     }
 
-    // if (cur_max_cycle_length <= 24) {
-    //   continue;
-    // }  // TODO
+    if (cur_max_cycle_length <= 34) {
+      continue;
+    }  // TODO
 
     cycle_index_t max_cycles_per_vertex;
     cbv_t cycles_by_vertex =

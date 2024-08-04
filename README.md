@@ -147,3 +147,106 @@ The genus for various complete bipartite graphs generated using the `CompleteBip
 [k4-4](CalcGenus/adjacency_lists/k4-4.txt) | 4   | 4   | 8    | 16    | 1152         | 1        | 0.012    | 0.010
 [k5-5](CalcGenus/adjacency_lists/k5-5.txt) | 5   | 4   | 10   | 25    | 28800        | 3        | 111.48   | DNF
 [k6-6](CalcGenus/adjacency_lists/k6-6.txt) | 6   | 4   | 12   | 36    | 1036800      | 4        | 0.014    | DNF
+
+## References
+- Adjacency Lists
+    - [Win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html)
+    - [SageMath Generators](https://doc.sagemath.org/html/en/reference/graphs/sage/graphs/graph_generators.html)
+
+- Genus problem is NP-Hard
+    - [The graph genus problem is NP-complete](https://www.sciencedirect.com/science/article/abs/pii/0196677489900060?via%3Dihub)
+        - The general problem of determining the genus of a graph is NP-hard
+    - [Triangulating a Surface with a Prescribed Graph](https://www.sciencedirect.com/science/article/pii/S0095895683710166)
+        - Determining the non-orientable genus of a graph is NP-hard
+
+- Existing Graph Embedding Algorithms
+    - Planarity Testing (genus = 0)
+        - [Efficient Planarity Testing](https://dl.acm.org/doi/10.1145/321850.321852)
+            - O(V) linear time, successfully implemented in ALGOL and can handle 900+ vertices in less than 12 seconds on 1974 hardware
+            - [An Implementation of the Hopcroft and Tarjan Planarity Test and Embedding Algorithm](https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=6a2fa11f47e315f108698feaabb287ab9751b921)
+                - Lists flaws and corrections to the original algorithm needed to actually implement it
+        - [Testing for the consecutive ones property, interval graphs, and graph planarity using PQ-tree algorithms](https://www.sciencedirect.com/science/article/pii/S0022000076800451)
+            - Also linear but introduces a cool datastructure called a PQ-tree that is good for handling permutations
+        - [Depth-First Search and Planarity](https://arxiv.org/pdf/math/0610935)
+            - Linear time, good explanation
+        - [A Simple Test for Planar Graphs](https://iasl.iis.sinica.edu.tw/webpdf/paper-1993-A_simple_test_for_planar_graphs.pdf)
+            - O(V + E), good diagrams/explanation
+        - [Depth-First Search and Kuratowski Subgraphs](https://dl.acm.org/doi/10.1145/1634.322451)
+            - Extracts the Kuratowski subgraph in O(V) linear time
+        - [Graphes Planaires: Reconnaissance et Construction de Representations Planaires Topologiques](https://www.mathe2.uni-bayreuth.de/EWS/demoucron.pdf)
+            - O(V^2) quadratic time but simple and practical to implement
+    - Torus Embedding (genus = 1)
+        - [Embedding graphs in the torus in linear time](https://link.springer.com/chapter/10.1007/3-540-59408-6_64)
+            - Linear time but near impossible to implement
+            - Has complicated substeps that require entire papers to prove: [Obstructions for simple embeddings](https://www.sfu.ca/~mohar/Papers/Corner.pdf)
+        - [An algorithm for embedding graphs in the torus](https://www.sfu.ca/~mohar/Papers/Torus.pdf)
+            - Cubic time but hard to implement
+        - [A Practical Algorithm for Embedding Graphs on Torus](http://www.ijnc.org/index.php/ijnc/article/view/122/124)
+            - Exponential but has actually been implemented
+        - [Practical Toroidality Testing](https://dl.acm.org/doi/pdf/10.5555/314161.314392)
+            - Exponential but has actually been implemented in C and C++
+            - Scales ok up to 10 vertices (11 with up to 24 edges)
+            - Used to find a set of 2K forbidden minors for the torus (biggest at the time of publication)
+        - [A large set of torus obstructions and how they were discovered](https://www.combinatorics.org/ojs/index.php/eljc/article/download/v25i1p16/pdf)
+            - Exponential but actually implemented in C. The best practical algorithm for torus embedding so far
+    - Projective Plane Embedding (genus = 1, non-orientable)
+        - [Projective Planarity in Linear Time](https://www.sciencedirect.com/science/article/abs/pii/S0196677483710503)
+            - Linear time but hard to implement
+        - [Simpler Projective Plane Embedding](https://www.sciencedirect.com/science/article/abs/pii/S1571065305801751)
+            - O(n^2) but much easier to implement
+    - Flawed Algorithms
+        - [Errors in graph embedding algorithms](https://www.sciencedirect.com/science/article/pii/S0022000010000863?ref=pdf_download&fr=RR-2&rr=8ae048cc8db8c71d)
+            - Explains errors in many existing algorithms and how fixing them would make them exponential time
+            - Only currently practical algorithms are exponential time
+    - Less Efficient Algorithms for Arbitrary Surfaces/Genus
+        - [SageMath](https://github.com/sagemath/sage/blob/develop/src/sage/graphs/genus.pyx)
+            - Johnson Trotter to check all rotation systems (exhaustive search with a few optimizations)
+            - O(V \prod_{v \in V(G)} (deg(v)-1)!)
+        - SAT/ILP
+            - [A Practical Method for the Minimum Genus of a Graph: Models and Experiments](https://tcs.informatik.uos.de/_media/pubs/sea16_preprint_mingenus.pdf)
+                - First SAT and ILP implementation
+                - Cannot handle genus > 1
+            - [Stronger ILPs for the Graph Genus Problem](https://drops.dagstuhl.de/storage/00lipics/lipics-vol144-esa2019/LIPIcs.ESA.2019.30/LIPIcs.ESA.2019.30.pdf)
+                - Solves most of ROME and NORTH graph datasets
+                - 42 hours for the Gray graph (genus 7)
+    - Theoretically more efficient but Nearly Impossible to Implement
+        - [A Linear Time Algorithm for Embedding Graphs in an Arbitrary Surface](https://www.sfu.ca/~mohar/Papers/General.pdf)
+            - Linear for fixed genus
+            - Has not been implemented correctly in multiple decades
+        - [A Simpler Linear Time Algorithm for Embedding Graphs into an Arbitrary Surface and the Genus of Graphs of Bounded Tree-Width](https://www.researchgate.net/publication/221499244_A_Simpler_Linear_Time_Algorithm_for_Embedding_Graphs_into_an_Arbitrary_Surface_and_the_Genus_of_Graphs_of_Bounded_Tree-Width)
+            - Linear for bounded tree-width
+            - Simpler than the general for fixed genus
+            - Has not been implemented correctly in multiple decades
+        - [Graph Minors .XIII. The Disjoint Paths Problem](https://www.sciencedirect.com/science/article/pii/S0095895685710064)
+            - Cubic time for fixed genus since checking if one of finitely many obstructions is a minor is cubic time
+            - The complete lists of forbidden minors is only known for the plane (genus 0) and projective plane (non-orientable genus 1)
+
+- Obstructions and Forbiddden Minors
+    - [Graph Minor Theorem](https://en.wikipedia.org/wiki/Robertson%E2%80%93Seymour_theorem)
+        - The minors can be used to determine if a graph contains an obstruction
+    - [Kuratowski's theorem](https://onlinelibrary.wiley.com/doi/10.1002/jgt.3190050304)
+        - 3 short proofs of Kuratowski's theorem
+        - A graph is planar if and only if it has no subdivision of K5 or K3,3
+    - [Graph minors. VIII. A kuratowski theorem for general surfaces](https://www.sciencedirect.com/science/article/pii/009589569090121F)
+        - Every surface has a finite list of forbidden minors
+        - A graph is embeddable in the surface if and only if it has none of these minors
+    - [A Kuatowsky Theorem for the Projective Plane](https://onlinelibrary.wiley.com/doi/10.1002/jgt.3190050305) and [103 Graphs that are irreducible for the projective plan](https://www.sciencedirect.com/science/article/pii/0095895679900224)
+        - The complete list of 103 forbidden minors for the projective plane
+        - A graph is embeddable in the projective plane if and only if it has none of these minors
+    - [A Kuratowski theorem for nonorientable surfaces](https://www.sciencedirect.com/science/article/pii/0095895689900439)
+        - Even nonorientable surfaces have a finite list of forbidden minors
+        - A graph is embeddable in the nonorientable surface if and only if it has none of these minors
+    - [Hunting for torus obstructions](https://dspace.library.uvic.ca/items/760d538c-023d-45ff-8d85-57fabd1cd858)
+        - Largest set at the time ~16K minor order obstructions
+        - Split delete method to non-exhaustively search for obstructions
+    - [A large set of torus obstructions and how they were discovered](https://www.combinatorics.org/ojs/index.php/eljc/article/download/v25i1p16/pdf)
+        - Exponential but simple torus embedding algorithm based on DMP quardratic time planarity testing algorithm
+        - Growing database of torus obstructions: https://webhome.cs.uvic.ca/~wendym/torus/torus_obstructions.html
+            - 250,815 torus obstructions, 17,523 of which are minors
+            - Possibly complete set for all 3 regular graphs, but likely not complete for all graphs
+        - Overview of current progress (split delete, only 11 obstructions that don't have K3,3 as a subgraph)
+    - [On Computing Graph Minor Obstruction Sets](https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=7ed5e446f2a1b487a7d9a28fddb83de8772c2402)
+        - Stopping time of an obstruction algorithm is nonconstructive and other theoretical results
+
+- Visualization of Embedding
+    - [Non-Euclidean Spring Embedders](https://www2.cs.arizona.edu/~kobourov/riemann_embedders.pdf)
