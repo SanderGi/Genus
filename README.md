@@ -248,5 +248,10 @@ The genus for various complete bipartite graphs generated using the `CompleteBip
     - [On Computing Graph Minor Obstruction Sets](https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=7ed5e446f2a1b487a7d9a28fddb83de8772c2402)
         - Stopping time of an obstruction algorithm is nonconstructive and other theoretical results
 
+- Cycle Finding Algorithms
+    - [Finding All the Elementary Circuits of a Directed Graph](https://www.cs.tufts.edu/comp/150GA/homeworks/hw1/Johnson%2075.PDF)
+        - O((c + 1)(V + E)) = O(cV + cE) time to find all c elementary cycles of a graph
+    - [A new way to enumerate cycles in graph](https://ieeexplore.ieee.org/document/1602189)
+
 - Visualization of Embedding
     - [Non-Euclidean Spring Embedders](https://www2.cs.arizona.edu/~kobourov/riemann_embedders.pdf)
