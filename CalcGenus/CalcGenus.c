@@ -13,10 +13,13 @@
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
 #define DEBUG false          // whether to print debug messages
-#define ADJACENCY_LIST_FILENAME "adjacency_lists/gray.txt"  // input file
+#define ADJACENCY_LIST_FILENAME "adjacency_lists/k8.txt"  // input file
 #define ADJACENCY_LIST_START 0  // change if vertex numbering doesn't start at 0
 #define OUTPUT_FILENAME "CalcGenus.out"  // output file
-#define VERTEX_DEGREE 3                  // must be >= 2
+#define VERTEX_DEGREE 7                  // must be >= 2
+// true if it should to find the full cycle fitting, otherwise stops early once
+// it is clear it exists:
+#define FIND_FULL_CYCLE_FITTING true
 
 // assumptions of the program (don't change these):
 #define VERTEX_USE_LIMIT VERTEX_DEGREE
@@ -237,9 +240,9 @@ int main(void) {
       cycles = combined;
     }
 
-    if (cur_max_cycle_length <= 34) {
-      continue;
-    }  // TODO
+    // if (cur_max_cycle_length <= 34) {
+    //   continue;
+    // }  // TODO
 
     cycle_index_t max_cycles_per_vertex;
     cbv_t cycles_by_vertex =
@@ -599,13 +602,20 @@ bool search(cycle_index_t cycles_to_use,                    // state
     }
 
     // if this is the final cycle needed to cover all edges, we're done
-    if (cycles_to_use == 1 ||
-        implied_max_genus_for_fit(max_used_cycles - cycles_to_use + 1,
-                                  num_vertices, num_edges) ==
-            implied_max_genus_for_fit(max_used_cycles, num_vertices,
-                                      num_edges)) {
-      return true;
+    if (FIND_FULL_CYCLE_FITTING) {
+      if (cycles_to_use == 1) {
+        return true;
+      }
+    } else {
+      if (cycles_to_use == 1 ||
+          implied_max_genus_for_fit(max_used_cycles - cycles_to_use + 1,
+                                    num_vertices, num_edges) ==
+              implied_max_genus_for_fit(max_used_cycles, num_vertices,
+                                        num_edges)) {
+        return true;
+      }
     }
+
     // otherwise, continue adding cycles
     if (search(cycles_to_use - 1, max_used_cycles, used_cycles, vertex_uses,
                max_fit, num_search_calls, num_vertices, num_edges,
