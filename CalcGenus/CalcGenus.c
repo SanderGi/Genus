@@ -13,13 +13,14 @@
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
 #define DEBUG false          // whether to print debug messages
-#define ADJACENCY_LIST_FILENAME "adjacency_lists/k8.txt"  // input file
-#define ADJACENCY_LIST_START 0  // change if vertex numbering doesn't start at 0
-#define OUTPUT_FILENAME "CalcGenus.out"  // output file
-#define VERTEX_DEGREE 7                  // must be >= 2
+#define ADJACENCY_LIST_FILENAME \
+  "adjacency_lists/bipartite-kneser12-5.txt"  // input file
+#define ADJACENCY_LIST_START 1  // change if vertex numbering doesn't start at 0
+#define OUTPUT_FILENAME "CalcGenus2.out"  // output file
+#define VERTEX_DEGREE 21                  // must be >= 2
 // true if it should to find the full cycle fitting, otherwise stops early once
 // it is clear it exists:
-#define FIND_FULL_CYCLE_FITTING true
+#define FIND_FULL_CYCLE_FITTING false
 
 // assumptions of the program (don't change these):
 #define VERTEX_USE_LIMIT VERTEX_DEGREE
@@ -110,6 +111,8 @@ cycle_index_t implied_max_genus_for_fit(cycle_index_t fit,
   int64_t val = 1 - ((int64_t)fit - num_edges + num_vertices) / 2;
   return val < 0 ? 0 : val;
 }
+
+// static int64_t num_current_length_cycles = 0;  // TODO
 
 int main(void) {
   if (PRINT_PROGRESS) {
@@ -240,7 +243,7 @@ int main(void) {
       cycles = combined;
     }
 
-    // if (cur_max_cycle_length <= 34) {
+    // if (cur_max_cycle_length < 7) {
     //   continue;
     // }  // TODO
 
@@ -277,9 +280,20 @@ int main(void) {
 
     // search for a solution that starts with one of the cycles
     for (cycle_index_t c = 0; c < num_cycles; c++) {
+      // for (cycle_index_t c = num_cycles - num_new_cycles; c < num_cycles;
+      //      c++) {  // TODO
+
       // default all vertices to 0 uses
       for (vertex_t i = 0; i < num_vertices; i++) {
         vertex_uses[i] = 0;
+        // if it is not a regular graph, we represent it as a regular graph with
+        // some vertices pre-used, so we need to count them as used here:
+        vertex_t* neighbors = adj_get_neighbors(adjacency_list, i);
+        for (degree_t j = 0; j < VERTEX_DEGREE; j++) {
+          if (neighbors[j] == MAX_VERTICES) {
+            vertex_uses[i]++;
+          }
+        }
       }
 
       // mark start cycle as used
@@ -293,6 +307,22 @@ int main(void) {
         // mark cycle vertices as used once
         vertex_uses[cycle[i]] = 1;
       }
+
+      // // mark all current length cycles as used TODO
+      // for (cycle_index_t c2 = num_cycles - num_new_cycles; c2 < num_cycles;
+      //      c2++) {
+      //   used_cycles[c2] = true;
+      //   cycle_length_t cycle_length;
+      //   cycles_t cycle =
+      //       cycle_get(cycles, cur_max_cycle_length, c2, &cycle_length);
+      //   for (cycle_length_t i = 0; i < cycle_length; i++) {
+      //     adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+
+      //     // mark cycle vertices as used once
+      //     vertex_uses[cycle[i]] = 1;
+      //   }
+      // }
+      // num_current_length_cycles = 1;  // TODO
 
       if (search(genus_lower_bound_implied_fit - 1,
                  genus_lower_bound_implied_fit, used_cycles, vertex_uses,
@@ -572,6 +602,14 @@ bool search(cycle_index_t cycles_to_use,                    // state
     vertex_t* cycle =
         cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
 
+    // // TODO
+    // if (cycle_length >= 7) {
+    //   if (num_current_length_cycles + 1 > 4) {
+    //     continue;
+    //   }
+    //   num_current_length_cycles++;
+    // }
+
     // cycle is only usable if all edges are available
     bool can_use = true;
     for (cycle_length_t j = 0; j < cycle_length; j++) {
@@ -581,12 +619,14 @@ bool search(cycle_index_t cycles_to_use,                    // state
       }
     }
     if (!can_use) {
+      // num_current_length_cycles--;  // TODO
       continue;
     }
 
     // make sure the cycle satisfies the ijk condition
     if (VERTEX_DEGREE > 2 && !is_ijk_good(used_cycles, cycles, max_cycle_length,
                                           num_cycles, cycle_index)) {
+      // num_current_length_cycles--;  // TODO
       continue;
     }
 
@@ -623,6 +663,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
                max_cycles_per_vertex, cycles_by_vertex, current_start_cycle)) {
       return true;  // as soon as we succeed, we're done
     }
+
+    // num_current_length_cycles--;  // TODO
 
     // un-use the cycle
     used_cycles[cycle_index] = false;
