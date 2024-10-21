@@ -159,7 +159,8 @@ The genus for various Johnson graphs generated using Mathematica follows.
 [Johnson (5, 2)](CalcGenus/adjacency_lists/Johnson5-2.txt)                       | 10   | 30    | 1        | 0.012
 [Johnson (6, 2)](CalcGenus/adjacency_lists/Johnson6-2.txt)                       | 15   | 60    | [3, 9]   | hours
 [Johnson (6, 3)](CalcGenus/adjacency_lists/Johnson6-3.txt)                       | 20   | 90    | 6        | 0.013
-[Johnson (8, 4)](CalcGenus/adjacency_lists/Johnson8-4.txt)                       | 70   | 560   | _______  | ____
+[Johnson (8, 4)](CalcGenus/adjacency_lists/Johnson8-4.txt)                       | 70   | 560   | [59,165]  | hours
+[Johnson (9, 4)](CalcGenus/adjacency_lists/Johnson9-4.txt)                       | 70   | 560   | [148,339]  | hours
 
 The genus for various Circulant graphs generated using Mathematica follows.
 \#                                                                    | v    | e     | genus    | time (s)
