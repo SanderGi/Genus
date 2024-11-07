@@ -4,6 +4,7 @@
         "stdbool.h": "c",
         "unistd.h": "c",
         "inttypes.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "ctype.h": "c"
     }
 }

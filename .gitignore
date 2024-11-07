@@ -4,3 +4,7 @@ CalcGenus/CalcGenus
 *.o
 *.dSYM
 .DS_Store
+CalcGenus/adjacency_lists/rome-graphml.tgz
+MultiGenus/multi_genus_128
+MultiGenus/multi_genus_longtype_128
+MultiGenus/planar_cutthroughedges_draw

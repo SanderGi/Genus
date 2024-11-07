@@ -1,37 +1,32 @@
-# Ever wondered what the genus of the Balaban 10 cage is?
+# A Practical Algorithm for Graph Embedding
 
-Unless "automorphism" and "graph cycles" are part of your daily vocabulary, you probably haven't. But if you have, the answer is 9.
+A famous problem at the intersection of topology and combinatorial graph theory is the [Utility Problem](https://www.youtube.com/watch?v=VvCytJvd4H0). Say you have three houses and three utilities and you need to connect each house to each utility via a wire. Is there a way to do this without the wires crossing? In terms of graph theory, this is asking whether K3,3 is _planar_. It is known that it is not. In fact K3,3 is _toroidal_ meaning while it cannot be embedded on a plane without edges crossing, it can be embedded on a torus:
 
-These are the scripts/programs used to calculate it. I wrote the FitCycles scripts that determined the genus (based on ideas for an algorithm by [Austin](https://austinulrigg.github.io/)) and the ReverseCycle utility program to convert it into a format that the CalcCycles programs could use to check the solution. The CalcCycles programs were written by [Sam King](https://www.linkedin.com/in/samkingwa/). Austin did the main work in deciphering the math and checking the solution manually. Also credit to the rest of the recreational math group at the University of Washington for input on the programs/math and for providing computational resources for experimentation.
+[![K3,3 Torus Embedding](images/k3-3torus.png)](images/k3-3torus.png)
 
-[![19 cycles](19Cycles.png)](19Cycles.png)
+The characterizing property of a torus that allows us to embed K3,3 is that it has a hole (unlike surfaces such as a plane or a sphere). This motivates classifying surfaces by their number of holes, that is, their genus g. The genus of a graph G is then simply the genus of the minimum genus surface on which G can be embedded without edges crossing. For genus zero we use the special name _planar_ and for genus one we use _toroidal_. Calculating the genus of a graph has a number of applications, particularly in the design of integrated circuits, study of graph minors, VLSI design, infrastructure planning, and more.
+
+## Properties of this algorithm
+
+This repo contains a fast algorithm for calculating the genus of arbitrary graphs. It has a number of properties that make it practical for real-world use:
+
+1) **Verification**: The algorithm outputs not only the genus but also the corresponding rotation system that defines the surface embedding that achieves this minimum genus. This allows for easy verification of the result both via a [Python script](CalcGenus/verifyEmbedding.ipynb) and visually:
+
+[![19 cycles](images/19Cycles.png)](images/19Cycles.png)
+
+2) **Progressively Narrowing Bounds**: The algorithm iterates through possible embeddings and progressively narrows the bounds on the genus. This allows for early stopping if only an estimate is needed.
+
+3) **Simplicity of Implementation**: While there exist more efficient algorithms for certain graph families (e.g., `multi_genus` does better on lower genus high degree graphs), this algorithm is much simpler to implement (can be done in a few dozen lines of Python or a few hundred lines of C).
+
+4) **Scales Well With Genus**: The algorithm can handle graphs with high genus much better than existing algorithms. It can for instance complete the (3, 10) Cages in a few minutes whereas SageMath doesn't finish in weeks and `multi_genus` takes hours. It does not, however, scale as well with degree as `multi_genus` for low genus graphs, so there is a tradeoff and the optimal algorithm depends on both the genus and degree of the graph.
 
 ## Usage
 
-To run the C program for ruling out genus 8 for the Balaban 10 Cage, `cd Balaban10` and run `make run`. This will compile the C program and run it. The output will be in `FitCycles.out`. To run with a different vertex labeling or set of cycles, modify `generate.ipynb` or `generate_austin.ipynb` and run the notebook to generate the input files. Then run `make run` again. To run the complete C version that doesn't require python to generate the cycles, `cd Balaban10C` and run `make run`. 
-
-To run the python scripts you must have [SageMath installed](https://doc.sagemath.org/html/en/installation/index.html) and select the SageMath kernel in Jupyter/VS Code/whatever you use. Then run the notebooks in the Balaban10 directory.
+To run the python scripts you must have [SageMath installed](https://doc.sagemath.org/html/en/installation/index.html) and select the SageMath kernel in Jupyter/VS Code/whatever you use.
 
 To run the C program for any graph, `cd CalcGenus` and run `make run`. This will compile the C program and run it. The output will be in `CalcGenus.out`. To change the adjacency list, change the `ADJACENCY_LIST_FILENAME` in `CalcGenus.c` and run `make run` again. You will also need to provide said adjacency list. The format is simply the number of vertices and number of edges on the first line followed by the neighbors of each vertex on the following lines. See the examples in `CalcGenus/adjacency_lists/`.
 
-## How it works
-Read more about the mathematical graph theory context in [Pearls in Graph Theory - A Comprehensive Introduction - By Nora Hartsfield and Gerhard Ringel](https://proofits.wordpress.com/wp-content/uploads/2012/09/nora_hartsfield_gerhard_ringel_pearls_in_graph.pdf) (particularly Chapter 10). In short, the problem boils down to "fitting" as many simple directed cycles (that are not just one edge) onto the 10 Cage graph as possible. Fitting just means that together, the cycles should use each directed edge exactly once. The shortest cycle is 10 edges long (there are 528 of these counting both orientations) and there are 210 edges (counting both directions) to fit. The maximum number of fitting cycles is therefore at most 210/10 = 21 which would correspond to a genus of 8. If 19 is the maximum number of cycles that can be fit, then the genus is 9. This comes from [Euler's Formula](https://en.wikipedia.org/wiki/Euler_characteristic), F - E + V = 2 - 2g, where E is the number of edges (105), V is the number of vertices (70), g is the genus and F is the number of faces (the number of cycles we can fit also known as circuits in Chapter 10 of the book). To rule out the possibility of a genus of 8, it seems at first that you would need to check all 528 choose 21 possible combinations of 10 edge cycles which would not be feasible. However, Austin came up with a sequence of case work to show that it is impossible to fit 21 cycles. This uses the automorphisms of the graph to deduce a 10 edge cycle that must be part of a 21 cycle fitting if one exists. It then keeps adding cycles using some clever constraints to fail early (each vertex must be used exactly 3 times, if the sequence i -> j -> k occurs in a cycle it can't occur in reverse in another cycle in the fitting, etc.). This requires about 100K cases to be checked so I wrote a program to check all the cases (see the simple but inefficient algorithm [in python](Balaban10/austin_adj_no_21.ipynb) or the optimized [C implementation](Balaban10/FitCycles.c) for details).
-
-[![Fit cycles C code run](FitCyclesRun.png)](FitCyclesRun.png)
-
-To find an example fitting with 19 cycles, I figured out how to modify Austin's algorithm to find the maximum fitting given a range of cycle lengths (see the implementation [in python](Balaban10/austin_adj_max_fit.ipynb)). Turns out finding such an example only requires up to length 14 cycles to be checked which is feasible to compute (computing with all the cycles would take too long to finish in a realistic amount of time because they quickly grow into the hundred of thousands -- e.g. there are 75K cycles of length 20). I then wrote a script to test the solution and visualize it [in python](Balaban10/test.ipynb) and others further tested both by hand and with the Java programs in the CalcCycles directory.
-
-For comparison, the SageMath code to find the genus of a Balaban 10 cage has been computing for a week and still hasn't finished. So this 7 second C algorithm is a significant improvement. There is also a [complete C implementation](Balaban10C/FitCycles.c) that only needs an adjacency list and can generate the cycles and other auxiliary data structures automatically.
-
-### Extending the algorithm to any graph
-
-This is a curious problem given it is [NP hard](https://en.wikipedia.org/wiki/Graph_embedding#Computational_complexity). For reasonably sized graphs, this algorithm easily confirms in a few seconds the genus is 4 for the Tutte-Coxeter Graph and is also 9 for the other two 10 Cages (Harries and Harries-Wong) like the Balaban 10 Cage. The extended and fully automated version of the algorithm can be found [implemented in C](CalcGenus/CalcGenus.c).
-
-## Comparison with SageMath
-
-In addition to being faster and scaling better (see sections on practical performance and time complexity), this algorithm also gives upper and lower bounds on the genus as it iterates. This allows stopping early if only an estimate is needed. 
-
-### Time Complexity
+## Time Complexity
 
 Let `V` be the number of vertices and `E` the number of edges. The [current SageMath algorithm](https://github.com/sagemath/sage/blob/develop/src/sage/graphs/genus.pyx) claims `O(V \prod_{v \in V(G)} (deg(v)-1)!)` runtime. This simplifies to `O(2^V)` for 3-regular graphs, and `O(V(V-1)!^{V})` for complete graphs. 
 
@@ -72,159 +67,181 @@ V  | SageMath | This Algorithm | Speedup Factor
 17 | 2.3e247  | 1.0e79         | 2.3e168
 18 | 3.3e284  | 5.4e88         | 6.0e195
 
-### Practical Performance
+## Practical Performance
 
-The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), and computation time for the genus using SageMath (SM time).
-\#                                                | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s)
-------------------------------------------------- | --- | --- | ---- | ----- | ---------- | ---------- | -------- | -----------
-[1/1](CalcGenus/adjacency_lists/3-3-cage.txt)     | 3   | 3   | 4    | 6     | 24         | 0          | 0.010    | 0.004
-[1/1](CalcGenus/adjacency_lists/3-4-cage.txt)     | 3   | 4   | 6    | 9     | 72         | 1          | 0.010    | 0.039
-[1/1](CalcGenus/adjacency_lists/3-5-cage.txt)     | 3   | 5   | 10   | 15    | 120        | 1          | 0.012    | 0.027
-[1/1](CalcGenus/adjacency_lists/3-6-cage.txt)     | 3   | 6   | 14   | 21    | 336        | 1          | 0.014    | 0.010
-[1/1](CalcGenus/adjacency_lists/3-7-cage.txt)     | 3   | 7   | 24   | 36    | 32         | 2          | 0.016    | 1.737
-[1/1](CalcGenus/adjacency_lists/3-8-cage.txt)     | 3   | 8   | 30   | 45    | 1440       | 4          | 0.104    | 118.958
-[1/18](CalcGenus/adjacency_lists/3-9-cage1.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 23.917   | days
-[2/18](CalcGenus/adjacency_lists/3-9-cage2.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 35.163   | days
-[3/18](CalcGenus/adjacency_lists/3-9-cage3.txt)   | 3   | 9   | 58   | 87    | 24         | 7          | 238.89   | days
-[4/18](CalcGenus/adjacency_lists/3-9-cage4.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 32.896   | days
-[5/18](CalcGenus/adjacency_lists/3-9-cage5.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 32.859   | days
-[6/18](CalcGenus/adjacency_lists/3-9-cage6.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 23.305   | days
-[7/18](CalcGenus/adjacency_lists/3-9-cage7.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 31.474   | days
-[8/18](CalcGenus/adjacency_lists/3-9-cage8.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 32.003   | days
-[9/18](CalcGenus/adjacency_lists/3-9-cage9.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 19.568   | days
-[10/18](CalcGenus/adjacency_lists/3-9-cage10.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 32.433   | days
-[11/18](CalcGenus/adjacency_lists/3-9-cage11.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 32.498   | days
-[12/18](CalcGenus/adjacency_lists/3-9-cage12.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 32.605   | days
-[13/18](CalcGenus/adjacency_lists/3-9-cage13.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 35.797   | days
-[14/18](CalcGenus/adjacency_lists/3-9-cage14.txt) | 3   | 9   | 58   | 87    | 12         | 7          | 41.168   | days
-[15/18](CalcGenus/adjacency_lists/3-9-cage15.txt) | 3   | 9   | 58   | 87    | 8          | 7          | 42.802   | days
-[16/18](CalcGenus/adjacency_lists/3-9-cage16.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 50.437   | days
-[17/18](CalcGenus/adjacency_lists/3-9-cage17.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 478.01   | days
-[18/18](CalcGenus/adjacency_lists/3-9-cage18.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 43.754   | days
-[1/3](CalcGenus/adjacency_lists/3-10-cage1.txt)   | 3   | 10  | 70   | 105   | 120        | 9          | 115.72   | DNF
-[2/3](CalcGenus/adjacency_lists/3-10-cage2.txt)   | 3   | 10  | 70   | 105   | 24         | 9          | 147.85   | DNF
-[3/3](CalcGenus/adjacency_lists/3-10-cage3.txt)   | 3   | 10  | 70   | 105   | 80         | 9          | 129.68   | DNF
-[1/1](CalcGenus/adjacency_lists/3-11-cage.txt)    | 3   | 11  | 112  | 168   | 64         | [14, 16]   | days     | DNF
-[1/1](CalcGenus/adjacency_lists/3-12-cage.txt)    | 3   | 12  | 126  | 189   | 12096      | 17         | 46249.80 | DNF
-[1/1](CalcGenus/adjacency_lists/4-5-cage.txt)     | 4   | 5   | 19   | 38    | 24         | 4          | 11.585   | days
-[1/1](CalcGenus/adjacency_lists/4-6-cage.txt)     | 4   | 6   | 26   | 52    | 11232      | 5          | 0.011    | DNF
-[1/?](CalcGenus/adjacency_lists/4-7-cage.txt)     | 4   | 7   | 67   | 134   | 4          | [16, 17]   | days     | DNF
-[1/1](CalcGenus/adjacency_lists/4-8-cage.txt)     | 4   | 8   | 80   | 160   | 51840      | [21, 22]   | days     | DNF
-[1/?](CalcGenus/adjacency_lists/4-12-cage.txt)    | 4   | 12  | 728  | 1456  | 8491392    | [244, 365] | DNF      | DNF
-[1/4](CalcGenus/adjacency_lists/5-5-cage1.txt)    | 5   | 5   | 30   | 75    | 120        | [8, 10]    | days     | DNF
-[2/4](CalcGenus/adjacency_lists/5-5-cage2.txt)    | 5   | 5   | 30   | 75    | 20         | [8, 13]    | days     | DNF
-[3/4](CalcGenus/adjacency_lists/5-5-cage3.txt)    | 5   | 5   | 30   | 75    | 30         | [8, 14]    | days     | DNF
-[4/4](CalcGenus/adjacency_lists/5-5-cage4.txt)    | 5   | 5   | 30   | 75    | 96         | [8, 14]    | days     | DNF
-[1/1](CalcGenus/adjacency_lists/5-6-cage.txt)     | 5   | 6   | 42   | 105   | 241920     | [15, 16]   | days     | DNF
-[1/1](CalcGenus/adjacency_lists/5-8-cage.txt)     | 5   | 8   | 170  | 425   | 3916800    | [75, 90]   | DNF      | DNF
-[1/?](CalcGenus/adjacency_lists/5-12-cage.txt)    | 5   | 12  | 2730 | 6825  | 503193600  |[1480, 2048]| OOM      | DNF
-[1/1](CalcGenus/adjacency_lists/6-5-cage.txt)     | 6   | 5   | 40   | 120   | 480        | [17, 22]   | days     | DNF
-[1/1](CalcGenus/adjacency_lists/6-6-cage.txt)     | 6   | 6   | 62   | 186   | 744000     | [32, 34]   | DNF      | DNF
-[1/1](CalcGenus/adjacency_lists/6-8-cage.txt)     | 6   | 8   | 312  | 936   | 9360000    | [196, 222] | DNF      | DNF
-[1/?](CalcGenus/adjacency_lists/6-12-cage.txt)    | 6   | 12  | 7812 | 23436 | 5859000000 |[5860, 7813]| OOM      | DNF
-[1/1](CalcGenus/adjacency_lists/7-5-cage.txt)     | 7   | 5   | 50   | 175   | 252000     | [28, 34]   | DNF      | DNF
-[1/1](CalcGenus/adjacency_lists/7-6-cage.txt)     | 7   | 6   | 90   | 315   | 15120      | [61, 67]   | DNF      | DNF
+The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), computation time for the genus using SageMath (SM time), and computation time using multi_genus.c (MG time).
+\#                                                | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s)
+------------------------------------------------- | --- | --- | ---- | ----- | ---------- | ---------- | -------- | ----------- | -----------
+[1/1](CalcGenus/adjacency_lists/3-3-cage.txt)     | 3   | 3   | 4    | 6     | 24         | 0          | 0.008    | 0.004       | 0.006
+[1/1](CalcGenus/adjacency_lists/3-4-cage.txt)     | 3   | 4   | 6    | 9     | 72         | 1          | 0.008    | 0.039       | 0.006
+[1/1](CalcGenus/adjacency_lists/3-5-cage.txt)     | 3   | 5   | 10   | 15    | 120        | 1          | 0.008    | 0.027       | 0.006
+[1/1](CalcGenus/adjacency_lists/3-6-cage.txt)     | 3   | 6   | 14   | 21    | 336        | 1          | 0.009    | 0.010       | 0.006
+[1/1](CalcGenus/adjacency_lists/3-7-cage.txt)     | 3   | 7   | 24   | 36    | 32         | 2          | 0.016    | 1.737       | 0.006
+[1/1](CalcGenus/adjacency_lists/3-8-cage.txt)     | 3   | 8   | 30   | 45    | 1440       | 4          | 0.104    | 118.958     | 0.012
+[1/18](CalcGenus/adjacency_lists/3-9-cage1.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 22.015   | days        | 29.084
+[2/18](CalcGenus/adjacency_lists/3-9-cage2.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 19.625   | days        | 30.909
+[3/18](CalcGenus/adjacency_lists/3-9-cage3.txt)   | 3   | 9   | 58   | 87    | 24         | 7          | 237.35   | days        | 25.993
+[4/18](CalcGenus/adjacency_lists/3-9-cage4.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 32.896   | days        | 54.396
+[5/18](CalcGenus/adjacency_lists/3-9-cage5.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 32.859   | days        | 67.89
+[6/18](CalcGenus/adjacency_lists/3-9-cage6.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 23.305   | days        | 45.310
+[7/18](CalcGenus/adjacency_lists/3-9-cage7.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 31.474   | days        | 37.257
+[8/18](CalcGenus/adjacency_lists/3-9-cage8.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 32.003   | days        | 42.843
+[9/18](CalcGenus/adjacency_lists/3-9-cage9.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 19.568   | days        | 34.437
+[10/18](CalcGenus/adjacency_lists/3-9-cage10.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 32.433   | days        | 86.54
+[11/18](CalcGenus/adjacency_lists/3-9-cage11.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 32.498   | days        | 54.990
+[12/18](CalcGenus/adjacency_lists/3-9-cage12.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 32.605   | days        | 51.589
+[13/18](CalcGenus/adjacency_lists/3-9-cage13.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 35.797   | days        | 32.340
+[14/18](CalcGenus/adjacency_lists/3-9-cage14.txt) | 3   | 9   | 58   | 87    | 12         | 7          | 41.168   | days        | 30.824
+[15/18](CalcGenus/adjacency_lists/3-9-cage15.txt) | 3   | 9   | 58   | 87    | 8          | 7          | 42.802   | days        | 44.888
+[16/18](CalcGenus/adjacency_lists/3-9-cage16.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 50.437   | days        | 57.890
+[17/18](CalcGenus/adjacency_lists/3-9-cage17.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 478.01   | days        | 140.50
+[18/18](CalcGenus/adjacency_lists/3-9-cage18.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 43.754   | days        | 47.737
+[1/3](CalcGenus/adjacency_lists/3-10-cage1.txt)   | 3   | 10  | 70   | 105   | 120        | 9          | 115.72   | DNF         | 9354.14
+[2/3](CalcGenus/adjacency_lists/3-10-cage2.txt)   | 3   | 10  | 70   | 105   | 24         | 9          | 147.85   | DNF         | 9556.13
+[3/3](CalcGenus/adjacency_lists/3-10-cage3.txt)   | 3   | 10  | 70   | 105   | 80         | 9          | 129.68   | DNF         | 10680.89
+[1/1](CalcGenus/adjacency_lists/3-11-cage.txt)    | 3   | 11  | 112  | 168   | 64         | [14, 29]   | days     | DNF         | DNF
+[1/1](CalcGenus/adjacency_lists/3-12-cage.txt)    | 3   | 12  | 126  | 189   | 12096      | 17         | 46249.80 | DNF         | DNF
+[1/1](CalcGenus/adjacency_lists/4-5-cage.txt)     | 4   | 5   | 19   | 38    | 24         | 4          | 7.998    | days        | 0.019
+[1/1](CalcGenus/adjacency_lists/4-6-cage.txt)     | 4   | 6   | 26   | 52    | 11232      | 5          | 0.011    | DNF         | 0.013
+<!-- [1/?](CalcGenus/adjacency_lists/4-7-cage1.txt)    | 4   | 7   | 67   | 134   | 4          | [16, 17]   | days     | DNF         | DNF
+[1/1](CalcGenus/adjacency_lists/4-8-cage.txt)     | 4   | 8   | 80   | 160   | 51840      | [21, 22]   | days     | DNF         | DNF
+[1/?](CalcGenus/adjacency_lists/4-12-cage1.txt)   | 4   | 12  | 728  | 1456  | 8491392    | [244, 365] | DNF      | DNF         | Too big for bit operations
+[1/4](CalcGenus/adjacency_lists/5-5-cage1.txt)    | 5   | 5   | 30   | 75    | 120        | [8, 10]    | days     | DNF         | days
+[2/4](CalcGenus/adjacency_lists/5-5-cage2.txt)    | 5   | 5   | 30   | 75    | 20         | [8, 13]    | days     | DNF         | days
+[3/4](CalcGenus/adjacency_lists/5-5-cage3.txt)    | 5   | 5   | 30   | 75    | 30         | [8, 14]    | days     | DNF         | days
+[4/4](CalcGenus/adjacency_lists/5-5-cage4.txt)    | 5   | 5   | 30   | 75    | 96         | [8, 14]    | days     | DNF         | days
+[1/1](CalcGenus/adjacency_lists/5-6-cage.txt)     | 5   | 6   | 42   | 105   | 241920     | [15, 16]   | days     | DNF         | days
+[1/1](CalcGenus/adjacency_lists/5-8-cage.txt)     | 5   | 8   | 170  | 425   | 3916800    | [75, 90]   | DNF      | DNF         | Too big for bit operations
+[1/?](CalcGenus/adjacency_lists/5-12-cage.txt)    | 5   | 12  | 2730 | 6825  | 503193600  |[1480, 2048]| OOM      | DNF         | Too big for bit operations
+[1/1](CalcGenus/adjacency_lists/6-5-cage.txt)     | 6   | 5   | 40   | 120   | 480        | [17, 22]   | days     | DNF         | days
+[1/1](CalcGenus/adjacency_lists/6-6-cage.txt)     | 6   | 6   | 62   | 186   | 744000     | [32, 34]   | DNF      | DNF         | days
+[1/1](CalcGenus/adjacency_lists/6-8-cage.txt)     | 6   | 8   | 312  | 936   | 9360000    | [196, 222] | DNF      | DNF         | Too big for bit operations
+[1/?](CalcGenus/adjacency_lists/6-12-cage.txt)    | 6   | 12  | 7812 | 23436 | 5859000000 |[5860, 7813]| OOM      | DNF         | Too big for bit operations
+[1/1](CalcGenus/adjacency_lists/7-5-cage.txt)     | 7   | 5   | 50   | 175   | 252000     | [28, 34]   | DNF      | DNF         | days
+[1/1](CalcGenus/adjacency_lists/7-6-cage.txt)     | 7   | 6   | 90   | 315   | 15120      | [61, 67]   | DNF      | DNF         | days -->
   
-The genus for various complete graphs generated using the `CompleteGraph` function in SageMath follows. Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), and computation time for the genus using SageMath (SM time).
-\#                                       | k   | g   | v    | e     | \|G\|              | genus    | time (s) | SM time (s)
----------------------------------------- | --- | --- | ---- | ----- | ------------------ | -------- | -------- | -----------
-[k2](CalcGenus/adjacency_lists/k2.txt)   | 1   | Inf | 2    | 1     | 2                  | 0        | ---      | 0.004
-[k3](CalcGenus/adjacency_lists/k3.txt)   | 2   | 3   | 3    | 3     | 6                  | 0        | 0.008    | 0.004
-[k4](CalcGenus/adjacency_lists/k4.txt)   | 3   | 3   | 4    | 6     | 24                 | 0        | 0.008    | 0.003
-[k5](CalcGenus/adjacency_lists/k5.txt)   | 4   | 3   | 5    | 10    | 120                | 1        | 0.008    | 0.005
-[k6](CalcGenus/adjacency_lists/k6.txt)   | 5   | 3   | 6    | 15    | 720                | 1        | 0.008    | 0.023
-[k7](CalcGenus/adjacency_lists/k7.txt)   | 6   | 3   | 7    | 21    | 5040               | 1        | 0.020    | days
-[k8](CalcGenus/adjacency_lists/k8.txt)   | 7   | 3   | 8    | 28    | 40320              | 2        | 18.079   | DNF
-[k9](CalcGenus/adjacency_lists/k9.txt)   | 8   | 3   | 9    | 36    | 362880             | 3        | days     | DNF
+The genus for various complete graphs generated using the `CompleteGraph` function in SageMath follows. 
+\#                                       | k   | g   | v    | e     | \|G\|              | genus    | time (s) | SM time (s) | MG time (s)
+---------------------------------------- | --- | --- | ---- | ----- | ------------------ | -------- | -------- | ----------- | -----------
+[k2](CalcGenus/adjacency_lists/k2.txt)   | 1   | Inf | 2    | 1     | 2                  | 0        | ---      | 0.004       | ---
+[k3](CalcGenus/adjacency_lists/k3.txt)   | 2   | 3   | 3    | 3     | 6                  | 0        | 0.008    | 0.004       | 0.008
+[k4](CalcGenus/adjacency_lists/k4.txt)   | 3   | 3   | 4    | 6     | 24                 | 0        | 0.008    | 0.003       | 0.008
+[k5](CalcGenus/adjacency_lists/k5.txt)   | 4   | 3   | 5    | 10    | 120                | 1        | 0.008    | 0.005       | 0.008
+[k6](CalcGenus/adjacency_lists/k6.txt)   | 5   | 3   | 6    | 15    | 720                | 1        | 0.008    | 0.023       | 0.008
+[k7](CalcGenus/adjacency_lists/k7.txt)   | 6   | 3   | 7    | 21    | 5040               | 1        | 0.020    | days        | 0.009
+[k8](CalcGenus/adjacency_lists/k8.txt)   | 7   | 3   | 8    | 28    | 40320              | 2        | 18.079   | DNF         | 0.008
+[k9](CalcGenus/adjacency_lists/k9.txt)   | 8   | 3   | 9    | 36    | 362880             | 3        | days     | DNF         | 0.008
 
 The genus for various complete bipartite graphs generated using the `CompleteBipartiteGraph` function in SageMath follows. Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), and computation time for the genus using SageMath (SM time).
-\#                                         | k   | g   | v    | e     | \|G\|        | genus    | time (s) | SM time (s)
------------------------------------------- | --- | --- | ---- | ----- | ------------ | -------- | -------- | -----------
-[k3-3](CalcGenus/adjacency_lists/k3-3.txt) | 3   | 4   | 6    | 9     | 72           | 1        | 0.010    | 0.047
-[k4-4](CalcGenus/adjacency_lists/k4-4.txt) | 4   | 4   | 8    | 16    | 1152         | 1        | 0.012    | 0.010
-[k5-5](CalcGenus/adjacency_lists/k5-5.txt) | 5   | 4   | 10   | 25    | 28800        | 3        | 111.48   | DNF
-[k6-6](CalcGenus/adjacency_lists/k6-6.txt) | 6   | 4   | 12   | 36    | 1036800      | 4        | 0.014    | DNF
+\#                                         | k   | g   | v    | e     | \|G\|        | genus    | time (s) | SM time (s) | MG time (s)
+------------------------------------------ | --- | --- | ---- | ----- | ------------ | -------- | -------- | ----------- | -----------
+[k3-3](CalcGenus/adjacency_lists/k3-3.txt) | 3   | 4   | 6    | 9     | 72           | 1        | 0.010    | 0.047       | 0.006
+[k4-4](CalcGenus/adjacency_lists/k4-4.txt) | 4   | 4   | 8    | 16    | 1152         | 1        | 0.012    | 0.010       | 0.010 
+[k5-5](CalcGenus/adjacency_lists/k5-5.txt) | 5   | 4   | 10   | 25    | 28800        | 3        | 111.48   | DNF         | 0.008
+[k6-6](CalcGenus/adjacency_lists/k6-6.txt) | 6   | 4   | 12   | 36    | 1036800      | 4        | 0.014    | DNF         | 0.009
 
 The genus for various complete n-partite graphs generated using the `CompleteMultipartiteGraph` function in SageMath follows.
-\#                                                                               | v    | e     | genus    | time (s)
--------------------------------------------------------------------------------- | ---- | ----- | -------- | --------
-[k2-2](CalcGenus/adjacency_lists/k2-2.txt)                                       | 4    | 4     | 0        | 0.017
-[k2-2-2](CalcGenus/adjacency_lists/k2-2-2.txt)                                   | 6    | 12    | 0        | 0.014
-[k2-2-2-2](CalcGenus/adjacency_lists/k2-2-2-2.txt)                               | 8    | 24    | 1        | 0.015
-[k2-2-2-2-2](CalcGenus/adjacency_lists/k2-2-2-2-2.txt)                           | 10   | 40    | 3        | 2273.60
+\#                                                                               | v    | e     | genus    | time (s) | MG time (s)
+-------------------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
+[k2-2](CalcGenus/adjacency_lists/k2-2.txt)                                       | 4    | 4     | 0        | 0.017    | 0.008
+[k2-2-2](CalcGenus/adjacency_lists/k2-2-2.txt)                                   | 6    | 12    | 0        | 0.014    | 0.009
+[k2-2-2-2](CalcGenus/adjacency_lists/k2-2-2-2.txt)                               | 8    | 24    | 1        | 0.015    | 0.009
+[k2-2-2-2-2](CalcGenus/adjacency_lists/k2-2-2-2-2.txt)                           | 10   | 40    | 3        | 2273.60  | 0.009
 
-The genus for various Johnson graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus    | time (s)
--------------------------------------------------------------------------------- | ---- | ----- | -------- | --------
-[Johnson (5, 2)](CalcGenus/adjacency_lists/Johnson5-2.txt)                       | 10   | 30    | 1        | 0.012
-[Johnson (6, 2)](CalcGenus/adjacency_lists/Johnson6-2.txt)                       | 15   | 60    | [3, 9]   | hours
-[Johnson (6, 3)](CalcGenus/adjacency_lists/Johnson6-3.txt)                       | 20   | 90    | 6        | 0.013
-[Johnson (8, 4)](CalcGenus/adjacency_lists/Johnson8-4.txt)                       | 70   | 560   | [59,165]  | hours
-[Johnson (9, 4)](CalcGenus/adjacency_lists/Johnson9-4.txt)                       | 70   | 560   | [148,339]  | hours
+<!-- The genus for various Johnson graphs generated using Mathematica follows.
+\#                                                                               | v    | e     | genus      | time (s) | MG time (s)
+-------------------------------------------------------------------------------- | ---- | ----- | ---------- | -------- | -----------
+[Johnson (5, 2)](CalcGenus/adjacency_lists/Johnson5-2.txt)                       | 10   | 30    | 2          | 0.017    | 0.009
+[Johnson (6, 2)](CalcGenus/adjacency_lists/Johnson6-2.txt)                       | 15   | 60    | [4, 9]     | hours    | hours
+[Johnson (6, 3)](CalcGenus/adjacency_lists/Johnson6-3.txt)                       | 20   | 90    | 6          | 0.013    | DNF
+[Johnson (8, 4)](CalcGenus/adjacency_lists/Johnson8-4.txt)                       | 70   | 560   | [59,165]   | hours    | too big for bit operations
+[Johnson (9, 4)](CalcGenus/adjacency_lists/Johnson9-4.txt)                       | 70   | 560   | [148,339]  | hours    | too big for bit operations -->
 
-The genus for various Circulant graphs generated using Mathematica follows.
-\#                                                                    | v    | e     | genus    | time (s)
-----------------------------------------------------------------------| ---- | ----- | -------- | --------
-[C10_1,2,5](CalcGenus/adjacency_lists/Circulant10_1-2-5.txt)          | 10   | 25    | 1        | 0.245
-[C10_1,2,4,5](CalcGenus/adjacency_lists/Circulant10_1-2-4-5.txt)      | 10   | 35    | 2        | 0.018
-[C15_1,5](CalcGenus/adjacency_lists/Circulant15_1-5.txt)              | 15   | 30    | 1        | 0.010 w/ planarity test
-[C16_1,7](CalcGenus/adjacency_lists/Circulant16_1-7.txt)              | 16   | 32    | 1        | 0.013
-[C18_1,3,9](CalcGenus/adjacency_lists/Circulant18_1-3-9.txt)          | 18   | 45    | 3        | 0.010
-[C31_1,5,6](CalcGenus/adjacency_lists/Circulant31_1-5-6.txt)          | 31   | 93    | 1        | 0.010
-[C20_*](CalcGenus/adjacency_lists/Circulant20_1-3-5-7-9-10.txt)       | 20   | 110   | [10, 16] | hours
+<!-- The genus for various Circulant graphs generated using Mathematica follows.
+\#                                                                    | v    | e     | genus    | time (s)                | MG time (s)
+----------------------------------------------------------------------| ---- | ----- | -------- | ----------------------- | -----------
+[C10_1,2,5](CalcGenus/adjacency_lists/Circulant10_1-2-5.txt)          | 10   | 25    | 1        | 0.021                   | 0.007
+[C10_1,2,4,5](CalcGenus/adjacency_lists/Circulant10_1-2-4-5.txt)      | 10   | 35    | 3        | DNF                     | 0.023 [!!]
+[C14_1,2,3,6](CalcGenus/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 48    | 4        | DNF                     | 0.896 [!!]
+[C15_1,5](CalcGenus/adjacency_lists/Circulant15_1-5.txt)              | 15   | 30    | 1        | 0.010 w/ planarity test | 0.006
+[C16_1,7](CalcGenus/adjacency_lists/Circulant16_1-7.txt)              | 16   | 32    | 1        | 0.008                   | 0.014
+[C18_1,3,9](CalcGenus/adjacency_lists/Circulant18_1-3-9.txt)          | 18   | 45    | 4        | 0.174                   | 0.021 [!!!]
+[C20_1,3,5](CalcGenus/adjacency_lists/Circulant20_1-3-5.txt)          | 20   | 60    | 6        | DNF                     | 13.698
+[C20_1,6,9](CalcGenus/adjacency_lists/Circulant20_1-6-9.txt)          | 20   | 60    | 6        | 0.089                   | 20.637
+[C21_1,4,5](CalcGenus/adjacency_lists/Circulant21_1-4-5.txt)          | 21   | 63    | 1        | 0.011                   | 0.008
+[C26_1,3,9](CalcGenus/adjacency_lists/Circulant26_1-3-9.txt)          | 26   | 78    | [7, 10]  | hours                   | hours
+[C30_1,9,11](CalcGenus/adjacency_lists/Circulant30_1-9-11.txt)        | 30   | 90    | [9, 31]  | hours                   | hours
+[C30_1,4,11,14](CalcGenus/adjacency_lists/Circulant30_1-4-11-14.txt)  | 30   | 120   | [16, 17] | hours                   | hours
+[C31_1,5,6](CalcGenus/adjacency_lists/Circulant31_1-5-6.txt)          | 31   | 93    | 1        | 0.010                   | 0.006
+[C20_*](CalcGenus/adjacency_lists/Circulant20_1-3-5-7-9-10.txt)       | 20   | 110   | [10, 16] | hours                   | hours -->
 
-The genus for various Cyclotomic graphs generated using Mathematica follows.
-\#                                                                    | v    | e     | genus    | time (s)
-----------------------------------------------------------------------| ---- | ----- | -------- | --------
-[16](CalcGenus/adjacency_lists/Cyclotomic16.txt)                      | 16   | 40    | 4        | 0.816
-[19](CalcGenus/adjacency_lists/Cyclotomic19.txt)                      | 19   | 57    | 1        | 0.010
-[31](CalcGenus/adjacency_lists/Cyclotomic31.txt)                      | 31   | 155   | [11,28]  | hours
-[61](CalcGenus/adjacency_lists/Cyclotomic61.txt)                      | 61   | 610   | [72,207] | hours
-[67](CalcGenus/adjacency_lists/Cyclotomic67.txt)                      | 67   | 737   | [90,297] | hours
+<!-- The genus for various Cyclotomic graphs generated using Mathematica follows.
+\#                                                                    | v    | e     | genus    | time (s) | MG time (s)
+----------------------------------------------------------------------| ---- | ----- | -------- | -------- | -----------
+[16](CalcGenus/adjacency_lists/Cyclotomic16.txt)                      | 16   | 40    | 4        | 0.816    | 0.042
+[19](CalcGenus/adjacency_lists/Cyclotomic19.txt)                      | 19   | 57    | 1        | 0.010    | 0.010
+[31](CalcGenus/adjacency_lists/Cyclotomic31.txt)                      | 31   | 155   | [11,28]  | hours    | hours
+[61](CalcGenus/adjacency_lists/Cyclotomic61.txt)                      | 61   | 610   | [72,207] | hours    | too big for bit operations
+[67](CalcGenus/adjacency_lists/Cyclotomic67.txt)                      | 67   | 737   | [90,297] | hours    | too big for bit operations -->
 
-The genus for various DifferenceSetIncidence graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus    | time (s)
--------------------------------------------------------------------------------- | ---- | ----- | -------- | --------
-[11,5,2](CalcGenus/adjacency_lists/DifferenceSetIncidence11-5-2.txt)             | 22   | 55    | 5        | 0.578
-[40,13,4](CalcGenus/adjacency_lists/DifferenceSetIncidence40-13-4.txt)           | 80   | 520   | [91,102] | hours
+<!-- The genus for various DifferenceSetIncidence graphs generated using Mathematica follows.
+\#                                                                               | v    | e     | genus    | time (s) | MG time (s)
+-------------------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
+[11,5,2](CalcGenus/adjacency_lists/DifferenceSetIncidence11-5-2.txt)             | 22   | 55    | 5        | 0.578    | 1.770
+[40,13,4](CalcGenus/adjacency_lists/DifferenceSetIncidence40-13-4.txt)           | 80   | 520   | [91,102] | hours    | too big for bit operations -->
 
-The genus for various Bipartite Kneser graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus     | time (s)
--------------------------------------------------------------------------------- | ---- | ----- | --------- | --------
-[Bipartite Kneser (6, 2)](CalcGenus/adjacency_lists/bipartite-kneser6-2.txt)     | 30   | 90    | [8,12]    | minutes
-[Bipartite Kneser (7, 2)](CalcGenus/adjacency_lists/bipartite-kneser7-2.txt)     | 42   | 210   | 32        | 406.52
-[Bipartite Kneser (8, 2)](CalcGenus/adjacency_lists/bipartite-kneser8-2.txt)     | 56   | 420   | 78        | 1.329
-[Bipartite Kneser (8, 3)](CalcGenus/adjacency_lists/bipartite-kneser8-3.txt)     | 112  | 560   | [85,143]  | minutes
-[Bipartite Kneser (9, 2)](CalcGenus/adjacency_lists/bipartite-kneser9-2.txt)     | 72   | 756   | 154       | 2.024
-[Bipartite Kneser (9, 3)](CalcGenus/adjacency_lists/bipartite-kneser9-3.txt)     | 168  | 1680  | [337,338] | minutes
-[Bipartite Kneser (10, 2)](CalcGenus/adjacency_lists/bipartite-kneser10-2.txt)   | 90   | 1260  | 271       | 31.067
-[Bipartite Kneser (10, 3)](CalcGenus/adjacency_lists/bipartite-kneser10-3.txt)   | 240  | 4200  | 931       | 59.28
-[Bipartite Kneser (10, 4)](CalcGenus/adjacency_lists/bipartite-kneser10-4.txt)   | 420  | 3150  |[578,1174] | minutes
-[Bipartite Kneser (11, 2)](CalcGenus/adjacency_lists/bipartite-kneser11-2.txt)   | 110  | 1980  | 441       | 95.57
-[Bipartite Kneser (11, 3)](CalcGenus/adjacency_lists/bipartite-kneser11-3.txt)   | 330  | 9240  | 2146      | 1726.81
-[Bipartite Kneser (11, 4)](CalcGenus/adjacency_lists/bipartite-kneser11-4.txt)   | 660  | 11550 |[2558,4600]| minutes
-[Bipartite Kneser (12, 2)](CalcGenus/adjacency_lists/bipartite-kneser12-2.txt)   | 132  | 2970  | 677       | 386.09
-[Bipartite Kneser (12, 3)](CalcGenus/adjacency_lists/bipartite-kneser12-3.txt)   | 440  | 18480 |[4401,7732]| minutes
-[Bipartite Kneser (12, 4)](CalcGenus/adjacency_lists/bipartite-kneser12-4.txt)   | 990  | 34650 | ?         | adjacency list too large to load
-[Bipartite Kneser (12, 5)](CalcGenus/adjacency_lists/bipartite-kneser12-5.txt)   | 1584 | 16632 |[3367,7253]| minutes
+<!-- The genus for various Bipartite Kneser graphs generated using Mathematica follows.
+\#                                                                               | v    | e     | genus     | time (s)                         | MG time (s)
+-------------------------------------------------------------------------------- | ---- | ----- | --------- | -------------------------------- | -----------
+[Bipartite Kneser (6, 2)](CalcGenus/adjacency_lists/bipartite-kneser6-2.txt)     | 30   | 90    | [9,12]    | minutes                          | minutes
+[Bipartite Kneser (7, 2)](CalcGenus/adjacency_lists/bipartite-kneser7-2.txt)     | 42   | 210   | 32        | 406.52                           |
+[Bipartite Kneser (8, 2)](CalcGenus/adjacency_lists/bipartite-kneser8-2.txt)     | 56   | 420   | 78        | 1.329                            |
+[Bipartite Kneser (8, 3)](CalcGenus/adjacency_lists/bipartite-kneser8-3.txt)     | 112  | 560   | [85,143]  | minutes                          |
+[Bipartite Kneser (9, 2)](CalcGenus/adjacency_lists/bipartite-kneser9-2.txt)     | 72   | 756   | 154       | 2.024                            |
+[Bipartite Kneser (9, 3)](CalcGenus/adjacency_lists/bipartite-kneser9-3.txt)     | 168  | 1680  | [337,338] | minutes                          |
+[Bipartite Kneser (10, 2)](CalcGenus/adjacency_lists/bipartite-kneser10-2.txt)   | 90   | 1260  | 271       | 31.067                           |
+[Bipartite Kneser (10, 3)](CalcGenus/adjacency_lists/bipartite-kneser10-3.txt)   | 240  | 4200  | 931       | 59.28                            |
+[Bipartite Kneser (10, 4)](CalcGenus/adjacency_lists/bipartite-kneser10-4.txt)   | 420  | 3150  |[578,1174] | minutes                          |
+[Bipartite Kneser (11, 2)](CalcGenus/adjacency_lists/bipartite-kneser11-2.txt)   | 110  | 1980  | 441       | 95.57                            |
+[Bipartite Kneser (11, 3)](CalcGenus/adjacency_lists/bipartite-kneser11-3.txt)   | 330  | 9240  | 2146      | 1726.81                          |
+[Bipartite Kneser (11, 4)](CalcGenus/adjacency_lists/bipartite-kneser11-4.txt)   | 660  | 11550 |[2558,4600]| minutes                          |
+[Bipartite Kneser (12, 2)](CalcGenus/adjacency_lists/bipartite-kneser12-2.txt)   | 132  | 2970  | 677       | 386.09                           |
+[Bipartite Kneser (12, 3)](CalcGenus/adjacency_lists/bipartite-kneser12-3.txt)   | 440  | 18480 |[4401,7732]| minutes                          |
+[Bipartite Kneser (12, 4)](CalcGenus/adjacency_lists/bipartite-kneser12-4.txt)   | 990  | 34650 | ?         | adjacency list too large to load |
+[Bipartite Kneser (12, 5)](CalcGenus/adjacency_lists/bipartite-kneser12-5.txt)   | 1584 | 16632 |[3367,7253]| minutes                          | -->
 
 The genus for various miscellaneous graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus    | time (s)
--------------------------------------------------------------------------------- | ---- | ----- | -------- | --------
-[Klein Bottle](CalcGenus/adjacency_lists/KleinBottleTriangulation9-1.txt)        | 9    | 27    | 2        | 0.332
-[Danzer Graph](CalcGenus/adjacency_lists/DanzerGraph.txt)                        | 70   | 140   | [13,17]  | hours
-[TRC](CalcGenus/adjacency_lists/TriangleReplacedCoxeterGraph.txt)                | 84   | 126   | [1,3]    | hours
+\#                                                                               | v    | e     | genus    | time (s) | MG time (s)
+-------------------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
+[Klein Bottle](CalcGenus/adjacency_lists/KleinBottleTriangulation9-1.txt)        | 9    | 27    | 2        | 0.332    | 0.006
+[TRC](CalcGenus/adjacency_lists/TriangleReplacedCoxeterGraph.txt)                | 84   | 126   | 3        | hours    | 0.006
+
+## Acknowledgements
+
+[Austin](https://austinulrigg.github.io/) did the main work in deciphering the math and checking the solutions manually. He also contributed intellectually to the ideas behind the algorithm.
+
+The CalcCycles programs were written by [Sam King](https://www.linkedin.com/in/samkingwa/) and used to check the results of the algorithm for the Balaban 10 Cage.
+
+Credit to the rest of the recreational math group at the University of Washington for input on the programs/math and for providing computational resources for experimentation.
+
+Thanks to [Professor Steinerberger](https://faculty.washington.edu/steinerb/) for guidance on the project, and thanks to [Professor Brinkman](https://scholar.google.be/citations?user=yaEBOB4AAAAJ&hl=nl) for providing a fast SoTA algorithm `multi_genus` to compare against and recommendations for visualizing results.
 
 ## References
 - Adjacency Lists
     - [Win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html)
     - [SageMath Generators](https://doc.sagemath.org/html/en/reference/graphs/sage/graphs/graph_generators.html)
+    - [Mathematica](https://www.wolfram.com/mathematica/)
+    - [ROME and other practical graph datasets](http://graphdrawing.org/data.html)
 
 - Genus problem is NP-Hard
     - [The graph genus problem is NP-complete](https://www.sciencedirect.com/science/article/abs/pii/0196677489900060?via%3Dihub)
         - The general problem of determining the genus of a graph is NP-hard
     - [Triangulating a Surface with a Prescribed Graph](https://www.sciencedirect.com/science/article/pii/S0095895683710166)
         - Determining the non-orientable genus of a graph is NP-hard
+
+- Background Information
+    - [Rotation Systems](https://sites.math.washington.edu/~morrow/papers/tom-thesis.pdf)
+    - [Pearls in Graph Theory - A Comprehensive Introduction - By Nora Hartsfield and Gerhard Ringel](https://proofits.wordpress.com/wp-content/uploads/2012/09/nora_hartsfield_gerhard_ringel_pearls_in_graph.pdf) (particularly Chapter 10)
 
 - Existing Graph Embedding Algorithms
     - Planarity Testing (genus = 0)
@@ -276,6 +293,9 @@ The genus for various miscellaneous graphs generated using Mathematica follows.
             - [Stronger ILPs for the Graph Genus Problem](https://drops.dagstuhl.de/storage/00lipics/lipics-vol144-esa2019/LIPIcs.ESA.2019.30/LIPIcs.ESA.2019.30.pdf)
                 - Solves most of ROME and NORTH graph datasets
                 - 42 hours for the Gray graph (genus 7)
+    - Similar Efficiency with Different Trade-Offs
+        - [A Practical Algorithm for the Computation of the Genus](https://www.researchgate.net/publication/361684162_A_practical_algorithm_for_the_computation_of_the_genus)
+            - Scales worse with Genus but better with Vertices
     - Theoretically more efficient but Nearly Impossible to Implement
         - [A Linear Time Algorithm for Embedding Graphs in an Arbitrary Surface](https://www.sfu.ca/~mohar/Papers/General.pdf)
             - Linear for fixed genus
