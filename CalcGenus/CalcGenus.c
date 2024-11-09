@@ -14,10 +14,10 @@
 #define PRINT_PROGRESS true     // whether to print progress messages
 #define DEBUG false             // whether to print debug messages
 #define OUTPUT_TO_STDOUT false  // whether to output to stdout instead of file
-#define ADJACENCY_LIST_FILENAME "adjacency_lists/4-6-cage.txt"  // input file
-#define ADJACENCY_LIST_START 0  // change if vertex numbering doesn't start at 0
-#define OUTPUT_FILENAME "CalcGenus.out"  // output file
-#define VERTEX_DEGREE 4                  // must be >= 2
+#define ADJACENCY_LIST_FILENAME getenv("ADJ")  // input file
+#define ADJACENCY_LIST_START 1  // change if vertex numbering doesn't start at 0
+#define OUTPUT_FILENAME "CalcGenus.out"    // output file
+#define VERTEX_DEGREE atoi(getenv("DEG"))  // must be >= 2
 // true if it should to find the full cycle fitting, otherwise stops early once
 // it is clear it exists:
 #define FIND_FULL_CYCLE_FITTING true
@@ -118,7 +118,8 @@ cycle_index_t implied_max_genus_for_fit(cycle_index_t fit,
   return val < 0 ? 0 : val;
 }
 
-// static int64_t num_current_length_cycles = 0;  // TODO
+static edge_t num_edges_remaining = 0;
+static cycle_length_t smallest_cycle_length;
 
 int main(void) {
   if (PRINT_PROGRESS) {
@@ -173,7 +174,7 @@ int main(void) {
 
   cycle_index_t max_fit = 0;
   uint64_t num_search_calls = 0;
-  cycle_length_t smallest_cycle_length = num_vertices;
+  smallest_cycle_length = num_vertices;
   cycles_t cycles = NULL;
   cycle_index_t num_cycles = 0;
   cycle_length_t cycles_max_cycle_length = 0;
@@ -252,7 +253,7 @@ int main(void) {
       cycles = combined;
     }
 
-    // if (cur_max_cycle_length < 7) {
+    // if (cur_max_cycle_length <= 12) {
     //   continue;
     // }  // TODO
 
@@ -316,22 +317,6 @@ int main(void) {
         // mark cycle vertices as used once
         vertex_uses[cycle[i]] = 1;
       }
-
-      // // mark all current length cycles as used TODO
-      // for (cycle_index_t c2 = num_cycles - num_new_cycles; c2 < num_cycles;
-      //      c2++) {
-      //   used_cycles[c2] = true;
-      //   cycle_length_t cycle_length;
-      //   cycles_t cycle =
-      //       cycle_get(cycles, cur_max_cycle_length, c2, &cycle_length);
-      //   for (cycle_length_t i = 0; i < cycle_length; i++) {
-      //     adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
-
-      //     // mark cycle vertices as used once
-      //     vertex_uses[cycle[i]] = 1;
-      //   }
-      // }
-      // num_current_length_cycles = 1;  // TODO
 
       if (search(genus_lower_bound_implied_fit - 1,
                  genus_lower_bound_implied_fit, used_cycles, vertex_uses,
@@ -463,10 +448,11 @@ int main(void) {
   return 1;
 }
 
+static int prev_percent = -1;
 void show_progress(double fraction) {
   // E.g. [##########          ] 50%
 
-  if (!PRINT_PROGRESS) {
+  if (!PRINT_PROGRESS || ((int)(fraction * 100) == prev_percent)) {
     return;
   }
 
@@ -480,6 +466,7 @@ void show_progress(double fraction) {
     }
   }
   fprintf(stderr, "] %d%%", (int)(fraction * 100));
+  prev_percent = (int)(fraction * 100);
 }
 
 bool is_valid_rotation_system(bool* used_cycles, cycles_t cycles,
@@ -790,13 +777,15 @@ bool search(cycle_index_t cycles_to_use,                    // state
     vertex_t* cycle =
         cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
 
-    // // TODO
-    // if (cycle_length >= 7) {
-    //   if (num_current_length_cycles + 1 > 4) {
-    //     continue;
-    //   }
-    //   num_current_length_cycles++;
-    // }
+    // If the cycle is too long and doesn't leave enough edges for our desired
+    // fit, we can't use it; similarly, if it is too short and doesn't allow us
+    // to use all the edges, we can't use it
+    if (((cycles_to_use - 1) * smallest_cycle_length >
+         num_edges_remaining - cycle_length) ||
+        ((cycles_to_use - 1) * max_cycle_length <
+         num_edges_remaining - cycle_length)) {
+      continue;
+    }
 
     // cycle is only usable if all edges are available
     bool can_use = true;
@@ -807,14 +796,12 @@ bool search(cycle_index_t cycles_to_use,                    // state
       }
     }
     if (!can_use) {
-      // num_current_length_cycles--;  // TODO
       continue;
     }
 
     // make sure the cycle satisfies the ijk condition
     if (VERTEX_DEGREE > 2 && !is_ijk_good(used_cycles, cycles, max_cycle_length,
                                           num_cycles, cycle_index)) {
-      // num_current_length_cycles--;  // TODO
       continue;
     }
     if (!is_valid_rotation_system(used_cycles, cycles, max_cycle_length,
@@ -855,9 +842,15 @@ bool search(cycle_index_t cycles_to_use,                    // state
               // un-use the cycle vertices
               vertex_uses[cycle[j]]--;
             }
+            if (CONSTRAINED_BY_TWO) {
+              free(cycle_indices);
+            }
             return false;
           }
         }
+      }
+      if (CONSTRAINED_BY_TWO) {
+        free(cycle_indices);
       }
       return true;
     }
@@ -867,10 +860,11 @@ bool search(cycle_index_t cycles_to_use,                    // state
                max_fit, num_search_calls, num_vertices, num_edges,
                adjacency_list, max_cycle_length, num_cycles, cycles,
                max_cycles_per_vertex, cycles_by_vertex, current_start_cycle)) {
+      if (CONSTRAINED_BY_TWO) {
+        free(cycle_indices);
+      }
       return true;  // as soon as we succeed, we're done
     }
-
-    // num_current_length_cycles--;  // TODO
 
     // un-use the cycle
     used_cycles[cycle_index] = false;
@@ -880,6 +874,10 @@ bool search(cycle_index_t cycles_to_use,                    // state
       // un-use the cycle vertices
       vertex_uses[cycle[j]]--;
     }
+  }
+
+  if (CONSTRAINED_BY_TWO) {
+    free(cycle_indices);
   }
 
   // if we haven't returned true by now, we've failed
@@ -925,6 +923,7 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
     fprintf(stderr, "\n");
   }
 
+  num_edges_remaining = 2 * *num_edges;
   return adjacency_list;
 }
 
@@ -937,6 +936,7 @@ void adj_remove_edge(adj_t adjacency_list, vertex_t start_vertex,
   vertex_t* neighbors = adj_get_neighbors(adjacency_list, start_vertex);
   for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
     if (neighbors[i] == end_vertex) {
+      num_edges_remaining -= 1;
       neighbors[i] = MAX_VERTICES;
       return;
     }
@@ -949,6 +949,7 @@ void adj_undo_remove_edge(adj_t adjacency_list, vertex_t start_vertex,
   vertex_t* neighbors = adj_get_neighbors(adjacency_list, start_vertex);
   for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
     if (neighbors[i] == MAX_VERTICES) {
+      num_edges_remaining += 1;
       neighbors[i] = end_vertex;
       return;
     }
@@ -1122,6 +1123,9 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
       (cycle_index_t*)malloc(num_vertices * sizeof(cycle_index_t));
   assert(cycles_per_vertex != NULL,
          "Error allocating memory for the cycles per vertex\n");
+  for (vertex_t i = 0; i < num_vertices; i++) {
+    cycles_per_vertex[i] = 0;
+  }
   cycle_length_t cycle_length;
   for (cycle_index_t i = 0; i < num_cycles; i++) {
     vertex_t* cycle = cycle_get(cycles, max_cycle_length, i, &cycle_length);
@@ -1164,7 +1168,9 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles,
       }
     }
     assert(num_cycles_for_vertex == cycles_per_vertex[i],
-           "Error filling in the cycles by vertex %" PRIvertex_t "\n", i);
+           "Error filling in the cycles by vertex %" PRIvertex_t
+           " (%" PRIcycle_index_t " != %" PRIcycle_index_t ")\n",
+           i, num_cycles_for_vertex, cycles_per_vertex[i]);
   }
 
   if (DEBUG) {
