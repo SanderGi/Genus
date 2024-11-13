@@ -226,7 +226,7 @@ The CalcCycles programs were written by [Sam King](https://www.linkedin.com/in/s
 
 Credit to the rest of the recreational math group at the University of Washington for input on the programs/math and for providing computational resources for experimentation.
 
-Thanks to [Professor Steinerberger](https://faculty.washington.edu/steinerb/) for guidance on the project, and thanks to [Professor Brinkman](https://scholar.google.be/citations?user=yaEBOB4AAAAJ&hl=nl) for providing a fast SoTA algorithm `multi_genus` to compare against and recommendations for visualizing results.
+Thanks to [Professor Steinerberger](https://faculty.washington.edu/steinerb/) for guidance on the project, and thanks to [Professor Brinkmann](https://scholar.google.be/citations?user=yaEBOB4AAAAJ&hl=nl) for providing a fast SoTA algorithm `multi_genus` to compare against and recommendations for visualizing results.
 
 ## References
 - Adjacency Lists
