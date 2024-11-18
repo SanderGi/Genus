@@ -244,6 +244,7 @@ Thanks to [Professor Steinerberger](https://faculty.washington.edu/steinerb/) fo
 - Background Information
     - [Rotation Systems](https://sites.math.washington.edu/~morrow/papers/tom-thesis.pdf)
     - [Pearls in Graph Theory - A Comprehensive Introduction - By Nora Hartsfield and Gerhard Ringel](https://proofits.wordpress.com/wp-content/uploads/2012/09/nora_hartsfield_gerhard_ringel_pearls_in_graph.pdf) (particularly Chapter 10)
+    - [Topological Graph Theory - A Survey](http://www.math.u-szeged.hu/~hajnal/courses/PhD_Specialis/Archdeacon.pdf)
 
 - Existing Graph Embedding Algorithms
     - Planarity Testing (genus = 0)
