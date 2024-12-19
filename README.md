@@ -25,9 +25,11 @@ This repo contains a fast algorithm for calculating the genus of arbitrary graph
 
 ## Usage
 
+The easiest way is to use the [hosted version](https://genus.fly.dev/). This won't be as fast as running it locally and I can't guarantee it will always be up, but it should allow you to explore the algorithm. You can also self-host the web application by [installing docker](https://docs.docker.com/get-docker/) and running `cd WebApp` followed by `. ./run-dev.sh`. This will start the web application on `localhost:8080`.
+
 To run the python scripts you must have [SageMath installed](https://doc.sagemath.org/html/en/installation/index.html) and select the SageMath kernel in Jupyter/VS Code/whatever you use.
 
-To run the C program for any graph, `cd CalcGenus` and run `S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" make run`. This will compile the C program and run it. The output will be in `CalcGenus.out`. The format of the adjacency lists is the number of vertices and number of edges on the first line followed by the neighbors of each vertex on the following lines. See the examples in `CalcGenus/adjacency_lists/`.
+To run the C program for any graph, `cd CalcGenus` and run `S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" make run`. This will compile the C program and run it. The output will be in `CalcGenus.out`. The format of the adjacency lists is the number of vertices and number of edges on the first line followed by the neighbors of each vertex on the following lines. See the examples in `CalcGenus/adjacency_lists/`. Use `MallocStackLogging=1 S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" leaks -quiet -atExit -- ./CalcGenus` to check for memory leaks on macOS.
 
 ## Time Complexity
 

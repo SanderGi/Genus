@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CalcGenus</title>
+</head>
+<body>
+    <h1>Practical Algorithm for Graph Embedding (PAGE)</h1>
+    <p>Enter your adjacency list below to calculate the genus of the graph.</p>
+    <p>Each vertex gets its own line. Each line is a list of space separated vertex numbers for the line-vertex's neighbors.</p>
+    <select id="example_adj"></select>
+    <button id="load_example">Load Example</button>
+    <br>
+    <textarea id="adjlist" placeholder="Enter your adjacency list here" style="width: 100ch; max-width: 90%; height: 20lh; max-height: 20%;"></textarea>
+    <br>
+    <button id="calculate">Calculate Genus</button>
+ 
+    <h2>Status:</h2>
+    <p id="stderr"></p>
+
+    <h2>Output:</h2>
+    <p id="stdout"></p>
+
+    <script src="script.js"></script>
+</body>
+</html>

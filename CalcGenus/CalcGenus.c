@@ -11,9 +11,13 @@
 #include <stdlib.h>
 
 // configuration options:
-#define PRINT_PROGRESS true     // whether to print progress messages
-#define DEBUG false             // whether to print debug messages
-#define OUTPUT_TO_STDOUT false  // whether to output to stdout instead of file
+#define PRINT_PROGRESS true  // whether to print progress messages
+#define PROGRESS_BAR_NEWLINE \
+  progress_bar_newline  // whether to print a newline after each progress bar
+                        // update
+#define DEBUG false     // whether to print debug messages
+#define OUTPUT_TO_STDOUT \
+  output_to_stdout  // whether to output to stdout instead of file
 #define ADJACENCY_LIST_FILENAME adj_filename  // input file
 #define ADJACENCY_LIST_START start_index      // vertex numbering starts from
 #define OUTPUT_FILENAME "CalcGenus.out"       // output file
@@ -67,6 +71,8 @@ static degree_t vertex_degree = 3;
 static char* adj_filename = NULL;
 static edge_t num_edges_remaining = 0;
 static cycle_length_t smallest_cycle_length;
+static bool output_to_stdout = false;
+static bool progress_bar_newline = false;
 
 // auxiliary data structures
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
@@ -133,6 +139,8 @@ int main(void) {
   start_index = atoi(getenv("S"));
   vertex_degree = atoi(getenv("DEG"));
   adj_filename = getenv("ADJ");
+  output_to_stdout = getenv("STDOUT") != NULL;
+  progress_bar_newline = getenv("PBN") != NULL;
 
   if (PRINT_PROGRESS) {
     fprintf(stderr, "Loading adjacency list...\n");
@@ -214,6 +222,8 @@ int main(void) {
       }
       continue;
     }
+    assert(new_cycles != NULL,
+           "Error: new cycles is NULL but there are new cycles\n");
     if (PRINT_PROGRESS) {
       fprintf(stderr,
               "Found %" PRIcycle_index_t " cycles of length %" PRIcycle_length_t
@@ -555,8 +565,12 @@ void show_progress(double fraction) {
     return;
   }
 
-  fflush(stderr);
-  fprintf(stderr, "\r[");
+  if (!PROGRESS_BAR_NEWLINE) {
+    fflush(stderr);
+    fprintf(stderr, "\r[");
+  } else {
+    fprintf(stderr, "[");
+  }
   for (int i = 0; i < 50; i++) {
     if (i < fraction * 50) {
       fprintf(stderr, "#");
@@ -565,6 +579,9 @@ void show_progress(double fraction) {
     }
   }
   fprintf(stderr, "] %d%%", (int)(fraction * 100));
+  if (PROGRESS_BAR_NEWLINE) {
+    fprintf(stderr, "\n");
+  }
   prev_percent = (int)(fraction * 100);
 }
 
@@ -1180,9 +1197,12 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
   fifo_free(&queue);
   free(buffer);
   *num_cycles = fifo_size(&cycle_list);
-  vertex_t* cycles = (vertex_t*)realloc(
-      cycle_list.data, *num_cycles * (cycle_length + 2) * sizeof(vertex_t));
-  assert(cycles != NULL, "Error reallocating memory for the cycles\n");
+  vertex_t* cycles = NULL;
+  if (*num_cycles != 0) {
+    cycles = (vertex_t*)realloc(
+        cycle_list.data, *num_cycles * (cycle_length + 2) * sizeof(vertex_t));
+    assert(cycles != NULL, "Error reallocating memory for the cycles\n");
+  }
   cycle_list.data = NULL;
   fifo_free(&cycle_list);
 

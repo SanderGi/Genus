@@ -1,0 +1,21 @@
+# fly.toml app configuration file generated for genus on 2024-12-19T02:40:03-08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'genus'
+primary_region = 'sea'
+
+[build]
+dockerfile = "WebApp/Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  size = 'shared-cpu-1x'
