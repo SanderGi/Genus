@@ -107,7 +107,7 @@ The genus for various cage graphs using the adjacency lists from [win.tue.nl](ht
 [1/1](CalcGenus/adjacency_lists/3-11-cage.txt)    | 3   | 11  | 112  | 168   | 64         | [14, 19]   | days     | DNF         | days
 [1/1](CalcGenus/adjacency_lists/3-12-cage.txt)    | 3   | 12  | 126  | 189   | 12096      | 17         | 254.45   | DNF         | days
 [1/1](CalcGenus/adjacency_lists/4-5-cage.txt)     | 4   | 5   | 19   | 38    | 24         | 4          | 0.047    | days        | 0.019
-[1/1](CalcGenus/adjacency_lists/4-6-cage.txt)     | 4   | 6   | 26   | 52    | 11232      | 5          | 0.288    | DNF         | 0.013
+[1/1](CalcGenus/adjacency_lists/4-6-cage.txt)     | 4   | 6   | 26   | 52    | 11232      | 6          | 0.288    | DNF         | 0.013
 [1/?](CalcGenus/adjacency_lists/4-7-cage1.txt)    | 4   | 7   | 67   | 134   | 4          | [16, 21]   | days     | DNF         | days
 [1/1](CalcGenus/adjacency_lists/4-8-cage.txt)     | 4   | 8   | 80   | 160   | 51840      | [21, 27]   | days     | DNF         | days
 [1/?](CalcGenus/adjacency_lists/4-12-cage1.txt)   | 4   | 12  | 728  | 1456  | 8491392    | [244, 363] | DNF      | DNF         | too big for bit operations
