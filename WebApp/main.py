@@ -1,6 +1,7 @@
 import os
 import subprocess
 import tempfile
+import time
 
 from flask import Flask, send_from_directory
 from flask_sock import Sock
@@ -49,6 +50,7 @@ def calc_genus(adj_list: list[list[int]]):
         env["S"] = str(min_vertex_id)
         env["DEG"] = str(max_degree)
         env["ADJ"] = f.name
+        start_time = time.perf_counter()
         with subprocess.Popen(
             ["./CalcGenus"],
             stdout=subprocess.PIPE,
@@ -57,11 +59,13 @@ def calc_genus(adj_list: list[list[int]]):
         ) as proc:
             assert proc.stderr is not None
             for line in proc.stderr:
-                yield line.decode("utf-8"), False
+                yield line.decode("utf-8"), "STDERR"
 
             assert proc.stdout is not None
             for line in proc.stdout:
-                yield line.decode("utf-8"), True
+                yield line.decode("utf-8"), "STDOUT"
+        end_time = time.perf_counter()
+        yield f"{end_time - start_time} seconds", "TIME"
 
 
 @sock.route("/stream_calc_genus")
@@ -71,11 +75,10 @@ def stream(ws):
         return
     adj_list = json.loads(data)
 
-    for out, is_stdout in calc_genus(adj_list):
-        if is_stdout:
-            ws.send("STDOUT:" + out)
-        else:
-            ws.send("STDERR:" + out)
+    for out, msg_type in calc_genus(adj_list):
+        ws.send(msg_type + ":" + out)
+
+    time.sleep(1)
 
     ws.close()
 

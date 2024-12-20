@@ -4,6 +4,7 @@ const stderr = document.getElementById("stderr");
 const stdout = document.getElementById("stdout");
 const exampleSelect = document.getElementById("example_adj");
 const loadExample = document.getElementById("load_example");
+const runtime = document.getElementById("runtime");
 
 const serverorigin = location.origin;
 const serverhost = location.host;
@@ -28,6 +29,7 @@ calculate.onclick = () => {
   calculate.disabled = true;
   stderr.innerHTML = "";
   stdout.innerHTML = "";
+  runtime.innerHTML = "";
 
   const socket = new WebSocket(
     `${
@@ -55,6 +57,8 @@ calculate.onclick = () => {
       stderr.innerHTML = laststderr + "<br>" + progress;
     } else if (type === "STDOUT") {
       stdout.innerHTML += data + "<br>";
+    } else if (type === "TIME") {
+      runtime.innerHTML = data;
     }
   };
 
