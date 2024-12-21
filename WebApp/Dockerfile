@@ -6,13 +6,17 @@ WORKDIR /app
 # Copy the C code and compile it
 COPY CalcGenus/CalcGenus.c CalcGenus.c
 RUN gcc -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o CalcGenus CalcGenus.c
+RUN gcc -DONLY_SIMPLE_CYCLES=1 -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o CalcGenusSC CalcGenus.c
+
+COPY MultiGenus/multi_genus_longtype.c multi_genus_longtype.c
+RUN gcc -O3 -DLONG -march=native -o multi_genus_128 multi_genus_longtype.c -lm
 
 # Now we take a minimal python image and copy the compiled C binary to it
 FROM python:3.9-slim
 
 WORKDIR /app
 
-COPY --from=builder /app/CalcGenus . 
+COPY --from=builder /app/CalcGenus /app/CalcGenusSC /app/multi_genus_128 /app/ 
 
 # Python dependencies
 COPY WebApp/requirements.txt requirements.txt

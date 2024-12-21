@@ -1,3 +1,4 @@
+const algorithm = document.getElementById("algorithm");
 const adjlist = document.getElementById("adjlist");
 const calculate = document.getElementById("calculate");
 const stderr = document.getElementById("stderr");
@@ -13,6 +14,7 @@ const serverhost = location.host;
 const progressRegex = /\[\s*#*\s*\]\s*\d+%/g;
 
 calculate.onclick = () => {
+  const alg = algorithm.value;
   const adj = [];
   for (const line of adjlist.value.trim().split("\n")) {
     const neighbors = line
@@ -63,7 +65,7 @@ calculate.onclick = () => {
   };
 
   socket.onopen = () => {
-    socket.send(JSON.stringify(adj));
+    socket.send(JSON.stringify({ adj, alg }));
   };
 
   socket.onclose = () => {

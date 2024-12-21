@@ -7,6 +7,14 @@
 </head>
 <body>
     <h1>Practical Algorithm for Graph Embedding (PAGE)</h1>
+    <label>
+        Algorithm:
+        <select id="algorithm">
+            <option value="page">PAGE</option>
+            <option value="page_sc">PAGE Simple-Cycle-Upperbound</option>
+            <option value="multi_genus">MULTI_GENUS</option>
+        </select>
+    </label>
     <p>Enter your adjacency list below to calculate the genus of the graph.</p>
     <p>Each vertex gets its own line. Each line is a list of space separated vertex numbers for the line-vertex's neighbors.</p>
     <select id="example_adj"></select>

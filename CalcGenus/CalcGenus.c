@@ -27,7 +27,9 @@
 #define FIND_FULL_CYCLE_FITTING true
 // true to use the two vertex heuristic, otherwise uses the most used vertex
 #define CONSTRAINED_BY_TWO true
+#ifndef ONLY_SIMPLE_CYCLES
 #define ONLY_SIMPLE_CYCLES false  // only consider simple cycles
+#endif
 
 // assumptions of the program (don't change these):
 #define VERTEX_USE_LIMIT VERTEX_DEGREE
