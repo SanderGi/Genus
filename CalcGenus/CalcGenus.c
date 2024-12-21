@@ -201,7 +201,7 @@ int main(void) {
   cycle_index_t num_cycles = 0;
   cycle_length_t cycles_max_cycle_length = 0;
   for (cycle_length_t cur_max_cycle_length = START_CYCLE_LENGTH;
-       cur_max_cycle_length <= ONLY_SIMPLE_CYCLES ? num_vertices : num_edges;
+       cur_max_cycle_length <= (ONLY_SIMPLE_CYCLES ? num_vertices : num_edges);
        cur_max_cycle_length++) {
     if (PRINT_PROGRESS) {
       fprintf(stderr,
