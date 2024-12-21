@@ -339,8 +339,8 @@ int main(void) {
       for (cycle_length_t i = 0; i < cycle_length; i++) {
         adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
 
-        // mark cycle vertices as used once
-        vertex_uses[cycle[i]] = 1;
+        // mark cycle vertices as used
+        vertex_uses[cycle[i]] += 1;
       }
 
       if (search(genus_lower_bound_implied_fit - 1,
@@ -405,7 +405,7 @@ int main(void) {
       fclose(output_file);
       return 0;
     }
-    assert(genus_lower_bound < genus_upper_bound,
+    assert(FIND_FULL_CYCLE_FITTING || (genus_lower_bound < genus_upper_bound),
            "Error: genus lower bound (%" PRIcycle_index_t
            ") is greater than upper bound (%" PRIcycle_index_t
            " from max_fit %" PRIcycle_index_t ")\n",
@@ -486,8 +486,8 @@ int main(void) {
       for (cycle_length_t i = 0; i < cycle_length; i++) {
         adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
 
-        // mark cycle vertices as used once
-        vertex_uses[cycle[i]] = 1;
+        // mark cycle vertices as used
+        vertex_uses[cycle[i]] += 1;
       }
 
       if (search(genus_lower_bound_implied_fit - 1,
@@ -947,7 +947,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
       // mark cycle vertices as used
       vertex_uses[cycle[j]]++;
       assert(vertex_uses[cycle[j]] <= VERTEX_USE_LIMIT,
-             "Vertex %" PRIvertex_t " used too many times\n", cycle[j]);
+             "\nVertex %" PRIvertex_t " used too many times\n", cycle[j]);
     }
 
     // if this is the final cycle needed to cover all edges, we're done
@@ -1181,22 +1181,43 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
         adj_get_neighbors(adjacency_list, path[path_length - 1]);
     if (path_length == cycle_length) {
       for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
-        if (neighbors[i] == path[0] &&
-            (ONLY_SIMPLE_CYCLES || path[2] != path[cycle_length])) {
-          buffer[cycle_length + 1] = path[0];
-          fifo_push(&cycle_list, buffer);
-          break;
+        if (neighbors[i] != path[0]) {
+          continue;  // if this doesn't complete a cycle, keep looking
         }
+        if (!ONLY_SIMPLE_CYCLES) {
+          // when not dealing with purely simple cycles, we need some extra
+          // checks
+
+          // prevent backtracking
+          if (path[1] == path[path_length - 1]) {
+            break;
+          }
+          // prevent repeated directed edges
+          bool repeated_edge = false;
+          for (cycle_length_t j = 0; j < path_length - 1; j++) {
+            if (path[j] == path[path_length - 1] && path[j + 1] == path[0]) {
+              repeated_edge = true;
+              break;
+            }
+          }
+          if (repeated_edge) {
+            break;
+          }
+        }
+        // we've found a cycle
+        buffer[cycle_length + 1] = path[0];
+        fifo_push(&cycle_list, buffer);
+        break;
       }
     } else {
       for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
         vertex_t neighbor = neighbors[i];
-        if (neighbor <= path[0]) {
+        if (ONLY_SIMPLE_CYCLES ? (neighbor <= path[0]) : (neighbor < path[0])) {
           continue;
         }
         if (ONLY_SIMPLE_CYCLES) {
-          // don't allow repeated vertices in the path (also prevents
-          // backtracking)
+          // don't allow repeated vertices in the path (implicitly also prevents
+          // backtracking and repeated directed edges)
           bool neighbor_in_path = false;
           for (cycle_length_t j = 0; j < path_length; j++) {
             if (path[j] == neighbor) {
@@ -1211,6 +1232,18 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
           if (path_length > 2 && neighbor == path[path_length - 2]) {
             // Skip the neighbor if it is the previous vertex in the path (no
             // backtracking).
+            continue;
+          }
+          // skip if any directed edge is repeated, i.e. matches the one we are
+          // currently adding from path[path_length - 1] to neighbor
+          bool repeated_edge = false;
+          for (cycle_length_t j = 0; j < path_length - 1; j++) {
+            if (path[j] == path[path_length - 1] && path[j + 1] == neighbor) {
+              repeated_edge = true;
+              break;
+            }
+          }
+          if (repeated_edge) {
             continue;
           }
         }
