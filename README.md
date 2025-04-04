@@ -1,5 +1,6 @@
 # A Practical Algorithm for Graph Embedding (PAGE)
 [![arXiv](https://img.shields.io/badge/arXiv-2411.07347-b31b1b.svg)](https://arxiv.org/abs/2411.07347)
+[![maintenance-status](https://img.shields.io/badge/maintenance-actively--developed-brightgreen.svg)](https://gist.github.com/taiki-e/ad73eaea17e2e0372efb76ef6b38f17b)
 
 A famous problem at the intersection of topology and combinatorial graph theory is the [Utility Problem](https://www.youtube.com/watch?v=VvCytJvd4H0). Say you have three houses and three utilities and you need to connect each house to each utility via a wire. Is there a way to do this without the wires crossing? In terms of graph theory, this is asking whether K3,3 is _planar_. It is known that it is not. In fact K3,3 is _toroidal_ meaning while it cannot be embedded on a plane without edges crossing, it can be embedded on a torus:
 
