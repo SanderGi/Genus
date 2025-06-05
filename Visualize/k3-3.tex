@@ -1,0 +1,63 @@
+\documentclass{article}
+\usepackage{tikz}
+\usepackage{tkz-euclide}
+\addtolength{\textwidth}{3cm}
+\addtolength{\oddsidemargin}{-1.5cm}
+\addtolength{\evensidemargin}{-1.5cm}
+\begin{document}
+\begin{center}
+\begin{tikzpicture}[scale=0.065]
+\def\vertexscale{1.00}
+\def\labelscale{1.00}
+\node [circle,black,draw,scale=\vertexscale] (1) at (17.61547,17.61547) {1};
+\node [circle,black,draw,scale=\vertexscale] (2) at (-50.93993,5.15207) {2};
+\node [circle,black,draw,scale=\vertexscale] (3) at (5.15207,-50.93993) {3};
+\node [circle,black,draw,scale=\vertexscale] (4) at (50.93993,-5.15207) {4};
+\node [circle,black,draw,scale=\vertexscale] (5) at (-5.15207,50.93993) {5};
+\node [circle,black,draw,scale=\vertexscale] (6) at (-17.61547,-17.61547) {6};
+\tkzDefPoint(-100.00000,-0.00000){7}
+\tkzDefPoint(-70.71068,-70.71068){8}
+\tkzDefPoint(0.00000,-100.00000){9}
+\tkzDefPoint(100.00000,0.00000){10}
+\tkzDefPoint(-0.00000,100.00000){11}
+\tkzDefPoint(-70.71068,70.71068){12}
+\tkzDefPoint(70.71068,70.71068){13}
+\tkzDefPoint(70.71068,-70.71068){14}
+\draw [black] (1) to (4);
+\draw [black] (1) to (6);
+\draw [black] (1) to (5);
+\draw [black] (2) to (7);
+\node [draw=none,fill=none,scale=\labelscale] () at (-105.00000,-0.00000) {4};
+\draw [black] (2) to (5);
+\draw [black] (2) to (6);
+\draw [black] (3) to (6);
+\draw [black] (3) to (4);
+\draw [black] (3) to (9);
+\node [draw=none,fill=none,scale=\labelscale] () at (0.00000,-105.00000) {5};
+\draw [black] (4) to (10);
+\node [draw=none,fill=none,scale=\labelscale] () at (105.00000,0.00000) {2};
+\draw [black] (5) to (11);
+\node [draw=none,fill=none,scale=\labelscale] () at (-0.00000,105.00000) {3};
+\tkzDefPoint(-68.55786,72.79986){A}
+\tkzDefPoint(68.55786,72.79986){B}
+\tkzDefPoint(0.0,0.0){C}
+\tkzDrawArc[<-,line width=0.9mm, red](C,B)(A)
+\tkzDefPoint(72.79986,68.55786){A}
+\tkzDefPoint(72.79986,-68.55786){B}
+\tkzDefPoint(0.0,0.0){C}
+\tkzDrawArc[<-,line width=0.9mm, blue](C,B)(A)
+\tkzDefPoint(68.55786,-72.79986){A}
+\tkzDefPoint(-68.55786,-72.79986){B}
+\tkzDefPoint(0.0,0.0){C}
+\tkzDrawArc[->,line width=0.9mm, red](C,B)(A)
+\tkzDefPoint(-72.79986,-68.55786){A}
+\tkzDefPoint(-72.79986,68.55786){B}
+\tkzDefPoint(0.0,0.0){C}
+\tkzDrawArc[->,line width=0.9mm, blue](C,B)(A)
+\node [black,circle,draw,fill=white,scale=0.75,line width=1mm] (8) at (-70.71068,-70.71068) {};
+\node [black,circle,draw,fill=white,scale=0.75,line width=1mm] (12) at (-70.71068,70.71068) {};
+\node [black,circle,draw,fill=white,scale=0.75,line width=1mm] (13) at (70.71068,70.71068) {};
+\node [black,circle,draw,fill=white,scale=0.75,line width=1mm] (14) at (70.71068,-70.71068) {};
+\end{tikzpicture}
+\end{center}
+\end{document}
