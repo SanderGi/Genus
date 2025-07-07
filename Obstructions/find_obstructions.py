@@ -1,6 +1,7 @@
 import sys
+import itertools
 
-from sage.all import *
+from sage.all import *  # type: ignore
 
 from genus_algos import run_algorithm
 from adj_format import to_upper_tri
@@ -33,7 +34,7 @@ def generate_non_isomorphic_graphs(
         max_degree = num_vertices - 1
     assert k_regular is None or k_regular <= max_degree
     return list(
-        graphs.nauty_geng(
+        graphs.nauty_geng(  # type: ignore
             f"{num_vertices} {min_edges}:{max_edges} {'-c' if connected else ''} -d{k_regular if k_regular is not None else min_degree} -D{k_regular if k_regular is not None else max_degree}"
         )
     )
@@ -65,8 +66,74 @@ def is_minor_obstruction(g, genus, algorithm):
     return is_minor_obstruction
 
 
-def is_split_delete_minimal(g, genus):
-    raise NotImplementedError
+def gen_split(G):
+    for v in G.vertices():
+        N = list(G.neighbors(v))
+        # split N into two non-empty sets
+        for k in range(1, len(N) // 2 + 1):
+            for part in itertools.combinations(N, k):
+                part = set(part)
+                rest = set(N) - part
+                if not rest:
+                    continue
+
+                H = G.copy()
+                H.delete_vertex(v)
+                v1, v2 = max(G.vertices()) + 1, max(G.vertices()) + 2
+                H.add_vertices([v1, v2])
+
+                for u in part:
+                    H.add_edge(v1, u)
+                for u in rest:
+                    H.add_edge(v2, u)
+
+                yield H
+
+
+def gen_split_delete(G):
+    for H in gen_split(G):
+        # Now H is a vertex-split of G; try deleting any subset of edges
+        for subset in itertools.chain.from_iterable(
+            itertools.combinations(H.edges(), r) for r in range(len(H.edges()))
+        ):
+            Hprime = H.copy()
+            for edge in subset:
+                Hprime.delete_edge(edge)
+            yield Hprime
+
+
+def is_split_delete_minimal(G, genus, algorithm, sorted_obstructions):
+    """Checks if G is a split-delete minimal obstruction."""
+    # TODO: doesn't work yet
+
+    # has right genus
+    if run_algorithm(G, algorithm=algorithm) != genus:
+        return False
+
+    # minimality under edge deletion
+    if not is_obstruction(G, genus, algorithm):
+        return False
+
+    # minimality under edge contraction
+    if not is_minor_obstruction(G, genus, algorithm):
+        return False
+
+    # cannot be obtained from an obstruction that has one less vertex by splitting at some vertex and then deleting some subset of the edges
+    for H in sorted_obstructions:
+        if H.num_verts() > G.num_verts() - 1:
+            break
+        if H.num_verts() < G.num_verts() - 1:
+            continue
+
+        for K in gen_split(H):
+            if K.subgraph_search(G) is not None:
+                return False
+
+        # for K in gen_split_delete(H):
+        #     if K.is_isomorphic(G):
+        #         return False
+
+    return True
 
 
 def main(args):
