@@ -10,10 +10,10 @@ def run_page(g, max_degree, filename, timeout=100):
     returncode = command.run(timeout=timeout, hide_output=False)
     if returncode != 0:
         raise Exception(
-            f"Error with {g}: " + "\n".join(command.stderr.decode().split("\n")[-3:])
+            f"Error with {g}: " + "\n".join(command.stderr.decode().split("\n")[-3:])  # type: ignore
         )
     else:
-        reg = re.search(r"The genus is (\d+)", command.stderr.decode())
+        reg = re.search(r"The genus is (\d+)", command.stderr.decode())  # type: ignore
         genus = None
         if reg:
             genus = int(reg.group(1))
@@ -24,9 +24,9 @@ def run_multi_genus(g, filename, timeout=100):
     command = Command(f"cat {filename} | ../MultiGenus/multi_genus_longtype_128 w")
     returncode = command.run(timeout=timeout, hide_output=False)
     if returncode != 0:
-        raise Exception(f"Error with {g}: " + command.stderr.decode())
+        raise Exception(f"Error with {g}: " + command.stderr.decode())  # type: ignore
     else:
-        reg = re.search(r"with genus (\d+)", command.stderr.decode())
+        reg = re.search(r"with genus (\d+)", command.stderr.decode())  # type: ignore
         genus = None
         if reg:
             genus = int(reg.group(1))
