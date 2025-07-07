@@ -34,16 +34,24 @@ def run_multi_genus(g, filename, timeout=100):
 
 
 def run_algorithm(graph, algorithm="MULTI", timeout=100):
-    filename = "../CalcGenus/adjacency_lists/nauty_temp.txt"
-    adjacency_list, max_degree = to_adj_list(graph, filename)
+    graph = graph.copy()
+    graph.relabel()
 
-    if algorithm == "PAGE":
-        genus = run_page(graph, max_degree, filename, timeout=timeout)
-    elif algorithm == "MULTI":
-        multi_filename = "../MultiGenus/graphs/nauty_temp.mc"
-        to_multi_code(adjacency_list, multi_filename)
-        genus = run_multi_genus(graph, multi_filename, timeout=timeout)
-    else:
-        raise Exception("Invalid algorithm")
+    genus = 0
+    for g in graph.connected_components_subgraphs():
+        if algorithm == "PAGE":
+            filename = "../CalcGenus/adjacency_lists/nauty_temp.txt"
+            _, max_degree = to_adj_list(g, filename)
+            genus += run_page(g, max_degree, filename, timeout=timeout)  # type: ignore
+        elif algorithm == "MULTI":
+            filename = "../CalcGenus/adjacency_lists/nauty_temp.txt"
+            adjacency_list, max_degree = to_adj_list(g, filename)
+            multi_filename = "../MultiGenus/graphs/nauty_temp.mc"
+            to_multi_code(adjacency_list, multi_filename)
+            genus += run_multi_genus(g, multi_filename, timeout=timeout)  # type: ignore
+        elif algorithm == "SAGE":
+            genus += g.genus()
+        else:
+            raise Exception("Invalid algorithm")
 
     return genus
