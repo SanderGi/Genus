@@ -20,6 +20,17 @@ def to_adj_list(g, filename):
     return adjacency_list, max_degree
 
 
+def from_adj_list(adjacency_list):
+    num_vertices = len(adjacency_list)
+    start_ix = min(min(neighbors) for neighbors in adjacency_list)
+    adjacency_matrix = [[0 for i in range(num_vertices)] for j in range(num_vertices)]
+    for i in range(num_vertices):
+        for j in adjacency_list[i]:
+            adjacency_matrix[i][j - start_ix] = 1
+            adjacency_matrix[j - start_ix][i] = 1
+    return Graph(matrix(adjacency_matrix), format="adjacency_matrix")  # type: ignore
+
+
 def to_multi_code(adj_list, filename):
     with open(filename, "wb") as file:
         num_vertices = len(adj_list)
