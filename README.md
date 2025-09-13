@@ -30,7 +30,7 @@ The easiest way is to use the [hosted version](https://genus.fly.dev/). This won
 
 To run the python scripts you must have [SageMath installed](https://doc.sagemath.org/html/en/installation/index.html) and select the SageMath kernel in Jupyter/VS Code/whatever you use.
 
-To run the C program for any graph, `cd CalcGenus` and run `S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" make run`. This will compile the C program and run it. The output will be in `CalcGenus.out`. The format of the adjacency lists is the number of vertices and number of edges on the first line followed by the neighbors of each vertex on the following lines. See the examples in `CalcGenus/adjacency_lists/`. Use `MallocStackLogging=1 S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" leaks -quiet -atExit -- ./CalcGenus` to check for memory leaks on macOS.
+To run the C program for any graph, `cd CalcGenus` and run `S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" make run`. This will compile the C program and run it. The output will be in `CalcGenus.out`. The format of the adjacency lists is the number of vertices and number of edges on the first line followed by the neighbors of each vertex on the following lines. See the examples in `CalcGenus/adjacency_lists/`. Use `MallocStackLogging=1 S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" leaks -quiet -atExit -- ./CalcGenus` to check for memory leaks on macOS. Use `S=0 DEG=7 ADJ="adjacency_lists/coHerschel.txt" lldb --file ./CalcGenus` and type `r` then `bt` to debug segmentation faults.
 
 ## Time Complexity
 
@@ -200,6 +200,8 @@ The genus for various miscellaneous graphs generated using Mathematica follows.
 -------------------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
 [Klein Bottle](CalcGenus/adjacency_lists/KleinBottleTriangulation9-1.txt)        | 9    | 27    | 2        | 0.152    | 0.006
 [TRC](CalcGenus/adjacency_lists/TriangleReplacedCoxeterGraph.txt)                | 84   | 126   | 3        | hours    | 0.006
+[Fan (3, 6)](CalcGenus/adjacency_lists/Fan3-6.txt)                               | 9    | 23    | 1        | 0.013    | 0.006
+[Co-Herschel](CalcGenus/adjacency_lists/coHerschel.txt)                          | 11   | 37    | 2        | 0.054    | 0.006
 
 ## Acknowledgements
 

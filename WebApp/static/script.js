@@ -89,8 +89,8 @@ loadExample.onclick = async () => {
   adjlist.value = await response.text();
   // remove the first line
   adjlist.value = adjlist.value.replace(/^.+\n/, "");
-  // remove 65536
-  adjlist.value = adjlist.value.replace(/65536/g, "");
+  // remove 65535
+  adjlist.value = adjlist.value.replace(/65535/g, "");
   // remove whitespace at the end of each line
   adjlist.value = adjlist.value.replace(/\s+$/gm, "");
 };

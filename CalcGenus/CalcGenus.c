@@ -1030,7 +1030,9 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
   for (vertex_t i = 0; i < *num_vertices * VERTEX_DEGREE; i++) {
     assert(fscanf(fp, "%" SCNvertex_t, &adjacency_list[i]) == 1,
            "Error reading the adjacency list from %s\n", filename);
-    adjacency_list[i] -= ADJACENCY_LIST_START;
+    if (adjacency_list[i] != MAX_VERTICES) {
+      adjacency_list[i] -= ADJACENCY_LIST_START;
+    }
   }
 
   fclose(fp);
@@ -1212,6 +1214,7 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices,
     } else {
       for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
         vertex_t neighbor = neighbors[i];
+        if (neighbor == MAX_VERTICES) continue;
         if (ONLY_SIMPLE_CYCLES ? (neighbor <= path[0]) : (neighbor < path[0])) {
           continue;
         }

@@ -1,6 +1,6 @@
 from sage.all import *
 
-IGNORE_VERTEX = 65536
+IGNORE_VERTEX = 65535
 
 
 def to_adj_list(g, filename):

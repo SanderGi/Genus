@@ -42,7 +42,7 @@ def setup_page(adj_list, file_name):
     min_vertex_id = min(min(neighbors) for neighbors in adj_list)
     file.write(f"{num_vertices} {num_edges}\n")
     for neighbors in adj_list:
-        padded_neighbors = neighbors + [65536] * (max_degree - len(neighbors))
+        padded_neighbors = neighbors + [65535] * (max_degree - len(neighbors))
         file.write(" ".join(str(n) for n in padded_neighbors) + "\n")
     file.flush()
 
