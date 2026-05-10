@@ -107,6 +107,10 @@ bool is_ijk_good(bool* used_cycles, cycles_t cycles, cycle_length_t max_cycle_le
                  cycle_index_t num_cycles, cycle_index_t cycle_to_check);
 bool cycle_has_directed_edge(vertex_t* cycle, cycle_length_t cycle_length, vertex_t start_vertex,
                              vertex_t end_vertex);
+cycle_index_t choose_start_edge(vertex_t num_vertices, adj_t adjacency_list, cycles_t cycles,
+                                cycle_length_t max_cycle_length,
+                                cycle_index_t max_cycles_per_vertex, cbv_t cycles_by_vertex,
+                                vertex_t* start_vertex, vertex_t* end_vertex);
 bool path_has_reverse_transition(vertex_t* path, cycle_length_t path_length, vertex_t prev_vertex,
                                  vertex_t center_vertex, vertex_t next_vertex);
 bool search(cycle_index_t cycles_to_use,                    // state
@@ -117,7 +121,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
             vertex_t num_vertices, edge_t num_edges, adj_t adjacency_list,
             cycle_length_t max_cycle_length, cycle_index_t num_cycles, cycles_t cycles,
             cycle_index_t max_cycles_per_vertex, cbv_t cycles_by_vertex,
-            cycle_index_t current_start_cycle);
+            cycle_index_t* start_cycle_order, cycle_index_t current_start_cycle_order);
 
 cycle_index_t implied_max_fit_for_genus(cycle_index_t genus, vertex_t num_vertices,
                                         edge_t num_edges) {
@@ -198,6 +202,7 @@ int main(void) {
     cycles_t cycles = NULL;
     cycle_index_t num_cycles = 0;
     cycle_length_t cycles_max_cycle_length = 0;
+    cycle_index_t last_searched_fit = MAX_CYCLES;
     for (cycle_length_t cur_max_cycle_length = START_CYCLE_LENGTH;
          cur_max_cycle_length <= (ONLY_SIMPLE_CYCLES ? num_vertices : num_edges);
          cur_max_cycle_length++) {
@@ -301,16 +306,55 @@ int main(void) {
         degree_t* vertex_uses = (degree_t*)malloc(num_vertices * sizeof(degree_t));
         assert(vertex_uses != NULL, "Error allocating memory for the vertices most used order\n");
 
-        // search for a solution that starts with one of the cycles
-        for (cycle_index_t c = 0; c < num_cycles; c++) {
-            // for (cycle_index_t c = num_cycles - num_new_cycles; c < num_cycles;
-            //      c++) {  // TODO
+        cycle_index_t searched_fit = genus_lower_bound_implied_fit;
+        bool same_target_fit = last_searched_fit == searched_fit;
+        vertex_t start_vertex;
+        vertex_t end_vertex;
+        cycle_index_t num_edge_start_cycles =
+            choose_start_edge(num_vertices, adjacency_list, cycles, cur_max_cycle_length,
+                              max_cycles_per_vertex, cycles_by_vertex, &start_vertex, &end_vertex);
+        bool use_max_length_start =
+            same_target_fit && num_new_cycles <= num_edge_start_cycles;
+        cycle_index_t num_start_cycles =
+            use_max_length_start ? num_new_cycles : num_edge_start_cycles;
+        cycle_index_t num_start_cycles_for_vertex = num_new_cycles;
+        cycle_index_t* start_cycle_indices = NULL;
+        cycle_index_t* start_cycle_order =
+            (cycle_index_t*)malloc(num_cycles * sizeof(cycle_index_t));
+        assert(start_cycle_order != NULL, "Error allocating memory for the start cycle order\n");
+        for (cycle_index_t i = 0; i < num_cycles; i++) {
+            start_cycle_order[i] = MAX_CYCLES;
+        }
+        if (!use_max_length_start) {
+            start_cycle_indices = cbv_get_cycle_indices(cycles_by_vertex, max_cycles_per_vertex,
+                                                        start_vertex, &num_start_cycles_for_vertex);
+        }
+
+        // If the same fit was already ruled out with shorter cycles, any new
+        // solution must contain a cycle of the current max length. Every fitting
+        // also uses the chosen directed edge exactly once, so use whichever
+        // valid start set is smaller.
+        cycle_index_t start_cycles_seen = 0;
+        for (cycle_index_t start_i = 0; start_i < num_start_cycles_for_vertex; start_i++) {
+            cycle_index_t c = use_max_length_start ? num_cycles - num_new_cycles + start_i
+                                                   : start_cycle_indices[start_i];
+            cycle_length_t cycle_length;
+            cycles_t cycle = cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
+            if (!use_max_length_start &&
+                !cycle_has_directed_edge(cycle, cycle_length, start_vertex, end_vertex)) {
+                continue;
+            }
+            start_cycle_order[c] = start_cycles_seen;
+            start_cycles_seen++;
+            cycle_index_t current_start_cycle_order = start_cycle_order[c];
             if (VERTEX_DEGREE > 2 &&
                 !is_ijk_good(used_cycles, cycles, cur_max_cycle_length, num_cycles, c)) {
+                show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
             if (!is_valid_rotation_system(used_cycles, cycles, cur_max_cycle_length, num_cycles,
                                           num_vertices, c)) {
+                show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
 
@@ -329,8 +373,6 @@ int main(void) {
 
             // mark start cycle as used
             used_cycles[c] = true;
-            cycle_length_t cycle_length;
-            cycles_t cycle = cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
 
@@ -341,7 +383,8 @@ int main(void) {
             if (search(genus_lower_bound_implied_fit - 1, genus_lower_bound_implied_fit,
                        used_cycles, vertex_uses, &max_fit, &num_search_calls, num_vertices,
                        num_edges, adjacency_list, cur_max_cycle_length, num_cycles, cycles,
-                       max_cycles_per_vertex, cycles_by_vertex, c)) {
+                       max_cycles_per_vertex, cycles_by_vertex, start_cycle_order,
+                       current_start_cycle_order)) {
                 // Success!
                 show_progress(1.0);
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
@@ -352,6 +395,7 @@ int main(void) {
                 free(cycles);
                 free(cycles_by_vertex);
                 free(used_cycles);
+                free(start_cycle_order);
                 fclose(output_file);
                 return 0;
             }
@@ -362,10 +406,11 @@ int main(void) {
                 adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
             }
 
-            show_progress(c / (double)num_cycles);
+            show_progress(start_cycles_seen / (double)num_start_cycles);
         }
 
         show_progress(1.0);
+        last_searched_fit = searched_fit;
 
         // we weren't able to find the implied fit, so the bounds need adjusting
         if ((2 * num_edges - cur_max_cycle_length - 1) / smallest_cycle_length <
@@ -390,6 +435,7 @@ int main(void) {
             show_solution(genus_lower_bound, max_fit, num_search_calls, num_cycles, used_cycles,
                           cycles, cur_max_cycle_length);
             free(used_cycles);
+            free(start_cycle_order);
             free(vertex_uses);
             free(adjacency_list);
             free(vertex_degrees);
@@ -413,6 +459,7 @@ int main(void) {
         }
 
         free(used_cycles);
+        free(start_cycle_order);
         free(vertex_uses);
         free(cycles_by_vertex);
     }
@@ -439,6 +486,20 @@ int main(void) {
     }
     degree_t* vertex_uses = (degree_t*)malloc(num_vertices * sizeof(degree_t));
     assert(vertex_uses != NULL, "Error allocating memory for the vertices most used order\n");
+    vertex_t start_vertex;
+    vertex_t end_vertex;
+    cycle_index_t num_start_cycles =
+        choose_start_edge(num_vertices, adjacency_list, cycles, cycles_max_cycle_length,
+                          max_cycles_per_vertex, cycles_by_vertex, &start_vertex, &end_vertex);
+    cycle_index_t num_start_cycles_for_vertex;
+    cycle_index_t* start_cycle_indices = cbv_get_cycle_indices(
+        cycles_by_vertex, max_cycles_per_vertex, start_vertex, &num_start_cycles_for_vertex);
+    cycle_index_t* start_cycle_order = (cycle_index_t*)malloc(num_cycles * sizeof(cycle_index_t));
+    assert(start_cycle_order != NULL, "Error allocating memory for the start cycle order\n");
+    for (cycle_index_t i = 0; i < num_cycles; i++) {
+        start_cycle_order[i] = MAX_CYCLES;
+    }
+
     while (FIND_FULL_CYCLE_FITTING ? genus_lower_bound <= genus_upper_bound
                                    : genus_lower_bound < genus_upper_bound) {
         if (PRINT_PROGRESS) {
@@ -450,14 +511,27 @@ int main(void) {
         }
         show_progress(0.0);
 
-        // search for a solution that starts with one of the cycles
-        for (cycle_index_t c = 0; c < num_cycles; c++) {
+        // Every fitting uses the chosen directed edge exactly once, so it is
+        // enough to try the cycles that contain that edge.
+        cycle_index_t start_cycles_seen = 0;
+        for (cycle_index_t start_i = 0; start_i < num_start_cycles_for_vertex; start_i++) {
+            cycle_index_t c = start_cycle_indices[start_i];
+            cycle_length_t cycle_length;
+            cycles_t cycle = cycle_get(cycles, cycles_max_cycle_length, c, &cycle_length);
+            if (!cycle_has_directed_edge(cycle, cycle_length, start_vertex, end_vertex)) {
+                continue;
+            }
+            start_cycle_order[c] = start_cycles_seen;
+            start_cycles_seen++;
+            cycle_index_t current_start_cycle_order = start_cycle_order[c];
             if (VERTEX_DEGREE > 2 &&
                 !is_ijk_good(used_cycles, cycles, cycles_max_cycle_length, num_cycles, c)) {
+                show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
             if (!is_valid_rotation_system(used_cycles, cycles, cycles_max_cycle_length, num_cycles,
                                           num_vertices, c)) {
+                show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
 
@@ -476,8 +550,6 @@ int main(void) {
 
             // mark start cycle as used
             used_cycles[c] = true;
-            cycle_length_t cycle_length;
-            cycles_t cycle = cycle_get(cycles, cycles_max_cycle_length, c, &cycle_length);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
 
@@ -488,7 +560,8 @@ int main(void) {
             if (search(genus_lower_bound_implied_fit - 1, genus_lower_bound_implied_fit,
                        used_cycles, vertex_uses, &max_fit, &num_search_calls, num_vertices,
                        num_edges, adjacency_list, cycles_max_cycle_length, num_cycles, cycles,
-                       max_cycles_per_vertex, cycles_by_vertex, c)) {
+                       max_cycles_per_vertex, cycles_by_vertex, start_cycle_order,
+                       current_start_cycle_order)) {
                 // Success!
                 show_progress(1.0);
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
@@ -499,6 +572,7 @@ int main(void) {
                 free(cycles);
                 free(cycles_by_vertex);
                 free(used_cycles);
+                free(start_cycle_order);
                 fclose(output_file);
                 return 0;
             }
@@ -509,7 +583,7 @@ int main(void) {
                 adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
             }
 
-            show_progress(c / (double)num_cycles);
+            show_progress(start_cycles_seen / (double)num_start_cycles);
         }
 
         show_progress(1.0);
@@ -526,6 +600,7 @@ int main(void) {
     free(cycles);
     free(cycles_by_vertex);
     free(used_cycles);
+    free(start_cycle_order);
     free(vertex_uses);
     fclose(output_file);
 
@@ -773,7 +848,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
             vertex_t num_vertices, edge_t num_edges, adj_t adjacency_list,
             cycle_length_t max_cycle_length, cycle_index_t num_cycles, cycles_t cycles,
             cycle_index_t max_cycles_per_vertex, cbv_t cycles_by_vertex,
-            cycle_index_t current_start_cycle) {
+            cycle_index_t* start_cycle_order, cycle_index_t current_start_cycle_order) {
     (*num_search_calls)++;
 
     // pick a vertex to explore
@@ -803,7 +878,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 cycle_index_t cycle_options = 0;
                 for (cycle_index_t k = 0; k < num_cycles_for_vertex; k++) {
                     cycle_index_t cycle_index = cycle_indices_for_vertex[k];
-                    if (cycle_index <= current_start_cycle || used_cycles[cycle_index]) {
+                    if (start_cycle_order[cycle_index] < current_start_cycle_order ||
+                        used_cycles[cycle_index]) {
                         continue;
                     }
                     cycle_length_t cycle_length;
@@ -901,7 +977,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
 
         for (cycle_index_t i = 0; i < num_cycles_for_vertex1; i++) {
             cycle_index_t cycle_index = cycle_indices1[i];
-            if (cycle_index <= current_start_cycle || used_cycles[cycle_index]) {
+            if (start_cycle_order[cycle_index] < current_start_cycle_order ||
+                used_cycles[cycle_index]) {
                 continue;
             }
             cycle_length_t cycle_length;
@@ -918,7 +995,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
     for (cycle_index_t i = 0; i < num_cycles_for_vertex; i++) {
         // skip if the cycle is already used
         cycle_index_t cycle_index = cycle_indices[i];
-        if (cycle_index <= current_start_cycle) {
+        if (start_cycle_order[cycle_index] < current_start_cycle_order) {
             continue;
         }
         if (used_cycles[cycle_index]) {
@@ -1008,7 +1085,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
         if (search(cycles_to_use - 1, max_used_cycles, used_cycles, vertex_uses, max_fit,
                    num_search_calls, num_vertices, num_edges, adjacency_list, max_cycle_length,
                    num_cycles, cycles, max_cycles_per_vertex, cycles_by_vertex,
-                   current_start_cycle)) {
+                   start_cycle_order, current_start_cycle_order)) {
             if (CONSTRAINED_BY_TWO && neighbor_vertex != MAX_VERTICES) {
                 free(cycle_indices);
             }
@@ -1041,6 +1118,54 @@ bool cycle_has_directed_edge(vertex_t* cycle, cycle_length_t cycle_length, verte
         }
     }
     return false;
+}
+
+cycle_index_t choose_start_edge(vertex_t num_vertices, adj_t adjacency_list, cycles_t cycles,
+                                cycle_length_t max_cycle_length,
+                                cycle_index_t max_cycles_per_vertex, cbv_t cycles_by_vertex,
+                                vertex_t* start_vertex, vertex_t* end_vertex) {
+    bool found_edge = false;
+    cycle_index_t min_cycle_options = MAX_CYCLES;
+
+    for (vertex_t i = 0; i < num_vertices; i++) {
+        vertex_t* neighbors = adj_get_neighbors(adjacency_list, i);
+        cycle_index_t num_cycles_for_vertex;
+        cycle_index_t* cycle_indices = cbv_get_cycle_indices(
+            cycles_by_vertex, max_cycles_per_vertex, i, &num_cycles_for_vertex);
+
+        for (degree_t j = 0; j < VERTEX_DEGREE; j++) {
+            if (neighbors[j] == MAX_VERTICES) {
+                continue;
+            }
+
+            cycle_index_t cycle_options = 0;
+            for (cycle_index_t k = 0; k < num_cycles_for_vertex; k++) {
+                cycle_index_t cycle_index = cycle_indices[k];
+                cycle_length_t cycle_length;
+                vertex_t* cycle = cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
+                if (cycle_has_directed_edge(cycle, cycle_length, i, neighbors[j])) {
+                    cycle_options++;
+                }
+            }
+
+            if (!found_edge || cycle_options < min_cycle_options) {
+                found_edge = true;
+                *start_vertex = i;
+                *end_vertex = neighbors[j];
+                min_cycle_options = cycle_options;
+
+                if (min_cycle_options == 0) {
+                    break;
+                }
+            }
+        }
+        if (min_cycle_options == 0) {
+            break;
+        }
+    }
+
+    assert(found_edge, "Error finding a starting edge\n");
+    return min_cycle_options;
 }
 
 bool path_has_reverse_transition(vertex_t* path, cycle_length_t path_length, vertex_t prev_vertex,
