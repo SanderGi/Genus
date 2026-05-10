@@ -21,11 +21,11 @@
 #define ADJACENCY_LIST_START start_index      // vertex numbering starts from
 #define OUTPUT_FILENAME "CalcGenus.out"       // output file
 #define VERTEX_DEGREE vertex_degree           // must be >= 2
-#define PRE_GENUS_LOWER_BOUND 0               // pre-computed lower bound on the genus
+#define PRE_GENUS_LOWER_BOUND pre_genus_lower_bound  // pre-computed lower bound on the genus
 // true if it should to find the full cycle fitting, otherwise stops early once
 // it is clear it exists (doesn't quite work with value false yet):
 #define FIND_FULL_CYCLE_FITTING true
-// true to use the two vertex heuristic, otherwise uses the most used vertex
+// true to branch on a remaining directed edge, otherwise uses the most used vertex
 #define CONSTRAINED_BY_TWO true
 #ifndef ONLY_SIMPLE_CYCLES
 #define ONLY_SIMPLE_CYCLES false  // only consider simple cycles
@@ -70,11 +70,13 @@ typedef cycle_index_t* cbv_t;
 static FILE* output_file = NULL;
 static vertex_t start_index = 0;
 static degree_t vertex_degree = 3;
+static cycle_index_t pre_genus_lower_bound = 0;
 static char* adj_filename = NULL;
 static edge_t num_edges_remaining = 0;
 static cycle_length_t smallest_cycle_length;
 static bool output_to_stdout = false;
 static bool progress_bar_newline = false;
+static degree_t* vertex_degrees = NULL;
 
 // auxiliary data structures
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
@@ -103,6 +105,10 @@ bool is_valid_rotation_system(bool* used_cycles, cycles_t cycles, cycle_length_t
                               cycle_index_t cycle_to_check);
 bool is_ijk_good(bool* used_cycles, cycles_t cycles, cycle_length_t max_cycle_length,
                  cycle_index_t num_cycles, cycle_index_t cycle_to_check);
+bool cycle_has_directed_edge(vertex_t* cycle, cycle_length_t cycle_length, vertex_t start_vertex,
+                             vertex_t end_vertex);
+bool path_has_reverse_transition(vertex_t* path, cycle_length_t path_length, vertex_t prev_vertex,
+                                 vertex_t center_vertex, vertex_t next_vertex);
 bool search(cycle_index_t cycles_to_use,                    // state
             cycle_index_t max_used_cycles,                  // state
             bool* used_cycles,                              // state
@@ -127,6 +133,9 @@ cycle_index_t implied_max_genus_for_fit(cycle_index_t fit, vertex_t num_vertices
 int main(void) {
     start_index = atoi(getenv("S"));
     vertex_degree = atoi(getenv("DEG"));
+    if (getenv("GLB") != NULL) {
+        pre_genus_lower_bound = atoi(getenv("GLB"));
+    }
     adj_filename = getenv("ADJ");
     output_to_stdout = getenv("STDOUT") != NULL;
     progress_bar_newline = getenv("PBN") != NULL;
@@ -152,6 +161,11 @@ int main(void) {
                                   num_vertices, num_edges);
     cycle_index_t genus_lower_bound_implied_fit =
         implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
+    if (PRE_GENUS_LOWER_BOUND > genus_lower_bound) {
+        genus_lower_bound = PRE_GENUS_LOWER_BOUND;
+        genus_lower_bound_implied_fit =
+            implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
+    }
     cycle_index_t max_fit = (2 * num_edges + num_vertices - 1) / num_vertices;
     cycle_index_t genus_upper_bound = implied_max_genus_for_fit(max_fit, num_vertices, num_edges);
 
@@ -167,6 +181,8 @@ int main(void) {
         fprintf(output_file, "Genus found: %" PRIcycle_index_t " in 0 iterations:\n",
                 genus_lower_bound);
         fclose(output_file);
+        free(adjacency_list);
+        free(vertex_degrees);
         return 0;
     }
 
@@ -289,6 +305,14 @@ int main(void) {
         for (cycle_index_t c = 0; c < num_cycles; c++) {
             // for (cycle_index_t c = num_cycles - num_new_cycles; c < num_cycles;
             //      c++) {  // TODO
+            if (VERTEX_DEGREE > 2 &&
+                !is_ijk_good(used_cycles, cycles, cur_max_cycle_length, num_cycles, c)) {
+                continue;
+            }
+            if (!is_valid_rotation_system(used_cycles, cycles, cur_max_cycle_length, num_cycles,
+                                          num_vertices, c)) {
+                continue;
+            }
 
             // default all vertices to 0 uses
             for (vertex_t i = 0; i < num_vertices; i++) {
@@ -323,6 +347,7 @@ int main(void) {
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
                               num_cycles, used_cycles, cycles, cur_max_cycle_length);
                 free(adjacency_list);
+                free(vertex_degrees);
                 free(vertex_uses);
                 free(cycles);
                 free(cycles_by_vertex);
@@ -367,6 +392,7 @@ int main(void) {
             free(used_cycles);
             free(vertex_uses);
             free(adjacency_list);
+            free(vertex_degrees);
             free(cycles);
             free(cycles_by_vertex);
             fclose(output_file);
@@ -426,6 +452,15 @@ int main(void) {
 
         // search for a solution that starts with one of the cycles
         for (cycle_index_t c = 0; c < num_cycles; c++) {
+            if (VERTEX_DEGREE > 2 &&
+                !is_ijk_good(used_cycles, cycles, cycles_max_cycle_length, num_cycles, c)) {
+                continue;
+            }
+            if (!is_valid_rotation_system(used_cycles, cycles, cycles_max_cycle_length, num_cycles,
+                                          num_vertices, c)) {
+                continue;
+            }
+
             // default all vertices to 0 uses
             for (vertex_t i = 0; i < num_vertices; i++) {
                 vertex_uses[i] = 0;
@@ -459,6 +494,7 @@ int main(void) {
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
                               num_cycles, used_cycles, cycles, cycles_max_cycle_length);
                 free(adjacency_list);
+                free(vertex_degrees);
                 free(vertex_uses);
                 free(cycles);
                 free(cycles_by_vertex);
@@ -486,8 +522,11 @@ int main(void) {
     }
 
     free(adjacency_list);
+    free(vertex_degrees);
     free(cycles);
     free(cycles_by_vertex);
+    free(used_cycles);
+    free(vertex_uses);
     fclose(output_file);
 
     if (FIND_FULL_CYCLE_FITTING) {
@@ -567,6 +606,8 @@ bool is_valid_rotation_system(bool* used_cycles, cycles_t cycles, cycle_length_t
     edge_t row_size = 2 * VERTEX_DEGREE + 1;
     vertex_t* pairs = (vertex_t*)malloc(row_size * num_vertices * sizeof(vertex_t));
     assert(pairs != NULL, "Error allocating memory for the pairs\n");
+    bool* pair_seen = (bool*)malloc(VERTEX_DEGREE * sizeof(bool));
+    assert(pair_seen != NULL, "Error allocating memory for the pair seen flags\n");
     for (vertex_t i = 0; i < num_vertices; i++) {
         pairs[i * row_size] = 0;
     }
@@ -597,41 +638,82 @@ bool is_valid_rotation_system(bool* used_cycles, cycles_t cycles, cycle_length_t
 
     for (vertex_t i = 0; i < num_vertices; i++) {
         degree_t num_pairs = pairs[i * row_size];
-        if (num_pairs < 3) continue;
-        vertex_t s = pairs[i * row_size + 1];
-        vertex_t u = pairs[i * row_size + 2];
-        degree_t pairs_used = 1;
-        while (u != s) {
-            bool found = false;
-            for (vertex_t j = 1; j < num_pairs; j++) {
-                if (pairs[i * row_size + 2 * j + 1] == u) {
-                    vertex_t v = pairs[i * row_size + 2 * j + 2];
-                    pairs[i * row_size + 2 * j + 1] = MAX_VERTICES;
-                    pairs[i * row_size + 2 * j + 2] = MAX_VERTICES;
-                    u = v;
-                    pairs_used++;
-                    found = true;
+        if (num_pairs == 0) continue;
+
+        for (degree_t start_pair = 0; start_pair < num_pairs; start_pair++) {
+            vertex_t start = pairs[i * row_size + 2 * start_pair + 1];
+            vertex_t next = pairs[i * row_size + 2 * start_pair + 2];
+            degree_t component_size = 1;
+            for (degree_t j = 0; j < num_pairs; j++) {
+                pair_seen[j] = false;
+            }
+            pair_seen[start_pair] = true;
+
+            while (next != start) {
+                bool found = false;
+                for (degree_t j = 0; j < num_pairs; j++) {
+                    if (pairs[i * row_size + 2 * j + 1] == next) {
+                        if (pair_seen[j]) {
+                            free(pair_seen);
+                            free(pairs);
+                            return false;
+                        }
+                        next = pairs[i * row_size + 2 * j + 2];
+                        pair_seen[j] = true;
+                        component_size++;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
                     break;
                 }
             }
-            if (!found) {
-                pairs_used = num_pairs;
-                break;
+
+            if (next == start && component_size < vertex_degrees[i]) {
+                free(pair_seen);
+                free(pairs);
+                return false;
             }
         }
-        if (pairs_used != num_pairs) {
-            free(pairs);
-            return false;
+
+        if (num_pairs == vertex_degrees[i]) {
+            degree_t pairs_used = 0;
+            vertex_t start = pairs[i * row_size + 1];
+            vertex_t next = start;
+            do {
+                bool found = false;
+                for (degree_t j = 0; j < num_pairs; j++) {
+                    if (pairs[i * row_size + 2 * j + 1] == next) {
+                        next = pairs[i * row_size + 2 * j + 2];
+                        pairs_used++;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    free(pair_seen);
+                    free(pairs);
+                    return false;
+                }
+            } while (next != start && pairs_used <= num_pairs);
+
+            if (pairs_used != num_pairs || next != start) {
+                free(pair_seen);
+                free(pairs);
+                return false;
+            }
         }
     }
 
+    free(pair_seen);
     free(pairs);
     return true;
 }
 
-// if sequence i -> j -> k occurs in any of the used cycles such that k -> j
-// -> i occurs in the cycle_to_check return false if no such sequence occurs
-// return true
+// Return false if the candidate cycle conflicts with an already-used cycle by
+// introducing both transitions i -> j -> k and k -> j -> i at any vertex j with
+// degree > 2. Candidate-internal conflicts are filtered during cycle generation.
 bool is_ijk_good(bool* used_cycles, cycles_t cycles, cycle_length_t max_cycle_length,
                  cycle_index_t num_cycles, cycle_index_t cycle_to_check) {
     // TODO: optimize by storing the rotation in the adjacency list as cycles
@@ -666,7 +748,8 @@ bool is_ijk_good(bool* used_cycles, cycles_t cycles, cycle_length_t max_cycle_le
                 for (cycle_length_t j = 0; j < other_cycle_length; j++) {
                     if (padded_cycle[i] == padded_other_cycle[j + 2] &&
                         padded_cycle[i + 1] == padded_other_cycle[j + 1] &&
-                        padded_cycle[i + 2] == padded_other_cycle[j]) {
+                        padded_cycle[i + 2] == padded_other_cycle[j] &&
+                        vertex_degrees[padded_cycle[i + 1]] > 2) {
                         free(padded_cycle);
                         free(padded_other_cycle);
                         return false;
@@ -698,41 +781,53 @@ bool search(cycle_index_t cycles_to_use,                    // state
     vertex_t neighbor_vertex = MAX_VERTICES;
     bool found = false;
     if (CONSTRAINED_BY_TWO) {
-        // we pick the vertex-neighbor pair that maximizes the total number of uses
-        // since this will constrain the search space the most (semi-expensive to
-        // compute though)
+        // Pick a remaining directed edge. Every complete fitting must use it, and
+        // choosing the edge with the fewest available trails keeps the branching
+        // factor low.
         degree_t max_comb_uses = 0;
+        cycle_index_t min_cycle_options = MAX_CYCLES;
         for (vertex_t i = 0; i < num_vertices; i++) {
             if (vertex_uses[i] >= VERTEX_USE_LIMIT) {
                 continue;
             }
 
             vertex_t* neighbors = adj_get_neighbors(adjacency_list, i);
-            vertex_t max_neighbor = neighbors[0];
-            degree_t max_neighbor_uses = 0;
+            cycle_index_t num_cycles_for_vertex;
+            cycle_index_t* cycle_indices_for_vertex = cbv_get_cycle_indices(
+                cycles_by_vertex, max_cycles_per_vertex, i, &num_cycles_for_vertex);
             for (degree_t j = 0; j < VERTEX_DEGREE; j++) {
                 if (neighbors[j] == MAX_VERTICES || vertex_uses[neighbors[j]] >= VERTEX_USE_LIMIT) {
                     continue;
                 }
-                if (max_neighbor == MAX_VERTICES || vertex_uses[neighbors[j]] > max_neighbor_uses) {
-                    max_neighbor = neighbors[j];
-                    max_neighbor_uses = vertex_uses[neighbors[j]];
+                degree_t comb_uses = vertex_uses[i] + vertex_uses[neighbors[j]];
+                cycle_index_t cycle_options = 0;
+                for (cycle_index_t k = 0; k < num_cycles_for_vertex; k++) {
+                    cycle_index_t cycle_index = cycle_indices_for_vertex[k];
+                    if (cycle_index <= current_start_cycle || used_cycles[cycle_index]) {
+                        continue;
+                    }
+                    cycle_length_t cycle_length;
+                    vertex_t* cycle =
+                        cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
+                    if (cycle_has_directed_edge(cycle, cycle_length, i, neighbors[j])) {
+                        cycle_options++;
+                    }
+                }
+                if (!found || cycle_options < min_cycle_options ||
+                    (cycle_options == min_cycle_options && comb_uses > max_comb_uses)) {
+                    found = true;
+                    vertex = i;
+                    neighbor_vertex = neighbors[j];
+                    max_comb_uses = comb_uses;
+                    min_cycle_options = cycle_options;
 
-                    if (max_neighbor_uses == VERTEX_USE_LIMIT - 1) {
+                    if (min_cycle_options == 0) {
                         break;  // we can't do better than this
                     }
                 }
             }
-
-            if (vertex_uses[i] + max_neighbor_uses > max_comb_uses) {
-                found = true;
-                vertex = i;
-                neighbor_vertex = max_neighbor;
-                max_comb_uses = vertex_uses[i] + max_neighbor_uses;
-
-                if (max_comb_uses == 2 * VERTEX_USE_LIMIT - 2) {
-                    break;  // we can't do better than this
-                }
+            if (min_cycle_options == 0) {
+                break;  // we can't do better than this
             }
         }
     } else {
@@ -740,7 +835,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
         // constrains the search space of possible cycles more
         degree_t max_uses = 0;
         for (vertex_t i = 0; i < num_vertices; i++) {
-            if (vertex_uses[i] < VERTEX_USE_LIMIT && vertex_uses[i] > max_uses) {
+            if (vertex_uses[i] < VERTEX_USE_LIMIT && (!found || vertex_uses[i] > max_uses)) {
                 found = true;
                 vertex = i;
                 max_uses = vertex_uses[i];
@@ -796,15 +891,12 @@ bool search(cycle_index_t cycles_to_use,                    // state
         cycle_index_t num_cycles_for_vertex1;
         cycle_index_t* cycle_indices1 = cbv_get_cycle_indices(
             cycles_by_vertex, max_cycles_per_vertex, vertex, &num_cycles_for_vertex1);
-        cycle_index_t num_cycles_for_vertex2;
-        cycle_index_t* cycle_indices2 = cbv_get_cycle_indices(
-            cycles_by_vertex, max_cycles_per_vertex, neighbor_vertex, &num_cycles_for_vertex2);
+        if (num_cycles_for_vertex1 == 0) {
+            return false;
+        }
 
         num_cycles_for_vertex = 0;
-        cycle_indices = (cbv_t)malloc((num_cycles_for_vertex1 > num_cycles_for_vertex2
-                                           ? num_cycles_for_vertex1
-                                           : num_cycles_for_vertex2) *
-                                      sizeof(cycle_index_t));
+        cycle_indices = (cbv_t)malloc(num_cycles_for_vertex1 * sizeof(cycle_index_t));
         assert(cycle_indices != NULL, "Error allocating memory for the cycle indices\n");
 
         for (cycle_index_t i = 0; i < num_cycles_for_vertex1; i++) {
@@ -812,14 +904,9 @@ bool search(cycle_index_t cycles_to_use,                    // state
             if (cycle_index <= current_start_cycle || used_cycles[cycle_index]) {
                 continue;
             }
-            bool is_in_other = false;
-            for (cycle_index_t j = 0; j < num_cycles_for_vertex2; j++) {
-                if (cycle_indices2[j] == cycle_index) {
-                    is_in_other = true;
-                    break;
-                }
-            }
-            if (is_in_other) {
+            cycle_length_t cycle_length;
+            vertex_t* cycle = cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
+            if (cycle_has_directed_edge(cycle, cycle_length, vertex, neighbor_vertex)) {
                 cycle_indices[num_cycles_for_vertex++] = cycle_index;
             }
         }
@@ -893,21 +980,22 @@ bool search(cycle_index_t cycles_to_use,                    // state
         if (is_final_cycle) {
             if (FIND_FULL_CYCLE_FITTING) {
                 // check that all vertices have been used enough times
+                bool all_vertices_used = true;
                 for (vertex_t i = 0; i < num_vertices; i++) {
                     if (vertex_uses[i] < VERTEX_USE_LIMIT) {
-                        // assert(false, "Vertex %" PRIvertex_t " used too few times\n", i);
-                        used_cycles[cycle_index] = false;
-                        for (uint8_t j = 0; j < cycle_length; j++) {
-                            adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
-
-                            // un-use the cycle vertices
-                            vertex_uses[cycle[j]]--;
-                        }
-                        if (CONSTRAINED_BY_TWO && neighbor_vertex != MAX_VERTICES) {
-                            free(cycle_indices);
-                        }
-                        return false;
+                        all_vertices_used = false;
+                        break;
                     }
+                }
+                if (!all_vertices_used) {
+                    used_cycles[cycle_index] = false;
+                    for (cycle_length_t j = 0; j < cycle_length; j++) {
+                        adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
+
+                        // un-use the cycle vertices
+                        vertex_uses[cycle[j]]--;
+                    }
+                    continue;
                 }
             }
             if (CONSTRAINED_BY_TWO && neighbor_vertex != MAX_VERTICES) {
@@ -929,7 +1017,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
 
         // un-use the cycle
         used_cycles[cycle_index] = false;
-        for (uint8_t j = 0; j < cycle_length; j++) {
+        for (cycle_length_t j = 0; j < cycle_length; j++) {
             adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
 
             // un-use the cycle vertices
@@ -945,6 +1033,31 @@ bool search(cycle_index_t cycles_to_use,                    // state
     return false;
 }
 
+bool cycle_has_directed_edge(vertex_t* cycle, cycle_length_t cycle_length, vertex_t start_vertex,
+                             vertex_t end_vertex) {
+    for (cycle_length_t i = 0; i < cycle_length; i++) {
+        if (cycle[i] == start_vertex && cycle[i + 1] == end_vertex) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool path_has_reverse_transition(vertex_t* path, cycle_length_t path_length, vertex_t prev_vertex,
+                                 vertex_t center_vertex, vertex_t next_vertex) {
+    if (vertex_degrees[center_vertex] <= 2) {
+        return false;
+    }
+
+    for (cycle_length_t i = 1; i + 1 < path_length; i++) {
+        if (path[i - 1] == next_vertex && path[i] == center_vertex &&
+            path[i + 1] == prev_vertex) {
+            return true;
+        }
+    }
+    return false;
+}
+
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
     FILE* fp = fopen(filename, "r");
     assert(fp != NULL, "Error opening file %s\n", filename);
@@ -955,11 +1068,17 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
 
     adj_t adjacency_list = (adj_t)malloc(*num_vertices * VERTEX_DEGREE * sizeof(vertex_t));
     assert(adjacency_list != NULL, "Error allocating memory for the adjacency list\n");
+    vertex_degrees = (degree_t*)malloc(*num_vertices * sizeof(degree_t));
+    assert(vertex_degrees != NULL, "Error allocating memory for the vertex degrees\n");
+    for (vertex_t i = 0; i < *num_vertices; i++) {
+        vertex_degrees[i] = 0;
+    }
     for (vertex_t i = 0; i < *num_vertices * VERTEX_DEGREE; i++) {
         assert(fscanf(fp, "%" SCNvertex_t, &adjacency_list[i]) == 1,
                "Error reading the adjacency list from %s\n", filename);
         if (adjacency_list[i] != MAX_VERTICES) {
             adjacency_list[i] -= ADJACENCY_LIST_START;
+            vertex_degrees[i / VERTEX_DEGREE]++;
         }
     }
 
@@ -971,11 +1090,18 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
         fprintf(stderr, "\tNumber of edges: %" PRIedge_t " (%" PRIedge_t " directed)\n", *num_edges,
                 2 * *num_edges);
         fprintf(stderr, "\tFirst 5 vertices (with neighbors): ");
-        for (vertex_t v = 0; v < 5; v++) {
-            fprintf(stderr, "%" PRIvertex_t "(%" PRIvertex_t " %" PRIvertex_t " %" PRIvertex_t ") ",
-                    v, adj_get_neighbors(adjacency_list, v)[0] + ADJACENCY_LIST_START,
-                    adj_get_neighbors(adjacency_list, v)[1] + ADJACENCY_LIST_START,
-                    adj_get_neighbors(adjacency_list, v)[2] + ADJACENCY_LIST_START);
+        vertex_t vertices_to_print = *num_vertices < 5 ? *num_vertices : 5;
+        degree_t neighbors_to_print = VERTEX_DEGREE < 3 ? VERTEX_DEGREE : 3;
+        for (vertex_t v = 0; v < vertices_to_print; v++) {
+            fprintf(stderr, "%" PRIvertex_t "(", v);
+            for (degree_t d = 0; d < neighbors_to_print; d++) {
+                if (d > 0) {
+                    fprintf(stderr, " ");
+                }
+                fprintf(stderr, "%" PRIvertex_t,
+                        adj_get_neighbors(adjacency_list, v)[d] + ADJACENCY_LIST_START);
+            }
+            fprintf(stderr, ") ");
         }
         fprintf(stderr, "\n");
     }
@@ -1108,9 +1234,10 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_lengt
                     // checks
 
                     // prevent backtracking
-                    if (path[1] == path[path_length - 1]) {
+                    if (path[1] == path[path_length - 1] || path[path_length - 2] == path[0]) {
                         break;
                     }
+
                     // prevent repeated directed edges
                     bool repeated_edge = false;
                     for (cycle_length_t j = 0; j < path_length - 1; j++) {
@@ -1120,6 +1247,13 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_lengt
                         }
                     }
                     if (repeated_edge) {
+                        break;
+                    }
+
+                    if (path_has_reverse_transition(path, path_length, path[path_length - 2],
+                                                    path[path_length - 1], path[0]) ||
+                        path_has_reverse_transition(path, path_length, path[path_length - 1],
+                                                    path[0], path[1])) {
                         break;
                     }
                 }
@@ -1154,6 +1288,7 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_lengt
                         // backtracking).
                         continue;
                     }
+
                     // skip if any directed edge is repeated, i.e. matches the one we are
                     // currently adding from path[path_length - 1] to neighbor
                     bool repeated_edge = false;
@@ -1164,6 +1299,12 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_lengt
                         }
                     }
                     if (repeated_edge) {
+                        continue;
+                    }
+
+                    if (path_length >= 2 &&
+                        path_has_reverse_transition(path, path_length, path[path_length - 2],
+                                                    path[path_length - 1], neighbor)) {
                         continue;
                     }
                 }
