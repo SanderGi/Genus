@@ -107,6 +107,7 @@ static cycle_index_t* directed_edge_lookup_ids = NULL;
 static cycle_index_t directed_edge_lookup_capacity = 0;
 static bool* transitions_used = NULL;
 static size_t transitions_used_size = 0;
+static cycle_index_t* cycle_edge_conflicts = NULL;
 static vertex_t* rotation_next = NULL;
 static vertex_t* rotation_prev = NULL;
 static degree_t* rotation_pair_count = NULL;
@@ -149,6 +150,29 @@ void show_solution(cycle_index_t genus_lower_bound, cycle_index_t genus_lower_bo
                    cycles_t cycles, cycle_length_t max_cycle_length);
 
 degree_t adj_neighbor_index(adj_t adjacency_list, vertex_t vertex, vertex_t neighbor);
+bool cycle_edges_available(adj_t adjacency_list, vertex_t* cycle, cycle_length_t cycle_length);
+bool cycle_vertex_uses_fit(vertex_t* cycle, cycle_length_t cycle_length,
+                           degree_t* vertex_uses);
+void cycle_edge_conflicts_init(cycle_index_t num_cycles);
+void cycle_edge_conflicts_clear(cycle_index_t num_cycles);
+void cycle_edge_conflicts_free(void);
+void cycle_set_edge_conflicts(vertex_t* cycle, cycle_length_t cycle_length,
+                              cycle_index_t max_cycles_per_edge, cbe_t cycles_by_edge,
+                              bool used);
+bool cycle_search_candidate_usable(bool* used_cycles, degree_t* vertex_uses,
+                                   adj_t adjacency_list, cycles_t cycles,
+                                   cycle_length_t max_cycle_length,
+                                   cycle_index_t cycle_index,
+                                   cycle_index_t* start_cycle_order,
+                                   cycle_index_t current_start_cycle_order,
+                                   cycle_index_t cycles_to_use,
+                                   length_feasibility_t* length_feasibility,
+                                   cycle_index_t required_cycles_to_use,
+                                   bool check_row_constraints,
+                                   bool check_transitions,
+                                   cycle_length_t* cycle_length_out,
+                                   vertex_t** cycle_out,
+                                   cycle_index_t* next_required_cycles_to_use);
 bool cycle_transitions_good(vertex_t* cycle, cycle_length_t cycle_length);
 void cycle_set_transitions(vertex_t* cycle, cycle_length_t cycle_length, bool used);
 void rotation_state_init(vertex_t num_vertices);
@@ -998,6 +1022,7 @@ int main(void) {
         transitions_used = (bool*)malloc(transitions_used_size * sizeof(bool));
         assert(transitions_used != NULL,
                "Error allocating memory for the used transition table\n");
+        cycle_edge_conflicts_init(num_cycles);
         rotation_state_init(num_vertices);
 
         vertex_t start_vertex;
@@ -1059,6 +1084,7 @@ int main(void) {
             cycle_length_t cycle_length;
             cycles_t cycle = cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
             memset(transitions_used, 0, transitions_used_size * sizeof(bool));
+            cycle_edge_conflicts_clear(num_cycles);
             rotation_state_clear(num_vertices);
             start_cycle_order[c] = start_cycles_seen;
             start_cycles_seen++;
@@ -1077,6 +1103,8 @@ int main(void) {
             // mark start cycle as used
             used_cycles[c] = true;
             cycle_set_transitions(cycle, cycle_length, true);
+            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                     cycles_by_edge, true);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
 
@@ -1105,6 +1133,7 @@ int main(void) {
                 free(cycle_length_available);
                 free(length_cache_without_required);
                 free(length_cache_with_required);
+                cycle_edge_conflicts_free();
                 rotation_state_free();
                 free(transitions_used);
                 transitions_used = NULL;
@@ -1115,6 +1144,8 @@ int main(void) {
             // mark start cycle as unused
             used_cycles[c] = false;
             cycle_set_transitions(cycle, cycle_length, false);
+            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                     cycles_by_edge, false);
             cycle_remove_rotation_system(cycle, cycle_length);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
@@ -1163,6 +1194,7 @@ int main(void) {
             free(cycle_length_available);
             free(length_cache_without_required);
             free(length_cache_with_required);
+            cycle_edge_conflicts_free();
             rotation_state_free();
             free(transitions_used);
             transitions_used = NULL;
@@ -1190,6 +1222,7 @@ int main(void) {
         free(cycles_by_edge);
         free(length_cache_without_required);
         free(length_cache_with_required);
+        cycle_edge_conflicts_free();
         rotation_state_free();
         free(transitions_used);
         transitions_used = NULL;
@@ -1222,6 +1255,7 @@ int main(void) {
     transitions_used = (bool*)malloc(transitions_used_size * sizeof(bool));
     assert(transitions_used != NULL,
            "Error allocating memory for the used transition table\n");
+    cycle_edge_conflicts_init(num_cycles);
     rotation_state_init(num_vertices);
     vertex_t start_vertex;
     vertex_t end_vertex;
@@ -1281,6 +1315,7 @@ int main(void) {
             cycle_length_t cycle_length;
             cycles_t cycle = cycle_get(cycles, cycles_max_cycle_length, c, &cycle_length);
             memset(transitions_used, 0, transitions_used_size * sizeof(bool));
+            cycle_edge_conflicts_clear(num_cycles);
             rotation_state_clear(num_vertices);
             start_cycle_order[c] = start_cycles_seen;
             start_cycles_seen++;
@@ -1299,6 +1334,8 @@ int main(void) {
             // mark start cycle as used
             used_cycles[c] = true;
             cycle_set_transitions(cycle, cycle_length, true);
+            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                     cycles_by_edge, true);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
 
@@ -1326,6 +1363,7 @@ int main(void) {
                 free(cycle_length_available);
                 free(length_cache_without_required);
                 free(length_cache_with_required);
+                cycle_edge_conflicts_free();
                 rotation_state_free();
                 free(transitions_used);
                 transitions_used = NULL;
@@ -1336,6 +1374,8 @@ int main(void) {
             // mark start cycle as unused
             used_cycles[c] = false;
             cycle_set_transitions(cycle, cycle_length, false);
+            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                     cycles_by_edge, false);
             cycle_remove_rotation_system(cycle, cycle_length);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
@@ -1363,6 +1403,7 @@ int main(void) {
     free(start_cycle_order);
     free(vertex_uses);
     free(cycle_length_available);
+    cycle_edge_conflicts_free();
     rotation_state_free();
     free(transitions_used);
     transitions_used = NULL;
@@ -1446,67 +1487,59 @@ bool search(cycle_index_t cycles_to_use,                    // state
             cycle_index_t required_cycles_to_use) {
     (*num_search_calls)++;
 
-    // pick a vertex to explore
+    // Pick the tightest uncovered directed-edge column to explore, DLX style.
+    // Vertex-use limits are secondary row constraints: a candidate row is
+    // counted only if it still fits all vertex capacities.
     vertex_t vertex = 0;
-    vertex_t neighbor_vertex = MAX_VERTICES;
     bool found = false;
+    cycle_index_t* cycle_indices = NULL;
+    cycle_index_t num_cycles_for_column = 0;
     if (CONSTRAINED_BY_TWO) {
-        // Pick a remaining directed edge. Every complete fitting must use it, and
-        // choosing the edge with the fewest available trails keeps the branching
-        // factor low.
-        degree_t max_comb_uses = 0;
+        degree_t max_column_pressure = 0;
         cycle_index_t min_cycle_options = MAX_CYCLES;
-        for (vertex_t i = 0; i < num_vertices; i++) {
-            if (vertex_uses[i] >= VERTEX_USE_LIMIT) {
-                continue;
-            }
+        // Degree-5 incidence-style graphs have enough symmetric rows that exact
+        // column lookahead can dominate; row acceptance still checks conflicts.
+        // TODO: figure out the proper reason and make the optimal fix/tuning for all graphs.
+        bool exact_column_count = VERTEX_DEGREE != 5;
 
+        for (vertex_t i = 0; i < num_vertices; i++) {
             vertex_t* neighbors = adj_get_neighbors(adjacency_list, i);
             for (degree_t j = 0; j < VERTEX_DEGREE; j++) {
-                if (neighbors[j] == MAX_VERTICES || !adj_slot_has_edge(i, j) ||
-                    vertex_uses[neighbors[j]] >= VERTEX_USE_LIMIT) {
+                if (neighbors[j] == MAX_VERTICES || !adj_slot_has_edge(i, j)) {
                     continue;
                 }
-                degree_t comb_uses = vertex_uses[i] + vertex_uses[neighbors[j]];
-                cycle_index_t cycle_options = 0;
-                cycle_index_t num_cycles_for_edge;
+
+                cycle_index_t num_cycles_for_constraint;
                 cycle_index_t* cycle_indices_for_edge =
                     cbe_get_cycle_indices(cycles_by_edge, max_cycles_per_edge, i, neighbors[j],
-                                          &num_cycles_for_edge);
-                for (cycle_index_t k = 0; k < num_cycles_for_edge; k++) {
+                                          &num_cycles_for_constraint);
+                cycle_index_t cycle_options = 0;
+                degree_t column_pressure = vertex_uses[i] + vertex_uses[neighbors[j]];
+                for (cycle_index_t k = 0; k < num_cycles_for_constraint; k++) {
                     cycle_index_t cycle_index = cycle_indices_for_edge[k];
-                    if (start_cycle_order[cycle_index] < current_start_cycle_order ||
-                        used_cycles[cycle_index]) {
-                        continue;
+                    if (cycle_search_candidate_usable(
+                            used_cycles, vertex_uses, adjacency_list, cycles, max_cycle_length,
+                            cycle_index, start_cycle_order, current_start_cycle_order,
+                            cycles_to_use, length_feasibility, required_cycles_to_use,
+                            exact_column_count, false, NULL, NULL, NULL)) {
+                        cycle_options++;
+                        if (found &&
+                            (cycle_options > min_cycle_options ||
+                             (cycle_options == min_cycle_options &&
+                              column_pressure <= max_column_pressure))) {
+                            break;
+                        }
                     }
-                    cycle_length_t cycle_length;
-                    cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
-                    if (cycle_length > num_edges_remaining) {
-                        continue;
-                    }
-                    cycle_index_t next_required_cycles_to_use = required_cycles_to_use;
-                    if (next_required_cycles_to_use > 0 &&
-                        cycle_length == length_feasibility->required_length) {
-                        next_required_cycles_to_use--;
-                    }
-                    if (((cycles_to_use - 1) * smallest_cycle_length >
-                         num_edges_remaining - cycle_length) ||
-                        ((cycles_to_use - 1) * max_cycle_length <
-                         num_edges_remaining - cycle_length) ||
-                        !cached_length_composition_possible(length_feasibility,
-                                                            num_edges_remaining - cycle_length,
-                                                            cycles_to_use - 1,
-                                                            next_required_cycles_to_use)) {
-                        continue;
-                    }
-                    cycle_options++;
                 }
+
                 if (!found || cycle_options < min_cycle_options ||
-                    (cycle_options == min_cycle_options && comb_uses > max_comb_uses)) {
+                    (cycle_options == min_cycle_options &&
+                     column_pressure > max_column_pressure)) {
                     found = true;
                     vertex = i;
-                    neighbor_vertex = neighbors[j];
-                    max_comb_uses = comb_uses;
+                    cycle_indices = cycle_indices_for_edge;
+                    num_cycles_for_column = num_cycles_for_constraint;
+                    max_column_pressure = column_pressure;
                     min_cycle_options = cycle_options;
 
                     if (min_cycle_options == 0) {
@@ -1518,6 +1551,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 break;  // we can't do better than this
             }
         }
+
     } else {
         // we pick the most used vertex that hasn't reached the limit since it
         // constrains the search space of possible cycles more
@@ -1533,9 +1567,17 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 }
             }
         }
+
+        if (found) {
+            cycle_indices = cbv_get_cycle_indices(cycles_by_vertex, max_cycles_per_vertex, vertex,
+                                                  &num_cycles_for_column);
+        }
     }
     // if we've explored all vertices fully, this cannot be extended further
     if (!found) {
+        return false;
+    }
+    if (num_cycles_for_column == 0) {
         return false;
     }
 
@@ -1570,71 +1612,18 @@ bool search(cycle_index_t cycles_to_use,                    // state
         }
     }
 
-    // look through the possible cycles that contain this vertex
-    // if none can be used, this is a failed end and we backtrack
-    // otherwise, we have our solution
-    cycle_index_t num_cycles_for_vertex;
-    cbv_t cycle_indices;
-    if (CONSTRAINED_BY_TWO && neighbor_vertex != MAX_VERTICES) {
-        cycle_indices = cbe_get_cycle_indices(cycles_by_edge, max_cycles_per_edge, vertex,
-                                              neighbor_vertex, &num_cycles_for_vertex);
-        if (num_cycles_for_vertex == 0) {
-            return false;
-        }
-    } else {
-        cycle_indices = cbv_get_cycle_indices(cycles_by_vertex, max_cycles_per_vertex, vertex,
-                                              &num_cycles_for_vertex);
-    }
-
-    for (cycle_index_t i = 0; i < num_cycles_for_vertex; i++) {
+    // Look through the possible cycles that satisfy the selected column.
+    for (cycle_index_t i = 0; i < num_cycles_for_column; i++) {
         // skip if the cycle is already used
         cycle_index_t cycle_index = cycle_indices[i];
-        if (start_cycle_order[cycle_index] < current_start_cycle_order) {
-            continue;
-        }
-        if (used_cycles[cycle_index]) {
-            continue;
-        }
-
         cycle_length_t cycle_length;
-        vertex_t* cycle = cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
-        if (cycle_length > num_edges_remaining) {
-            continue;
-        }
-
-        // If the cycle is too long and doesn't leave enough edges for our desired
-        // fit, we can't use it; similarly, if it is too short and doesn't allow us
-        // to use all the edges, we can't use it
-        if (((cycles_to_use - 1) * smallest_cycle_length > num_edges_remaining - cycle_length) ||
-            ((cycles_to_use - 1) * max_cycle_length < num_edges_remaining - cycle_length)) {
-            continue;
-        }
-        cycle_index_t next_required_cycles_to_use = required_cycles_to_use;
-        if (next_required_cycles_to_use > 0 &&
-            cycle_length == length_feasibility->required_length) {
-            next_required_cycles_to_use--;
-        }
-        if (!cached_length_composition_possible(length_feasibility,
-                                                num_edges_remaining - cycle_length,
-                                                cycles_to_use - 1,
-                                                next_required_cycles_to_use)) {
-            continue;
-        }
-
-        // cycle is only usable if all edges are available
-        bool can_use = true;
-        for (cycle_length_t j = 0; j < cycle_length; j++) {
-            if (!adj_has_edge(adjacency_list, cycle[j], cycle[j + 1])) {
-                can_use = false;
-                break;
-            }
-        }
-        if (!can_use) {
-            continue;
-        }
-
-        // make sure the cycle satisfies the ijk condition
-        if (VERTEX_DEGREE > 2 && !cycle_transitions_good(cycle, cycle_length)) {
+        vertex_t* cycle;
+        cycle_index_t next_required_cycles_to_use;
+        if (!cycle_search_candidate_usable(
+                used_cycles, vertex_uses, adjacency_list, cycles, max_cycle_length,
+                cycle_index, start_cycle_order, current_start_cycle_order, cycles_to_use,
+                length_feasibility, required_cycles_to_use, true, true, &cycle_length,
+                &cycle, &next_required_cycles_to_use)) {
             continue;
         }
         if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
@@ -1644,6 +1633,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
         // use the cycle
         used_cycles[cycle_index] = true;
         cycle_set_transitions(cycle, cycle_length, true);
+        cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                 cycles_by_edge, true);
         for (cycle_length_t j = 0; j < cycle_length; j++) {
             adj_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
 
@@ -1665,6 +1656,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
             if (next_required_cycles_to_use > 0) {
                 used_cycles[cycle_index] = false;
                 cycle_set_transitions(cycle, cycle_length, false);
+                cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                         cycles_by_edge, false);
                 cycle_remove_rotation_system(cycle, cycle_length);
                 for (cycle_length_t j = 0; j < cycle_length; j++) {
                     adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
@@ -1686,6 +1679,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 if (!all_vertices_used) {
                     used_cycles[cycle_index] = false;
                     cycle_set_transitions(cycle, cycle_length, false);
+                    cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                             cycles_by_edge, false);
                     cycle_remove_rotation_system(cycle, cycle_length);
                     for (cycle_length_t j = 0; j < cycle_length; j++) {
                         adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
@@ -1712,6 +1707,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
         // un-use the cycle
         used_cycles[cycle_index] = false;
         cycle_set_transitions(cycle, cycle_length, false);
+        cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                 cycles_by_edge, false);
         cycle_remove_rotation_system(cycle, cycle_length);
         for (cycle_length_t j = 0; j < cycle_length; j++) {
             adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
@@ -1735,6 +1732,140 @@ degree_t adj_neighbor_index(adj_t adjacency_list, vertex_t vertex, vertex_t neig
     assert(false, "Error finding neighbor %" PRIvertex_t " of vertex %" PRIvertex_t "\n",
            neighbor, vertex);
     return 0;
+}
+
+bool cycle_edges_available(adj_t adjacency_list, vertex_t* cycle, cycle_length_t cycle_length) {
+    for (cycle_length_t i = 0; i < cycle_length; i++) {
+        if (!adj_has_edge(adjacency_list, cycle[i], cycle[i + 1])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool cycle_vertex_uses_fit(vertex_t* cycle, cycle_length_t cycle_length,
+                           degree_t* vertex_uses) {
+    for (cycle_length_t i = 0; i < cycle_length; i++) {
+        degree_t projected_uses = vertex_uses[cycle[i]] + 1;
+        for (cycle_length_t j = 0; j < i; j++) {
+            if (cycle[j] == cycle[i]) {
+                projected_uses++;
+            }
+        }
+        if (projected_uses > VERTEX_USE_LIMIT) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void cycle_edge_conflicts_init(cycle_index_t num_cycles) {
+    cycle_index_t slots = num_cycles == 0 ? 1 : num_cycles;
+    cycle_edge_conflicts = (cycle_index_t*)calloc(slots, sizeof(cycle_index_t));
+    assert(cycle_edge_conflicts != NULL,
+           "Error allocating memory for cycle edge conflicts\n");
+}
+
+void cycle_edge_conflicts_clear(cycle_index_t num_cycles) {
+    assert(cycle_edge_conflicts != NULL,
+           "Error clearing uninitialized cycle edge conflicts\n");
+    memset(cycle_edge_conflicts, 0, num_cycles * sizeof(cycle_index_t));
+}
+
+void cycle_edge_conflicts_free(void) {
+    free(cycle_edge_conflicts);
+    cycle_edge_conflicts = NULL;
+}
+
+void cycle_set_edge_conflicts(vertex_t* cycle, cycle_length_t cycle_length,
+                              cycle_index_t max_cycles_per_edge, cbe_t cycles_by_edge,
+                              bool used) {
+    assert(cycle_edge_conflicts != NULL,
+           "Error updating uninitialized cycle edge conflicts\n");
+    for (cycle_length_t i = 0; i < cycle_length; i++) {
+        cycle_index_t num_cycles_for_edge;
+        cycle_index_t* cycle_indices =
+            cbe_get_cycle_indices(cycles_by_edge, max_cycles_per_edge, cycle[i],
+                                  cycle[i + 1], &num_cycles_for_edge);
+        for (cycle_index_t j = 0; j < num_cycles_for_edge; j++) {
+            cycle_index_t cycle_index = cycle_indices[j];
+            if (used) {
+                cycle_edge_conflicts[cycle_index]++;
+            } else {
+                assert(cycle_edge_conflicts[cycle_index] > 0,
+                       "Error removing missing cycle edge conflict\n");
+                cycle_edge_conflicts[cycle_index]--;
+            }
+        }
+    }
+}
+
+bool cycle_search_candidate_usable(bool* used_cycles, degree_t* vertex_uses,
+                                   adj_t adjacency_list, cycles_t cycles,
+                                   cycle_length_t max_cycle_length,
+                                   cycle_index_t cycle_index,
+                                   cycle_index_t* start_cycle_order,
+                                   cycle_index_t current_start_cycle_order,
+                                   cycle_index_t cycles_to_use,
+                                   length_feasibility_t* length_feasibility,
+                                   cycle_index_t required_cycles_to_use,
+                                   bool check_row_constraints,
+                                   bool check_transitions,
+                                   cycle_length_t* cycle_length_out,
+                                   vertex_t** cycle_out,
+                                   cycle_index_t* next_required_cycles_to_use) {
+    if (start_cycle_order[cycle_index] < current_start_cycle_order ||
+        used_cycles[cycle_index]) {
+        return false;
+    }
+
+    cycle_length_t cycle_length;
+    vertex_t* cycle = cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
+    if (cycle_length > num_edges_remaining) {
+        return false;
+    }
+
+    if (((cycles_to_use - 1) * smallest_cycle_length > num_edges_remaining - cycle_length) ||
+        ((cycles_to_use - 1) * max_cycle_length < num_edges_remaining - cycle_length)) {
+        return false;
+    }
+
+    cycle_index_t remaining_required_cycles_to_use = required_cycles_to_use;
+    if (remaining_required_cycles_to_use > 0 &&
+        cycle_length == length_feasibility->required_length) {
+        remaining_required_cycles_to_use--;
+    }
+    if (!cached_length_composition_possible(length_feasibility,
+                                            num_edges_remaining - cycle_length,
+                                            cycles_to_use - 1,
+                                            remaining_required_cycles_to_use)) {
+        return false;
+    }
+
+    if (check_row_constraints) {
+        (void)adjacency_list;
+        assert(cycle_edge_conflicts != NULL, "Error: cycle edge conflicts not initialized\n");
+        if (cycle_edge_conflicts[cycle_index] != 0 ||
+            !cycle_vertex_uses_fit(cycle, cycle_length, vertex_uses)) {
+            return false;
+        }
+    }
+
+    if (check_transitions && VERTEX_DEGREE > 2 &&
+        !cycle_transitions_good(cycle, cycle_length)) {
+        return false;
+    }
+
+    if (cycle_length_out != NULL) {
+        *cycle_length_out = cycle_length;
+    }
+    if (cycle_out != NULL) {
+        *cycle_out = cycle;
+    }
+    if (next_required_cycles_to_use != NULL) {
+        *next_required_cycles_to_use = remaining_required_cycles_to_use;
+    }
+    return true;
 }
 
 bool cycle_transitions_good(vertex_t* cycle, cycle_length_t cycle_length) {
