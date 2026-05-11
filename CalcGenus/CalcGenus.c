@@ -41,6 +41,14 @@
 #define LENGTH_COMPOSITION_WORK_LIMIT 25000000ULL
 #define LENGTH_FEASIBILITY_CACHE_LIMIT 10000000ULL
 #define SHORTEST_PACKING_CALL_LIMIT 1000000ULL
+// Symmetry discovery is opportunistic: found automorphisms are used for sound
+// pruning, but large graphs skip discovery when it costs more than it saves.
+// TODO: find a proper criteria for when/how much symmetry pruning makes sense. 
+// For now, the VERTEX_LIMIT and LIMIT will need to be tuned based on the graph
+#define AUTOMORPHISM_VERTEX_LIMIT 120
+#define AUTOMORPHISM_LIMIT 128
+#define AUTOMORPHISM_SEED_CALL_LIMIT 20000ULL
+#define AUTOMORPHISM_TOTAL_CALL_LIMIT 200000ULL
 #define DIRECTED_EDGE_LOOKUP_EMPTY UINT32_MAX
 
 // consequences of assumptions:
@@ -77,6 +85,23 @@ typedef struct {
     int8_t* cache_with_required;
     cycle_index_t cache_width;
 } length_feasibility_t;
+typedef struct {
+    vertex_t num_vertices;
+    cycle_index_t count;
+    cycle_index_t capacity;
+    vertex_t* maps;
+} automorphism_list_t;
+typedef struct {
+    vertex_t num_vertices;
+    adj_t adjacency_list;
+    vertex_t* distances;
+    uint64_t* vertex_signatures;
+    vertex_t* map;
+    vertex_t* inverse_map;
+    vertex_t* result;
+    uint64_t calls;
+    uint64_t call_limit;
+} automorphism_search_t;
 
 // macros
 // assert(condition, message, ...fmt_args)
@@ -112,11 +137,13 @@ static vertex_t* rotation_next = NULL;
 static vertex_t* rotation_prev = NULL;
 static degree_t* rotation_pair_count = NULL;
 static size_t rotation_state_size = 0;
+static automorphism_list_t graph_automorphisms = {0, 0, 0, NULL};
 
 // auxiliary data structures
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
 vertex_t* adj_get_neighbors(adj_t adjacency_list, vertex_t vertex);
 void graph_free(adj_t adjacency_list);
+bool graph_has_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex);
 uint32_t directed_edge_key(vertex_t start_vertex, vertex_t end_vertex);
 cycle_index_t directed_edge_lookup_slot(uint32_t key, bool allow_empty);
 void directed_edge_lookup_insert(vertex_t start_vertex, vertex_t end_vertex,
@@ -153,6 +180,17 @@ degree_t adj_neighbor_index(adj_t adjacency_list, vertex_t vertex, vertex_t neig
 bool cycle_edges_available(adj_t adjacency_list, vertex_t* cycle, cycle_length_t cycle_length);
 bool cycle_vertex_uses_fit(vertex_t* cycle, cycle_length_t cycle_length,
                            degree_t* vertex_uses);
+void automorphism_list_free(automorphism_list_t* automorphisms);
+void automorphism_generate(vertex_t num_vertices, adj_t adjacency_list,
+                           automorphism_list_t* automorphisms);
+cycle_index_t* start_cycles_prune_by_symmetry(cycles_t cycles,
+                                              cycle_length_t max_cycle_length,
+                                              cycle_index_t num_cycles,
+                                              cbe_t cycles_by_edge,
+                                              cycle_index_t max_cycles_per_edge,
+                                              cycle_index_t* raw_start_cycles,
+                                              cycle_index_t raw_start_count,
+                                              cycle_index_t* pruned_start_count);
 void cycle_edge_conflicts_init(cycle_index_t num_cycles);
 void cycle_edge_conflicts_clear(cycle_index_t num_cycles);
 void cycle_edge_conflicts_free(void);
@@ -755,7 +793,6 @@ int main(void) {
             }
         }
     }
-
     if (OUTPUT_TO_STDOUT) {
         output_file = stdout;
     } else {
@@ -1035,10 +1072,8 @@ int main(void) {
         bool use_max_length_start =
             same_target_fit &&
             (forced_single_new_cycle || num_new_cycles <= num_edge_start_cycles);
-        cycle_index_t num_start_cycles =
-            use_max_length_start ? num_new_cycles : num_edge_start_cycles;
         cycle_index_t num_start_cycles_for_vertex = num_new_cycles;
-        cycle_index_t* start_cycle_indices = NULL;
+        cycle_index_t* fixed_edge_start_cycles = NULL;
         cycle_index_t* start_cycle_order =
             (cycle_index_t*)malloc(num_cycles * sizeof(cycle_index_t));
         assert(start_cycle_order != NULL, "Error allocating memory for the start cycle order\n");
@@ -1068,19 +1103,38 @@ int main(void) {
             .cache_width = length_cache_width,
         };
         if (!use_max_length_start) {
-            start_cycle_indices = cbe_get_cycle_indices(cycles_by_edge, max_cycles_per_edge,
-                                                        start_vertex, end_vertex,
-                                                        &num_start_cycles_for_vertex);
+            fixed_edge_start_cycles = cbe_get_cycle_indices(cycles_by_edge, max_cycles_per_edge,
+                                                            start_vertex, end_vertex,
+                                                            &num_start_cycles_for_vertex);
         }
 
         // If the same fit was already ruled out with shorter cycles, any new
         // solution must contain a cycle of the current max length. Every fitting
         // also uses the chosen directed edge exactly once, so use whichever
         // valid start set is smaller.
+        cycle_index_t raw_start_count =
+            use_max_length_start ? num_new_cycles : num_start_cycles_for_vertex;
+        cycle_index_t* raw_start_cycles =
+            (cycle_index_t*)malloc((raw_start_count == 0 ? 1 : raw_start_count) *
+                                   sizeof(cycle_index_t));
+        assert(raw_start_cycles != NULL, "Error allocating memory for start cycles\n");
+        for (cycle_index_t start_i = 0; start_i < raw_start_count; start_i++) {
+            raw_start_cycles[start_i] = use_max_length_start
+                                            ? num_cycles - num_new_cycles + start_i
+                                            : fixed_edge_start_cycles[start_i];
+        }
+        if (graph_automorphisms.maps == NULL) {
+            automorphism_generate(num_vertices, adjacency_list, &graph_automorphisms);
+        }
+        cycle_index_t num_start_cycles;
+        cycle_index_t* start_cycles = start_cycles_prune_by_symmetry(
+            cycles, cur_max_cycle_length, num_cycles, cycles_by_edge, max_cycles_per_edge,
+            raw_start_cycles, raw_start_count, &num_start_cycles);
+        free(raw_start_cycles);
+
         cycle_index_t start_cycles_seen = 0;
-        for (cycle_index_t start_i = 0; start_i < num_start_cycles_for_vertex; start_i++) {
-            cycle_index_t c = use_max_length_start ? num_cycles - num_new_cycles + start_i
-                                                   : start_cycle_indices[start_i];
+        for (cycle_index_t start_i = 0; start_i < num_start_cycles; start_i++) {
+            cycle_index_t c = start_cycles[start_i];
             cycle_length_t cycle_length;
             cycles_t cycle = cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
             memset(transitions_used, 0, transitions_used_size * sizeof(bool));
@@ -1133,6 +1187,7 @@ int main(void) {
                 free(cycle_length_available);
                 free(length_cache_without_required);
                 free(length_cache_with_required);
+                free(start_cycles);
                 cycle_edge_conflicts_free();
                 rotation_state_free();
                 free(transitions_used);
@@ -1186,6 +1241,7 @@ int main(void) {
                           cycles, cur_max_cycle_length);
             free(used_cycles);
             free(start_cycle_order);
+            free(start_cycles);
             free(vertex_uses);
             graph_free(adjacency_list);
             free(cycles);
@@ -1217,6 +1273,7 @@ int main(void) {
 
         free(used_cycles);
         free(start_cycle_order);
+        free(start_cycles);
         free(vertex_uses);
         free(cycles_by_vertex);
         free(cycles_by_edge);
@@ -1259,13 +1316,19 @@ int main(void) {
     rotation_state_init(num_vertices);
     vertex_t start_vertex;
     vertex_t end_vertex;
-    cycle_index_t num_start_cycles =
-        choose_start_edge(num_vertices, adjacency_list, max_cycles_per_edge, cycles_by_edge,
-                          &start_vertex, &end_vertex);
+    choose_start_edge(num_vertices, adjacency_list, max_cycles_per_edge, cycles_by_edge,
+                      &start_vertex, &end_vertex);
     cycle_index_t num_start_cycles_for_vertex;
     cycle_index_t* start_cycle_indices = cbe_get_cycle_indices(
         cycles_by_edge, max_cycles_per_edge, start_vertex, end_vertex,
         &num_start_cycles_for_vertex);
+    if (graph_automorphisms.maps == NULL) {
+        automorphism_generate(num_vertices, adjacency_list, &graph_automorphisms);
+    }
+    cycle_index_t num_start_cycles;
+    cycle_index_t* start_cycles = start_cycles_prune_by_symmetry(
+        cycles, cycles_max_cycle_length, num_cycles, cycles_by_edge, max_cycles_per_edge,
+        start_cycle_indices, num_start_cycles_for_vertex, &num_start_cycles);
     cycle_index_t* start_cycle_order = (cycle_index_t*)malloc(num_cycles * sizeof(cycle_index_t));
     assert(start_cycle_order != NULL, "Error allocating memory for the start cycle order\n");
     memset(start_cycle_order, 0xff, num_cycles * sizeof(cycle_index_t));
@@ -1310,8 +1373,8 @@ int main(void) {
         // Every fitting uses the chosen directed edge exactly once, so it is
         // enough to try the cycles that contain that edge.
         cycle_index_t start_cycles_seen = 0;
-        for (cycle_index_t start_i = 0; start_i < num_start_cycles_for_vertex; start_i++) {
-            cycle_index_t c = start_cycle_indices[start_i];
+        for (cycle_index_t start_i = 0; start_i < num_start_cycles; start_i++) {
+            cycle_index_t c = start_cycles[start_i];
             cycle_length_t cycle_length;
             cycles_t cycle = cycle_get(cycles, cycles_max_cycle_length, c, &cycle_length);
             memset(transitions_used, 0, transitions_used_size * sizeof(bool));
@@ -1360,6 +1423,7 @@ int main(void) {
                 free(cycles_by_edge);
                 free(used_cycles);
                 free(start_cycle_order);
+                free(start_cycles);
                 free(cycle_length_available);
                 free(length_cache_without_required);
                 free(length_cache_with_required);
@@ -1401,6 +1465,7 @@ int main(void) {
     free(cycles_by_edge);
     free(used_cycles);
     free(start_cycle_order);
+    free(start_cycles);
     free(vertex_uses);
     free(cycle_length_available);
     cycle_edge_conflicts_free();
@@ -2230,6 +2295,396 @@ void graph_free(adj_t adjacency_list) {
     directed_edge_lookup_capacity = 0;
     num_directed_edges = 0;
     num_edges_remaining = 0;
+    automorphism_list_free(&graph_automorphisms);
+}
+
+bool graph_has_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex) {
+    vertex_t* neighbors = adj_get_neighbors(adjacency_list, start_vertex);
+    for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
+        if (neighbors[i] == end_vertex) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void automorphism_list_free(automorphism_list_t* automorphisms) {
+    free(automorphisms->maps);
+    automorphisms->num_vertices = 0;
+    automorphisms->count = 0;
+    automorphisms->capacity = 0;
+    automorphisms->maps = NULL;
+}
+
+bool automorphism_is_identity(vertex_t* map, vertex_t num_vertices) {
+    for (vertex_t i = 0; i < num_vertices; i++) {
+        if (map[i] != i) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool automorphism_list_contains(automorphism_list_t* automorphisms, vertex_t* map) {
+    for (cycle_index_t i = 0; i < automorphisms->count; i++) {
+        vertex_t* existing = &automorphisms->maps[i * automorphisms->num_vertices];
+        if (memcmp(existing, map, automorphisms->num_vertices * sizeof(vertex_t)) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void automorphism_list_add_if_new(automorphism_list_t* automorphisms, vertex_t* map) {
+    if (automorphisms->count >= automorphisms->capacity ||
+        automorphism_is_identity(map, automorphisms->num_vertices) ||
+        automorphism_list_contains(automorphisms, map)) {
+        return;
+    }
+
+    memcpy(&automorphisms->maps[automorphisms->count * automorphisms->num_vertices], map,
+           automorphisms->num_vertices * sizeof(vertex_t));
+    automorphisms->count++;
+}
+
+vertex_t* automorphism_distances_generate(vertex_t num_vertices, adj_t adjacency_list) {
+    vertex_t* distances =
+        (vertex_t*)malloc((size_t)num_vertices * num_vertices * sizeof(vertex_t));
+    vertex_t* queue = (vertex_t*)malloc(num_vertices * sizeof(vertex_t));
+    assert(distances != NULL && queue != NULL,
+           "Error allocating memory for automorphism distances\n");
+
+    for (vertex_t source = 0; source < num_vertices; source++) {
+        vertex_t* source_distances = &distances[(size_t)source * num_vertices];
+        for (vertex_t i = 0; i < num_vertices; i++) {
+            source_distances[i] = MAX_VERTICES;
+        }
+
+        cycle_index_t head = 0;
+        cycle_index_t tail = 0;
+        source_distances[source] = 0;
+        queue[tail++] = source;
+        while (head < tail) {
+            vertex_t vertex = queue[head++];
+            vertex_t* neighbors = adj_get_neighbors(adjacency_list, vertex);
+            for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
+                vertex_t neighbor = neighbors[i];
+                if (neighbor == MAX_VERTICES ||
+                    source_distances[neighbor] != MAX_VERTICES) {
+                    continue;
+                }
+                source_distances[neighbor] = source_distances[vertex] + 1;
+                queue[tail++] = neighbor;
+            }
+        }
+    }
+
+    free(queue);
+    return distances;
+}
+
+uint64_t automorphism_mix(uint64_t hash, uint64_t value) {
+    hash ^= value + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
+    return hash;
+}
+
+uint64_t* automorphism_vertex_signatures_generate(vertex_t num_vertices, vertex_t* distances) {
+    uint64_t* signatures = (uint64_t*)malloc(num_vertices * sizeof(uint64_t));
+    vertex_t* distance_counts = (vertex_t*)malloc((num_vertices + 1) * sizeof(vertex_t));
+    assert(signatures != NULL && distance_counts != NULL,
+           "Error allocating memory for automorphism signatures\n");
+
+    for (vertex_t vertex = 0; vertex < num_vertices; vertex++) {
+        memset(distance_counts, 0, (num_vertices + 1) * sizeof(vertex_t));
+        for (vertex_t other = 0; other < num_vertices; other++) {
+            vertex_t distance = distances[(size_t)vertex * num_vertices + other];
+            if (distance == MAX_VERTICES || distance > num_vertices) {
+                distance = num_vertices;
+            }
+            distance_counts[distance]++;
+        }
+
+        uint64_t hash = 1469598103934665603ULL;
+        hash = automorphism_mix(hash, vertex_degrees[vertex]);
+        for (vertex_t distance = 0; distance <= num_vertices; distance++) {
+            hash = automorphism_mix(hash, distance_counts[distance]);
+        }
+        signatures[vertex] = hash;
+    }
+
+    free(distance_counts);
+    return signatures;
+}
+
+bool automorphism_candidate_ok(automorphism_search_t* state, vertex_t domain_vertex,
+                               vertex_t image_vertex) {
+    if (state->inverse_map[image_vertex] != MAX_VERTICES ||
+        vertex_degrees[domain_vertex] != vertex_degrees[image_vertex] ||
+        state->vertex_signatures[domain_vertex] != state->vertex_signatures[image_vertex]) {
+        return false;
+    }
+
+    for (vertex_t other = 0; other < state->num_vertices; other++) {
+        vertex_t other_image = state->map[other];
+        if (other_image == MAX_VERTICES) {
+            continue;
+        }
+        if (state->distances[(size_t)domain_vertex * state->num_vertices + other] !=
+            state->distances[(size_t)image_vertex * state->num_vertices + other_image]) {
+            return false;
+        }
+        if (graph_has_edge(state->adjacency_list, domain_vertex, other) !=
+            graph_has_edge(state->adjacency_list, image_vertex, other_image)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void automorphism_assign(automorphism_search_t* state, vertex_t domain_vertex,
+                         vertex_t image_vertex) {
+    state->map[domain_vertex] = image_vertex;
+    state->inverse_map[image_vertex] = domain_vertex;
+}
+
+void automorphism_unassign(automorphism_search_t* state, vertex_t domain_vertex,
+                           vertex_t image_vertex) {
+    state->map[domain_vertex] = MAX_VERTICES;
+    state->inverse_map[image_vertex] = MAX_VERTICES;
+}
+
+bool automorphism_assign_fixed(automorphism_search_t* state, vertex_t domain_vertex,
+                               vertex_t image_vertex) {
+    if (state->map[domain_vertex] != MAX_VERTICES) {
+        return state->map[domain_vertex] == image_vertex;
+    }
+    if (!automorphism_candidate_ok(state, domain_vertex, image_vertex)) {
+        return false;
+    }
+    automorphism_assign(state, domain_vertex, image_vertex);
+    return true;
+}
+
+bool automorphism_valid(automorphism_search_t* state) {
+    for (vertex_t vertex = 0; vertex < state->num_vertices; vertex++) {
+        if (state->map[vertex] == MAX_VERTICES) {
+            return false;
+        }
+        vertex_t* neighbors = adj_get_neighbors(state->adjacency_list, vertex);
+        for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
+            vertex_t neighbor = neighbors[i];
+            if (neighbor != MAX_VERTICES &&
+                !graph_has_edge(state->adjacency_list, state->map[vertex],
+                                state->map[neighbor])) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+vertex_t automorphism_choose_domain(automorphism_search_t* state,
+                                    cycle_index_t* num_candidates) {
+    vertex_t best_vertex = MAX_VERTICES;
+    cycle_index_t best_candidates = MAX_CYCLES;
+
+    for (vertex_t vertex = 0; vertex < state->num_vertices; vertex++) {
+        if (state->map[vertex] != MAX_VERTICES) {
+            continue;
+        }
+
+        cycle_index_t candidates = 0;
+        for (vertex_t image = 0; image < state->num_vertices; image++) {
+            if (automorphism_candidate_ok(state, vertex, image)) {
+                candidates++;
+            }
+        }
+
+        if (candidates < best_candidates) {
+            best_vertex = vertex;
+            best_candidates = candidates;
+            if (best_candidates == 0) {
+                break;
+            }
+        }
+    }
+
+    *num_candidates = best_candidates;
+    return best_vertex;
+}
+
+bool automorphism_search_dfs(automorphism_search_t* state) {
+    if (state->calls >= state->call_limit) {
+        return false;
+    }
+    state->calls++;
+
+    cycle_index_t num_candidates;
+    vertex_t domain_vertex = automorphism_choose_domain(state, &num_candidates);
+    if (domain_vertex == MAX_VERTICES) {
+        if (!automorphism_valid(state)) {
+            return false;
+        }
+        memcpy(state->result, state->map, state->num_vertices * sizeof(vertex_t));
+        return true;
+    }
+    if (num_candidates == 0) {
+        return false;
+    }
+
+    for (vertex_t image_vertex = 0; image_vertex < state->num_vertices; image_vertex++) {
+        if (!automorphism_candidate_ok(state, domain_vertex, image_vertex)) {
+            continue;
+        }
+
+        automorphism_assign(state, domain_vertex, image_vertex);
+        if (automorphism_search_dfs(state)) {
+            return true;
+        }
+        automorphism_unassign(state, domain_vertex, image_vertex);
+    }
+
+    return false;
+}
+
+bool automorphism_find_one(vertex_t num_vertices, adj_t adjacency_list, vertex_t* distances,
+                           uint64_t* vertex_signatures, vertex_t* fixed_domain,
+                           vertex_t* fixed_image, vertex_t fixed_count,
+                           uint64_t call_limit, vertex_t* result, uint64_t* calls) {
+    automorphism_search_t state = {
+        .num_vertices = num_vertices,
+        .adjacency_list = adjacency_list,
+        .distances = distances,
+        .vertex_signatures = vertex_signatures,
+        .map = (vertex_t*)malloc(num_vertices * sizeof(vertex_t)),
+        .inverse_map = (vertex_t*)malloc(num_vertices * sizeof(vertex_t)),
+        .result = result,
+        .calls = 0,
+        .call_limit = call_limit,
+    };
+    assert(state.map != NULL && state.inverse_map != NULL,
+           "Error allocating memory for automorphism search\n");
+    for (vertex_t i = 0; i < num_vertices; i++) {
+        state.map[i] = MAX_VERTICES;
+        state.inverse_map[i] = MAX_VERTICES;
+    }
+
+    bool fixed_ok = true;
+    for (vertex_t i = 0; i < fixed_count; i++) {
+        if (!automorphism_assign_fixed(&state, fixed_domain[i], fixed_image[i])) {
+            fixed_ok = false;
+            break;
+        }
+    }
+
+    bool found = fixed_ok && automorphism_search_dfs(&state);
+    *calls = state.calls;
+    free(state.map);
+    free(state.inverse_map);
+    return found;
+}
+
+void automorphism_generate(vertex_t num_vertices, adj_t adjacency_list,
+                           automorphism_list_t* automorphisms) {
+    automorphism_list_free(automorphisms);
+    automorphisms->num_vertices = num_vertices;
+    automorphisms->capacity = AUTOMORPHISM_LIMIT;
+    automorphisms->count = 0;
+    automorphisms->maps =
+        (vertex_t*)malloc((size_t)AUTOMORPHISM_LIMIT *
+                          (num_vertices == 0 ? 1 : num_vertices) * sizeof(vertex_t));
+    assert(automorphisms->maps != NULL,
+           "Error allocating memory for graph automorphisms\n");
+
+    if (num_vertices == 0 || num_vertices > AUTOMORPHISM_VERTEX_LIMIT ||
+        AUTOMORPHISM_LIMIT == 0) {
+        return;
+    }
+
+    vertex_t* distances = automorphism_distances_generate(num_vertices, adjacency_list);
+    uint64_t* vertex_signatures =
+        automorphism_vertex_signatures_generate(num_vertices, distances);
+    vertex_t* result = (vertex_t*)malloc(num_vertices * sizeof(vertex_t));
+    assert(result != NULL, "Error allocating memory for an automorphism result\n");
+
+    uint64_t total_calls = 0;
+    vertex_t root = 0;
+    vertex_t root_neighbor = MAX_VERTICES;
+    vertex_t* root_neighbors = adj_get_neighbors(adjacency_list, root);
+    for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
+        if (root_neighbors[i] != MAX_VERTICES) {
+            root_neighbor = root_neighbors[i];
+            break;
+        }
+    }
+
+    for (vertex_t target = 0; target < num_vertices &&
+                                automorphisms->count < automorphisms->capacity &&
+                                total_calls < AUTOMORPHISM_TOTAL_CALL_LIMIT;
+         target++) {
+        if (vertex_signatures[root] != vertex_signatures[target]) {
+            continue;
+        }
+        vertex_t fixed_domain[1] = {root};
+        vertex_t fixed_image[1] = {target};
+        uint64_t calls;
+        uint64_t remaining = AUTOMORPHISM_TOTAL_CALL_LIMIT - total_calls;
+        uint64_t call_limit =
+            remaining < AUTOMORPHISM_SEED_CALL_LIMIT ? remaining : AUTOMORPHISM_SEED_CALL_LIMIT;
+        if (automorphism_find_one(num_vertices, adjacency_list, distances, vertex_signatures,
+                                  fixed_domain, fixed_image, 1, call_limit, result, &calls)) {
+            automorphism_list_add_if_new(automorphisms, result);
+        }
+        total_calls += calls;
+    }
+
+    if (root_neighbor != MAX_VERTICES) {
+        for (vertex_t target = 0; target < num_vertices &&
+                                    automorphisms->count < automorphisms->capacity &&
+                                    total_calls < AUTOMORPHISM_TOTAL_CALL_LIMIT;
+             target++) {
+            if (vertex_signatures[root] != vertex_signatures[target]) {
+                continue;
+            }
+            vertex_t* target_neighbors = adj_get_neighbors(adjacency_list, target);
+            for (degree_t i = 0; i < VERTEX_DEGREE &&
+                                     automorphisms->count < automorphisms->capacity &&
+                                     total_calls < AUTOMORPHISM_TOTAL_CALL_LIMIT;
+                 i++) {
+                vertex_t target_neighbor = target_neighbors[i];
+                if (target_neighbor == MAX_VERTICES ||
+                    vertex_signatures[root_neighbor] != vertex_signatures[target_neighbor]) {
+                    continue;
+                }
+
+                vertex_t fixed_domain[2] = {root, root_neighbor};
+                vertex_t fixed_image[2] = {target, target_neighbor};
+                uint64_t calls;
+                uint64_t remaining = AUTOMORPHISM_TOTAL_CALL_LIMIT - total_calls;
+                uint64_t call_limit = remaining < AUTOMORPHISM_SEED_CALL_LIMIT
+                                          ? remaining
+                                          : AUTOMORPHISM_SEED_CALL_LIMIT;
+                if (automorphism_find_one(num_vertices, adjacency_list, distances,
+                                          vertex_signatures, fixed_domain, fixed_image, 2,
+                                          call_limit, result, &calls)) {
+                    automorphism_list_add_if_new(automorphisms, result);
+                }
+                total_calls += calls;
+            }
+        }
+    }
+
+    if (PRINT_PROGRESS && automorphisms->count > 0) {
+        fprintf(stderr,
+                "\033[2K\rFound %" PRIcycle_index_t
+                " graph automorphism(s) for symmetry pruning.\n",
+                automorphisms->count);
+    }
+
+    free(result);
+    free(distances);
+    free(vertex_signatures);
 }
 
 uint32_t directed_edge_key(vertex_t start_vertex, vertex_t end_vertex) {
@@ -2678,4 +3133,140 @@ cycle_index_t* cbe_get_cycle_indices(cbe_t cycles_by_edge, cycle_index_t max_cyc
                         (max_cycles_per_edge + 1)];
     *num_cycles = row[0];
     return &row[1];
+}
+
+cycle_index_t cycle_image_index(cycles_t cycles, cycle_length_t max_cycle_length,
+                                cbe_t cycles_by_edge, cycle_index_t max_cycles_per_edge,
+                                cycle_index_t cycle_index, vertex_t* automorphism,
+                                vertex_t* image) {
+    cycle_length_t cycle_length;
+    vertex_t* cycle = cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
+    vertex_t min_vertex = MAX_VERTICES;
+    for (cycle_length_t i = 0; i < cycle_length; i++) {
+        image[i] = automorphism[cycle[i]];
+        if (image[i] < min_vertex) {
+            min_vertex = image[i];
+        }
+    }
+
+    for (cycle_length_t start = 0; start < cycle_length; start++) {
+        if (image[start] != min_vertex) {
+            continue;
+        }
+
+        cycle_index_t num_cycles_for_edge;
+        cycle_index_t* cycle_indices = cbe_get_cycle_indices(
+            cycles_by_edge, max_cycles_per_edge, image[start],
+            image[(start + 1) % cycle_length], &num_cycles_for_edge);
+        for (cycle_index_t i = 0; i < num_cycles_for_edge; i++) {
+            cycle_index_t candidate_index = cycle_indices[i];
+            cycle_length_t candidate_length;
+            vertex_t* candidate =
+                cycle_get(cycles, max_cycle_length, candidate_index, &candidate_length);
+            if (candidate_length != cycle_length) {
+                continue;
+            }
+
+            bool matches = true;
+            for (cycle_length_t j = 0; j < cycle_length; j++) {
+                if (candidate[j] != image[(start + j) % cycle_length]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                return candidate_index;
+            }
+        }
+    }
+
+    return MAX_CYCLES;
+}
+
+cycle_index_t* start_cycles_prune_by_symmetry(cycles_t cycles,
+                                              cycle_length_t max_cycle_length,
+                                              cycle_index_t num_cycles,
+                                              cbe_t cycles_by_edge,
+                                              cycle_index_t max_cycles_per_edge,
+                                              cycle_index_t* raw_start_cycles,
+                                              cycle_index_t raw_start_count,
+                                              cycle_index_t* pruned_start_count) {
+    // Every valid fitting contains at least one raw start cycle. If an
+    // automorphism maps one raw start cycle to another, searching the earlier
+    // representative also searches an isomorphic fitting.
+    cycle_index_t* start_cycles =
+        (cycle_index_t*)malloc((raw_start_count == 0 ? 1 : raw_start_count) *
+                               sizeof(cycle_index_t));
+    assert(start_cycles != NULL, "Error allocating memory for pruned start cycles\n");
+    *pruned_start_count = 0;
+
+    if (raw_start_count == 0) {
+        return start_cycles;
+    }
+    if (graph_automorphisms.count == 0 || raw_start_count == 1) {
+        memcpy(start_cycles, raw_start_cycles, raw_start_count * sizeof(cycle_index_t));
+        *pruned_start_count = raw_start_count;
+        return start_cycles;
+    }
+
+    bool* is_start_cycle = (bool*)calloc((num_cycles == 0 ? 1 : num_cycles), sizeof(bool));
+    bool* start_cycle_seen = (bool*)calloc((num_cycles == 0 ? 1 : num_cycles), sizeof(bool));
+    cycle_index_t* queue =
+        (cycle_index_t*)malloc(raw_start_count * sizeof(cycle_index_t));
+    vertex_t* image = (vertex_t*)malloc((max_cycle_length == 0 ? 1 : max_cycle_length) *
+                                        sizeof(vertex_t));
+    assert(is_start_cycle != NULL && start_cycle_seen != NULL && queue != NULL &&
+               image != NULL,
+           "Error allocating memory for start cycle symmetry pruning\n");
+    for (cycle_index_t i = 0; i < raw_start_count; i++) {
+        is_start_cycle[raw_start_cycles[i]] = true;
+    }
+
+    for (cycle_index_t i = 0; i < raw_start_count; i++) {
+        cycle_index_t cycle_index = raw_start_cycles[i];
+        if (start_cycle_seen[cycle_index]) {
+            continue;
+        }
+
+        start_cycles[*pruned_start_count] = cycle_index;
+        (*pruned_start_count)++;
+
+        cycle_index_t head = 0;
+        cycle_index_t tail = 0;
+        start_cycle_seen[cycle_index] = true;
+        queue[tail++] = cycle_index;
+        while (head < tail) {
+            cycle_index_t current = queue[head++];
+            for (cycle_index_t automorphism_index = 0;
+                 automorphism_index < graph_automorphisms.count; automorphism_index++) {
+                vertex_t* automorphism =
+                    &graph_automorphisms.maps[automorphism_index *
+                                               graph_automorphisms.num_vertices];
+                cycle_index_t image_index =
+                    cycle_image_index(cycles, max_cycle_length, cycles_by_edge,
+                                      max_cycles_per_edge, current, automorphism, image);
+                if (image_index == MAX_CYCLES || !is_start_cycle[image_index] ||
+                    start_cycle_seen[image_index]) {
+                    continue;
+                }
+
+                start_cycle_seen[image_index] = true;
+                queue[tail++] = image_index;
+            }
+        }
+    }
+
+    if (PRINT_PROGRESS && *pruned_start_count < raw_start_count) {
+        fprintf(stderr,
+                "\rSymmetry pruning reduced start cycles from %" PRIcycle_index_t
+                " to %" PRIcycle_index_t ".\n",
+                raw_start_count, *pruned_start_count);
+        show_progress(0.0);
+    }
+
+    free(is_start_cycle);
+    free(start_cycle_seen);
+    free(queue);
+    free(image);
+    return start_cycles;
 }
