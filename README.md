@@ -138,7 +138,7 @@ The genus for various Johnson graphs generated using Mathematica follows.
 \#                                                                               | v    | e     | genus      | time (s) | MG time (s)
 -------------------------------------------------------------------------------- | ---- | ----- | ---------- | -------- | -----------
 [Johnson (5, 2)](CalcGenus/adjacency_lists/Johnson5-2.txt)                       | 10   | 30    | 2          | 0.003    | 0.009
-[Johnson (6, 2)](CalcGenus/adjacency_lists/Johnson6-2.txt)                       | 15   | 60    | 5          | 456.91   | hours
+[Johnson (6, 2)](CalcGenus/adjacency_lists/Johnson6-2.txt)                       | 15   | 60    | 5          | 414.38   | hours
 [Johnson (6, 3)](CalcGenus/adjacency_lists/Johnson6-3.txt)                       | 20   | 90    | [7, 9]     | hours    | hours
 [Johnson (8, 4)](CalcGenus/adjacency_lists/Johnson8-4.txt)                       | 70   | 560   | [60,238]   | days     | too big for bit operations
 [Johnson (9, 4)](CalcGenus/adjacency_lists/Johnson9-4.txt)                       | 70   | 560   | [148,558]  | days     | too big for bit operations
