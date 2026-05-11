@@ -5,11 +5,14 @@
 // run`. Works better for regular graphs (preferably of low degree).
 
 #include <inttypes.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
+#include <unistd.h>
 
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
@@ -41,6 +44,8 @@
 #define LENGTH_COMPOSITION_WORK_LIMIT 25000000ULL
 #define LENGTH_FEASIBILITY_CACHE_LIMIT 10000000ULL
 #define SHORTEST_PACKING_CALL_LIMIT 1000000ULL
+#define START_BRANCH_THREAD_CAP 8
+#define START_BRANCH_PARALLEL_MIN_CYCLES 750
 // Symmetry discovery is opportunistic: found automorphisms are used for sound
 // pruning, but large graphs skip discovery when it costs more than it saves.
 // TODO: find a proper criteria for when/how much symmetry pruning makes sense. 
@@ -102,6 +107,36 @@ typedef struct {
     uint64_t calls;
     uint64_t call_limit;
 } automorphism_search_t;
+typedef struct {
+    vertex_t num_vertices;
+    edge_t num_edges;
+    adj_t adjacency_list;
+    cycle_length_t max_cycle_length;
+    cycle_index_t num_cycles;
+    cycles_t cycles;
+    cycle_index_t max_cycles_per_vertex;
+    cbv_t cycles_by_vertex;
+    cycle_index_t max_cycles_per_edge;
+    cbe_t cycles_by_edge;
+    cycle_index_t* start_cycles;
+    cycle_index_t num_start_cycles;
+    cycle_index_t* start_cycle_order;
+    cycle_index_t initial_cycles_to_use;
+    cycle_index_t max_used_cycles;
+    cycle_index_t initial_max_fit;
+    bool* initial_directed_edge_remaining;
+    length_feasibility_t length_feasibility_template;
+    uint64_t length_cache_entries;
+    bool require_max_cycle_if_start_is_shorter;
+    pthread_mutex_t mutex;
+    cycle_index_t next_start_index;
+    cycle_index_t completed_start_cycles;
+    cycle_index_t best_max_fit;
+    uint64_t total_search_calls;
+    bool solution_found;
+    bool* solution_used_cycles;
+    atomic_bool stop_requested;
+} start_branch_search_t;
 
 // macros
 // assert(condition, message, ...fmt_args)
@@ -117,7 +152,7 @@ static vertex_t start_index = 0;
 static degree_t vertex_degree = 3;
 static cycle_index_t pre_genus_lower_bound = 0;
 static char* adj_filename = NULL;
-static cycle_index_t num_edges_remaining = 0;
+static _Thread_local cycle_index_t num_edges_remaining = 0;
 static cycle_length_t smallest_cycle_length;
 static bool output_to_stdout = false;
 static bool progress_bar_newline = false;
@@ -126,18 +161,20 @@ static degree_t* initial_vertex_uses = NULL;
 static adj_t full_adjacency_list = NULL;
 static cycle_index_t num_directed_edges = 0;
 static cycle_index_t* directed_edge_ids = NULL;
-static bool* directed_edge_remaining = NULL;
+static _Thread_local bool* directed_edge_remaining = NULL;
 static uint32_t* directed_edge_lookup_keys = NULL;
 static cycle_index_t* directed_edge_lookup_ids = NULL;
 static cycle_index_t directed_edge_lookup_capacity = 0;
-static bool* transitions_used = NULL;
-static size_t transitions_used_size = 0;
-static cycle_index_t* cycle_edge_conflicts = NULL;
-static vertex_t* rotation_next = NULL;
-static vertex_t* rotation_prev = NULL;
-static degree_t* rotation_pair_count = NULL;
-static size_t rotation_state_size = 0;
+static _Thread_local bool* transitions_used = NULL;
+static _Thread_local size_t transitions_used_size = 0;
+static _Thread_local cycle_index_t* cycle_edge_conflicts = NULL;
+static _Thread_local vertex_t* rotation_next = NULL;
+static _Thread_local vertex_t* rotation_prev = NULL;
+static _Thread_local degree_t* rotation_pair_count = NULL;
+static _Thread_local size_t rotation_state_size = 0;
 static automorphism_list_t graph_automorphisms = {0, 0, 0, NULL};
+static _Thread_local atomic_bool* search_stop_requested = NULL;
+static pthread_mutex_t output_file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // auxiliary data structures
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
@@ -213,6 +250,14 @@ bool cycle_search_candidate_usable(bool* used_cycles, degree_t* vertex_uses,
                                    cycle_index_t* next_required_cycles_to_use);
 bool cycle_transitions_good(vertex_t* cycle, cycle_length_t cycle_length);
 void cycle_set_transitions(vertex_t* cycle, cycle_length_t cycle_length, bool used);
+unsigned get_start_branch_thread_count(cycle_index_t num_start_cycles,
+                                       cycle_index_t num_cycles);
+void precompute_start_cycle_order(cycle_index_t* start_cycle_order,
+                                  cycle_index_t* start_cycles,
+                                  cycle_index_t num_start_cycles);
+bool search_start_cycles_parallel(start_branch_search_t* context,
+                                  unsigned num_threads);
+void* start_branch_worker(void* arg);
 void rotation_state_init(vertex_t num_vertices);
 void rotation_state_clear(vertex_t num_vertices);
 void rotation_state_free(void);
@@ -1131,49 +1176,47 @@ int main(void) {
             cycles, cur_max_cycle_length, num_cycles, cycles_by_edge, max_cycles_per_edge,
             raw_start_cycles, raw_start_count, &num_start_cycles);
         free(raw_start_cycles);
+        precompute_start_cycle_order(start_cycle_order, start_cycles, num_start_cycles);
 
-        cycle_index_t start_cycles_seen = 0;
-        for (cycle_index_t start_i = 0; start_i < num_start_cycles; start_i++) {
-            cycle_index_t c = start_cycles[start_i];
-            cycle_length_t cycle_length;
-            cycles_t cycle = cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
-            memset(transitions_used, 0, transitions_used_size * sizeof(bool));
-            cycle_edge_conflicts_clear(num_cycles);
-            rotation_state_clear(num_vertices);
-            start_cycle_order[c] = start_cycles_seen;
-            start_cycles_seen++;
-            cycle_index_t current_start_cycle_order = start_cycle_order[c];
-            if (VERTEX_DEGREE > 2 && !cycle_transitions_good(cycle, cycle_length)) {
-                show_progress(start_cycles_seen / (double)num_start_cycles);
-                continue;
+        unsigned num_start_threads =
+            get_start_branch_thread_count(num_start_cycles, num_cycles);
+        if (num_start_threads > 1) {
+            if (PRINT_PROGRESS) {
+                fprintf(stderr,
+                        "\nSearching start-cycle branches with %u worker threads.\n",
+                        num_start_threads);
             }
-            if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
-                show_progress(start_cycles_seen / (double)num_start_cycles);
-                continue;
-            }
-
-            memcpy(vertex_uses, initial_vertex_uses, num_vertices * sizeof(degree_t));
-
-            // mark start cycle as used
-            used_cycles[c] = true;
-            cycle_set_transitions(cycle, cycle_length, true);
-            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
-                                     cycles_by_edge, true);
-            for (cycle_length_t i = 0; i < cycle_length; i++) {
-                adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
-
-                // mark cycle vertices as used
-                vertex_uses[cycle[i]] += 1;
-            }
-
-            if (search(genus_lower_bound_implied_fit - 1, genus_lower_bound_implied_fit,
-                       used_cycles, vertex_uses, &max_fit, &num_search_calls, num_vertices,
-                       num_edges, adjacency_list, cur_max_cycle_length, num_cycles, cycles,
-                       max_cycles_per_vertex, cycles_by_vertex, max_cycles_per_edge,
-                       cycles_by_edge, start_cycle_order,
-                       current_start_cycle_order, &length_feasibility,
-                       same_target_fit && cycle_length != cur_max_cycle_length ? 1 : 0)) {
-                // Success!
+            bool* solution_used_cycles = (bool*)calloc(num_cycles, sizeof(bool));
+            assert(solution_used_cycles != NULL,
+                   "Error allocating memory for the parallel search solution\n");
+            start_branch_search_t context = {
+                .num_vertices = num_vertices,
+                .num_edges = num_edges,
+                .adjacency_list = adjacency_list,
+                .max_cycle_length = cur_max_cycle_length,
+                .num_cycles = num_cycles,
+                .cycles = cycles,
+                .max_cycles_per_vertex = max_cycles_per_vertex,
+                .cycles_by_vertex = cycles_by_vertex,
+                .max_cycles_per_edge = max_cycles_per_edge,
+                .cycles_by_edge = cycles_by_edge,
+                .start_cycles = start_cycles,
+                .num_start_cycles = num_start_cycles,
+                .start_cycle_order = start_cycle_order,
+                .initial_cycles_to_use = genus_lower_bound_implied_fit - 1,
+                .max_used_cycles = genus_lower_bound_implied_fit,
+                .initial_max_fit = max_fit,
+                .initial_directed_edge_remaining = directed_edge_remaining,
+                .length_feasibility_template = length_feasibility,
+                .length_cache_entries = length_cache_entries,
+                .require_max_cycle_if_start_is_shorter = same_target_fit,
+                .solution_used_cycles = solution_used_cycles,
+            };
+            if (search_start_cycles_parallel(&context, num_start_threads)) {
+                num_search_calls += context.total_search_calls;
+                max_fit = context.best_max_fit;
+                memcpy(used_cycles, solution_used_cycles, num_cycles * sizeof(bool));
+                free(solution_used_cycles);
                 show_progress(1.0);
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
                               num_cycles, used_cycles, cycles, cur_max_cycle_length);
@@ -1195,18 +1238,87 @@ int main(void) {
                 fclose(output_file);
                 return 0;
             }
-
-            // mark start cycle as unused
-            used_cycles[c] = false;
-            cycle_set_transitions(cycle, cycle_length, false);
-            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
-                                     cycles_by_edge, false);
-            cycle_remove_rotation_system(cycle, cycle_length);
-            for (cycle_length_t i = 0; i < cycle_length; i++) {
-                adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+            num_search_calls += context.total_search_calls;
+            if (context.best_max_fit > max_fit) {
+                max_fit = context.best_max_fit;
             }
+            free(solution_used_cycles);
+        } else {
+            cycle_index_t start_cycles_seen = 0;
+            for (cycle_index_t start_i = 0; start_i < num_start_cycles; start_i++) {
+                cycle_index_t c = start_cycles[start_i];
+                cycle_length_t cycle_length;
+                cycles_t cycle = cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
+                memset(transitions_used, 0, transitions_used_size * sizeof(bool));
+                cycle_edge_conflicts_clear(num_cycles);
+                rotation_state_clear(num_vertices);
+                start_cycles_seen++;
+                cycle_index_t current_start_cycle_order = start_cycle_order[c];
+                if (VERTEX_DEGREE > 2 && !cycle_transitions_good(cycle, cycle_length)) {
+                    show_progress(start_cycles_seen / (double)num_start_cycles);
+                    continue;
+                }
+                if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
+                    show_progress(start_cycles_seen / (double)num_start_cycles);
+                    continue;
+                }
 
-            show_progress(start_cycles_seen / (double)num_start_cycles);
+                memcpy(vertex_uses, initial_vertex_uses, num_vertices * sizeof(degree_t));
+
+                // mark start cycle as used
+                used_cycles[c] = true;
+                cycle_set_transitions(cycle, cycle_length, true);
+                cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                         cycles_by_edge, true);
+                for (cycle_length_t i = 0; i < cycle_length; i++) {
+                    adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+
+                    // mark cycle vertices as used
+                    vertex_uses[cycle[i]] += 1;
+                }
+
+                if (search(genus_lower_bound_implied_fit - 1, genus_lower_bound_implied_fit,
+                           used_cycles, vertex_uses, &max_fit, &num_search_calls, num_vertices,
+                           num_edges, adjacency_list, cur_max_cycle_length, num_cycles, cycles,
+                           max_cycles_per_vertex, cycles_by_vertex, max_cycles_per_edge,
+                           cycles_by_edge, start_cycle_order,
+                           current_start_cycle_order, &length_feasibility,
+                           same_target_fit && cycle_length != cur_max_cycle_length ? 1 : 0)) {
+                    // Success!
+                    show_progress(1.0);
+                    show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
+                                  num_cycles, used_cycles, cycles, cur_max_cycle_length);
+                    graph_free(adjacency_list);
+                    free(vertex_uses);
+                    free(cycles);
+                    free(cycles_by_vertex);
+                    free(cycles_by_edge);
+                    free(used_cycles);
+                    free(start_cycle_order);
+                    free(cycle_length_available);
+                    free(length_cache_without_required);
+                    free(length_cache_with_required);
+                    free(start_cycles);
+                    cycle_edge_conflicts_free();
+                    rotation_state_free();
+                    free(transitions_used);
+                    transitions_used = NULL;
+                    fclose(output_file);
+                    return 0;
+                }
+
+                // mark start cycle as unused
+                used_cycles[c] = false;
+                cycle_set_transitions(cycle, cycle_length, false);
+                cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                         cycles_by_edge, false);
+                cycle_remove_rotation_system(cycle, cycle_length);
+                for (cycle_length_t i = 0; i < cycle_length; i++) {
+                    adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+                }
+
+                show_progress(start_cycles_seen / (double)num_start_cycles);
+            }
         }
 
         show_progress(1.0);
@@ -1332,6 +1444,7 @@ int main(void) {
     cycle_index_t* start_cycle_order = (cycle_index_t*)malloc(num_cycles * sizeof(cycle_index_t));
     assert(start_cycle_order != NULL, "Error allocating memory for the start cycle order\n");
     memset(start_cycle_order, 0xff, num_cycles * sizeof(cycle_index_t));
+    precompute_start_cycle_order(start_cycle_order, start_cycles, num_start_cycles);
 
     while (FIND_FULL_CYCLE_FITTING ? genus_lower_bound <= genus_upper_bound
                                    : genus_lower_bound < genus_upper_bound) {
@@ -1372,47 +1485,45 @@ int main(void) {
 
         // Every fitting uses the chosen directed edge exactly once, so it is
         // enough to try the cycles that contain that edge.
-        cycle_index_t start_cycles_seen = 0;
-        for (cycle_index_t start_i = 0; start_i < num_start_cycles; start_i++) {
-            cycle_index_t c = start_cycles[start_i];
-            cycle_length_t cycle_length;
-            cycles_t cycle = cycle_get(cycles, cycles_max_cycle_length, c, &cycle_length);
-            memset(transitions_used, 0, transitions_used_size * sizeof(bool));
-            cycle_edge_conflicts_clear(num_cycles);
-            rotation_state_clear(num_vertices);
-            start_cycle_order[c] = start_cycles_seen;
-            start_cycles_seen++;
-            cycle_index_t current_start_cycle_order = start_cycle_order[c];
-            if (VERTEX_DEGREE > 2 && !cycle_transitions_good(cycle, cycle_length)) {
-                show_progress(start_cycles_seen / (double)num_start_cycles);
-                continue;
+        unsigned num_start_threads =
+            get_start_branch_thread_count(num_start_cycles, num_cycles);
+        if (num_start_threads > 1) {
+            if (PRINT_PROGRESS) {
+                fprintf(stderr,
+                        "\nSearching start-cycle branches with %u worker threads.\n",
+                        num_start_threads);
             }
-            if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
-                show_progress(start_cycles_seen / (double)num_start_cycles);
-                continue;
-            }
-
-            memcpy(vertex_uses, initial_vertex_uses, num_vertices * sizeof(degree_t));
-
-            // mark start cycle as used
-            used_cycles[c] = true;
-            cycle_set_transitions(cycle, cycle_length, true);
-            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
-                                     cycles_by_edge, true);
-            for (cycle_length_t i = 0; i < cycle_length; i++) {
-                adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
-
-                // mark cycle vertices as used
-                vertex_uses[cycle[i]] += 1;
-            }
-
-            if (search(genus_lower_bound_implied_fit - 1, genus_lower_bound_implied_fit,
-                       used_cycles, vertex_uses, &max_fit, &num_search_calls, num_vertices,
-                       num_edges, adjacency_list, cycles_max_cycle_length, num_cycles, cycles,
-                       max_cycles_per_vertex, cycles_by_vertex, max_cycles_per_edge,
-                       cycles_by_edge, start_cycle_order,
-                       current_start_cycle_order, &length_feasibility, 0)) {
-                // Success!
+            bool* solution_used_cycles = (bool*)calloc(num_cycles, sizeof(bool));
+            assert(solution_used_cycles != NULL,
+                   "Error allocating memory for the parallel search solution\n");
+            start_branch_search_t context = {
+                .num_vertices = num_vertices,
+                .num_edges = num_edges,
+                .adjacency_list = adjacency_list,
+                .max_cycle_length = cycles_max_cycle_length,
+                .num_cycles = num_cycles,
+                .cycles = cycles,
+                .max_cycles_per_vertex = max_cycles_per_vertex,
+                .cycles_by_vertex = cycles_by_vertex,
+                .max_cycles_per_edge = max_cycles_per_edge,
+                .cycles_by_edge = cycles_by_edge,
+                .start_cycles = start_cycles,
+                .num_start_cycles = num_start_cycles,
+                .start_cycle_order = start_cycle_order,
+                .initial_cycles_to_use = genus_lower_bound_implied_fit - 1,
+                .max_used_cycles = genus_lower_bound_implied_fit,
+                .initial_max_fit = max_fit,
+                .initial_directed_edge_remaining = directed_edge_remaining,
+                .length_feasibility_template = length_feasibility,
+                .length_cache_entries = length_cache_entries,
+                .require_max_cycle_if_start_is_shorter = false,
+                .solution_used_cycles = solution_used_cycles,
+            };
+            if (search_start_cycles_parallel(&context, num_start_threads)) {
+                num_search_calls += context.total_search_calls;
+                max_fit = context.best_max_fit;
+                memcpy(used_cycles, solution_used_cycles, num_cycles * sizeof(bool));
+                free(solution_used_cycles);
                 show_progress(1.0);
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
                               num_cycles, used_cycles, cycles, cycles_max_cycle_length);
@@ -1434,18 +1545,86 @@ int main(void) {
                 fclose(output_file);
                 return 0;
             }
-
-            // mark start cycle as unused
-            used_cycles[c] = false;
-            cycle_set_transitions(cycle, cycle_length, false);
-            cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
-                                     cycles_by_edge, false);
-            cycle_remove_rotation_system(cycle, cycle_length);
-            for (cycle_length_t i = 0; i < cycle_length; i++) {
-                adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+            num_search_calls += context.total_search_calls;
+            if (context.best_max_fit > max_fit) {
+                max_fit = context.best_max_fit;
             }
+            free(solution_used_cycles);
+        } else {
+            cycle_index_t start_cycles_seen = 0;
+            for (cycle_index_t start_i = 0; start_i < num_start_cycles; start_i++) {
+                cycle_index_t c = start_cycles[start_i];
+                cycle_length_t cycle_length;
+                cycles_t cycle = cycle_get(cycles, cycles_max_cycle_length, c, &cycle_length);
+                memset(transitions_used, 0, transitions_used_size * sizeof(bool));
+                cycle_edge_conflicts_clear(num_cycles);
+                rotation_state_clear(num_vertices);
+                start_cycles_seen++;
+                cycle_index_t current_start_cycle_order = start_cycle_order[c];
+                if (VERTEX_DEGREE > 2 && !cycle_transitions_good(cycle, cycle_length)) {
+                    show_progress(start_cycles_seen / (double)num_start_cycles);
+                    continue;
+                }
+                if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
+                    show_progress(start_cycles_seen / (double)num_start_cycles);
+                    continue;
+                }
 
-            show_progress(start_cycles_seen / (double)num_start_cycles);
+                memcpy(vertex_uses, initial_vertex_uses, num_vertices * sizeof(degree_t));
+
+                // mark start cycle as used
+                used_cycles[c] = true;
+                cycle_set_transitions(cycle, cycle_length, true);
+                cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                         cycles_by_edge, true);
+                for (cycle_length_t i = 0; i < cycle_length; i++) {
+                    adj_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+
+                    // mark cycle vertices as used
+                    vertex_uses[cycle[i]] += 1;
+                }
+
+                if (search(genus_lower_bound_implied_fit - 1, genus_lower_bound_implied_fit,
+                           used_cycles, vertex_uses, &max_fit, &num_search_calls, num_vertices,
+                           num_edges, adjacency_list, cycles_max_cycle_length, num_cycles, cycles,
+                           max_cycles_per_vertex, cycles_by_vertex, max_cycles_per_edge,
+                           cycles_by_edge, start_cycle_order,
+                           current_start_cycle_order, &length_feasibility, 0)) {
+                    // Success!
+                    show_progress(1.0);
+                    show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
+                                  num_cycles, used_cycles, cycles, cycles_max_cycle_length);
+                    graph_free(adjacency_list);
+                    free(vertex_uses);
+                    free(cycles);
+                    free(cycles_by_vertex);
+                    free(cycles_by_edge);
+                    free(used_cycles);
+                    free(start_cycle_order);
+                    free(start_cycles);
+                    free(cycle_length_available);
+                    free(length_cache_without_required);
+                    free(length_cache_with_required);
+                    cycle_edge_conflicts_free();
+                    rotation_state_free();
+                    free(transitions_used);
+                    transitions_used = NULL;
+                    fclose(output_file);
+                    return 0;
+                }
+
+                // mark start cycle as unused
+                used_cycles[c] = false;
+                cycle_set_transitions(cycle, cycle_length, false);
+                cycle_set_edge_conflicts(cycle, cycle_length, max_cycles_per_edge,
+                                         cycles_by_edge, false);
+                cycle_remove_rotation_system(cycle, cycle_length);
+                for (cycle_length_t i = 0; i < cycle_length; i++) {
+                    adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
+                }
+
+                show_progress(start_cycles_seen / (double)num_start_cycles);
+            }
         }
 
         free(length_cache_without_required);
@@ -1550,6 +1729,9 @@ bool search(cycle_index_t cycles_to_use,                    // state
             cycle_index_t* start_cycle_order, cycle_index_t current_start_cycle_order,
             length_feasibility_t* length_feasibility,
             cycle_index_t required_cycles_to_use) {
+    if (search_stop_requested != NULL && atomic_load(search_stop_requested)) {
+        return false;
+    }
     (*num_search_calls)++;
 
     // Pick the tightest uncovered directed-edge column to explore, DLX style.
@@ -1659,6 +1841,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
 
         if (all_used) {
             *max_fit = max_used_cycles - cycles_to_use;
+            pthread_mutex_lock(&output_file_mutex);
             fprintf(output_file,
                     "New max fit: %" PRIcycle_index_t " (about to try vertex %" PRIvertex_t ")\n",
                     *max_fit, vertex);
@@ -1674,6 +1857,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
             }
             fprintf(output_file, "\n");
             fflush(output_file);
+            pthread_mutex_unlock(&output_file_mutex);
         }
     }
 
@@ -1968,6 +2152,205 @@ void cycle_set_transitions(vertex_t* cycle, cycle_length_t cycle_length, bool us
             ((size_t)center * VERTEX_DEGREE + prev_index) * VERTEX_DEGREE + next_index;
         transitions_used[transition_index] = used;
     }
+}
+
+unsigned get_start_branch_thread_count(cycle_index_t num_start_cycles,
+                                       cycle_index_t num_cycles) {
+    if (num_start_cycles < 4) {
+        return 1;
+    }
+
+    char* thread_env = getenv("CG_THREADS");
+    if (thread_env == NULL || thread_env[0] == '\0') {
+        thread_env = getenv("THREADS");
+    }
+    bool explicit_thread_count = thread_env != NULL && thread_env[0] != '\0';
+    unsigned threads = 0;
+    if (explicit_thread_count) {
+        char* end = NULL;
+        unsigned long parsed = strtoul(thread_env, &end, 10);
+        if (end != thread_env && parsed > 0) {
+            threads = parsed > START_BRANCH_THREAD_CAP ? START_BRANCH_THREAD_CAP
+                                                       : (unsigned)parsed;
+        }
+    } else {
+        if (num_cycles < START_BRANCH_PARALLEL_MIN_CYCLES) {
+            return 1;
+        }
+        long online_processors = sysconf(_SC_NPROCESSORS_ONLN);
+        threads = online_processors > 0 ? (unsigned)online_processors : 1;
+        if (threads > START_BRANCH_THREAD_CAP) {
+            threads = START_BRANCH_THREAD_CAP;
+        }
+    }
+
+    if (threads < 2) {
+        return 1;
+    }
+    if (threads > num_start_cycles) {
+        threads = num_start_cycles;
+    }
+    return threads;
+}
+
+void precompute_start_cycle_order(cycle_index_t* start_cycle_order,
+                                  cycle_index_t* start_cycles,
+                                  cycle_index_t num_start_cycles) {
+    for (cycle_index_t i = 0; i < num_start_cycles; i++) {
+        start_cycle_order[start_cycles[i]] = i;
+    }
+}
+
+bool search_start_cycles_parallel(start_branch_search_t* context,
+                                  unsigned num_threads) {
+    context->next_start_index = 0;
+    context->completed_start_cycles = 0;
+    context->best_max_fit = context->initial_max_fit;
+    context->total_search_calls = 0;
+    context->solution_found = false;
+    atomic_init(&context->stop_requested, false);
+    assert(pthread_mutex_init(&context->mutex, NULL) == 0,
+           "Error initializing start branch mutex\n");
+
+    pthread_t* threads = (pthread_t*)malloc(num_threads * sizeof(pthread_t));
+    assert(threads != NULL, "Error allocating start branch threads\n");
+    for (unsigned i = 0; i < num_threads; i++) {
+        assert(pthread_create(&threads[i], NULL, start_branch_worker, context) == 0,
+               "Error creating start branch worker thread\n");
+    }
+    for (unsigned i = 0; i < num_threads; i++) {
+        assert(pthread_join(threads[i], NULL) == 0,
+               "Error joining start branch worker thread\n");
+    }
+    free(threads);
+    pthread_mutex_destroy(&context->mutex);
+    return context->solution_found;
+}
+
+void* start_branch_worker(void* arg) {
+    start_branch_search_t* context = (start_branch_search_t*)arg;
+    bool* used_cycles = (bool*)calloc(context->num_cycles, sizeof(bool));
+    degree_t* vertex_uses =
+        (degree_t*)malloc(context->num_vertices * sizeof(degree_t));
+    directed_edge_remaining =
+        (bool*)malloc((num_directed_edges == 0 ? 1 : num_directed_edges) * sizeof(bool));
+    transitions_used_size =
+        (size_t)context->num_vertices * VERTEX_DEGREE * VERTEX_DEGREE;
+    transitions_used = (bool*)malloc(transitions_used_size * sizeof(bool));
+    assert(used_cycles != NULL && vertex_uses != NULL &&
+               directed_edge_remaining != NULL && transitions_used != NULL,
+           "Error allocating start branch worker state\n");
+    cycle_edge_conflicts_init(context->num_cycles);
+    rotation_state_init(context->num_vertices);
+
+    int8_t* length_cache_without_required = NULL;
+    int8_t* length_cache_with_required = NULL;
+    if (context->length_feasibility_template.cache_without_required != NULL) {
+        length_cache_without_required =
+            (int8_t*)malloc(context->length_cache_entries * sizeof(int8_t));
+        length_cache_with_required =
+            (int8_t*)malloc(context->length_cache_entries * sizeof(int8_t));
+        assert(length_cache_without_required != NULL && length_cache_with_required != NULL,
+               "Error allocating worker length feasibility caches\n");
+    }
+    length_feasibility_t length_feasibility = context->length_feasibility_template;
+    length_feasibility.cache_without_required = length_cache_without_required;
+    length_feasibility.cache_with_required = length_cache_with_required;
+    search_stop_requested = &context->stop_requested;
+
+    while (!atomic_load(&context->stop_requested)) {
+        pthread_mutex_lock(&context->mutex);
+        if (context->solution_found ||
+            context->next_start_index >= context->num_start_cycles) {
+            pthread_mutex_unlock(&context->mutex);
+            break;
+        }
+        cycle_index_t start_i = context->next_start_index++;
+        pthread_mutex_unlock(&context->mutex);
+
+        if (length_cache_without_required != NULL) {
+            memset(length_cache_without_required, 0xff,
+                   context->length_cache_entries * sizeof(int8_t));
+            memset(length_cache_with_required, 0xff,
+                   context->length_cache_entries * sizeof(int8_t));
+        }
+        memset(used_cycles, 0, context->num_cycles * sizeof(bool));
+        memcpy(vertex_uses, initial_vertex_uses,
+               context->num_vertices * sizeof(degree_t));
+        memcpy(directed_edge_remaining, context->initial_directed_edge_remaining,
+               (num_directed_edges == 0 ? 1 : num_directed_edges) * sizeof(bool));
+        num_edges_remaining = num_directed_edges;
+        memset(transitions_used, 0, transitions_used_size * sizeof(bool));
+        cycle_edge_conflicts_clear(context->num_cycles);
+        rotation_state_clear(context->num_vertices);
+
+        cycle_index_t c = context->start_cycles[start_i];
+        cycle_length_t cycle_length;
+        cycles_t cycle =
+            cycle_get(context->cycles, context->max_cycle_length, c, &cycle_length);
+        bool branch_found = false;
+        cycle_index_t local_max_fit = context->initial_max_fit;
+        uint64_t local_search_calls = 0;
+        if ((VERTEX_DEGREE <= 2 || cycle_transitions_good(cycle, cycle_length)) &&
+            cycle_try_add_rotation_system(cycle, cycle_length)) {
+            used_cycles[c] = true;
+            cycle_set_transitions(cycle, cycle_length, true);
+            cycle_set_edge_conflicts(cycle, cycle_length, context->max_cycles_per_edge,
+                                     context->cycles_by_edge, true);
+            for (cycle_length_t i = 0; i < cycle_length; i++) {
+                adj_remove_edge(context->adjacency_list, cycle[i], cycle[i + 1]);
+                vertex_uses[cycle[i]] += 1;
+            }
+
+            cycle_index_t required_cycles_to_use =
+                context->require_max_cycle_if_start_is_shorter &&
+                        cycle_length != context->max_cycle_length
+                    ? 1
+                    : 0;
+            branch_found = search(
+                context->initial_cycles_to_use, context->max_used_cycles,
+                used_cycles, vertex_uses, &local_max_fit, &local_search_calls,
+                context->num_vertices, context->num_edges, context->adjacency_list,
+                context->max_cycle_length, context->num_cycles, context->cycles,
+                context->max_cycles_per_vertex, context->cycles_by_vertex,
+                context->max_cycles_per_edge, context->cycles_by_edge,
+                context->start_cycle_order, start_i, &length_feasibility,
+                required_cycles_to_use);
+        }
+
+        pthread_mutex_lock(&context->mutex);
+        context->total_search_calls += local_search_calls;
+        if (local_max_fit > context->best_max_fit) {
+            context->best_max_fit = local_max_fit;
+        }
+        if (branch_found && !context->solution_found) {
+            context->solution_found = true;
+            memcpy(context->solution_used_cycles, used_cycles,
+                   context->num_cycles * sizeof(bool));
+            atomic_store(&context->stop_requested, true);
+        }
+        context->completed_start_cycles++;
+        if (PRINT_PROGRESS) {
+            show_progress(context->completed_start_cycles /
+                          (double)context->num_start_cycles);
+        }
+        pthread_mutex_unlock(&context->mutex);
+    }
+
+    search_stop_requested = NULL;
+    free(length_cache_without_required);
+    free(length_cache_with_required);
+    cycle_edge_conflicts_free();
+    rotation_state_free();
+    free(transitions_used);
+    transitions_used = NULL;
+    transitions_used_size = 0;
+    free(directed_edge_remaining);
+    directed_edge_remaining = NULL;
+    num_edges_remaining = 0;
+    free(vertex_uses);
+    free(used_cycles);
+    return NULL;
 }
 
 void rotation_state_init(vertex_t num_vertices) {
