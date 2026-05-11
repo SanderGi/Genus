@@ -107,6 +107,10 @@ static cycle_index_t* directed_edge_lookup_ids = NULL;
 static cycle_index_t directed_edge_lookup_capacity = 0;
 static bool* transitions_used = NULL;
 static size_t transitions_used_size = 0;
+static vertex_t* rotation_next = NULL;
+static vertex_t* rotation_prev = NULL;
+static degree_t* rotation_pair_count = NULL;
+static size_t rotation_state_size = 0;
 
 // auxiliary data structures
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
@@ -144,12 +148,16 @@ void show_solution(cycle_index_t genus_lower_bound, cycle_index_t genus_lower_bo
                    uint64_t num_search_calls, cycle_index_t num_cycles, bool* used_cycles,
                    cycles_t cycles, cycle_length_t max_cycle_length);
 
-bool is_valid_rotation_system(bool* used_cycles, cycles_t cycles, cycle_length_t max_cycle_length,
-                              cycle_index_t num_cycles, vertex_t num_vertices,
-                              cycle_index_t cycle_to_check);
 degree_t adj_neighbor_index(adj_t adjacency_list, vertex_t vertex, vertex_t neighbor);
 bool cycle_transitions_good(vertex_t* cycle, cycle_length_t cycle_length);
 void cycle_set_transitions(vertex_t* cycle, cycle_length_t cycle_length, bool used);
+void rotation_state_init(vertex_t num_vertices);
+void rotation_state_clear(vertex_t num_vertices);
+void rotation_state_free(void);
+bool rotation_transition_add(vertex_t center, degree_t prev_index, degree_t next_index);
+void rotation_transition_remove(vertex_t center, degree_t prev_index, degree_t next_index);
+bool cycle_try_add_rotation_system(vertex_t* cycle, cycle_length_t cycle_length);
+void cycle_remove_rotation_system(vertex_t* cycle, cycle_length_t cycle_length);
 cycle_index_t choose_start_edge(vertex_t num_vertices, adj_t adjacency_list,
                                 cycle_index_t max_cycles_per_edge, cbe_t cycles_by_edge,
                                 vertex_t* start_vertex, vertex_t* end_vertex);
@@ -990,6 +998,7 @@ int main(void) {
         transitions_used = (bool*)malloc(transitions_used_size * sizeof(bool));
         assert(transitions_used != NULL,
                "Error allocating memory for the used transition table\n");
+        rotation_state_init(num_vertices);
 
         vertex_t start_vertex;
         vertex_t end_vertex;
@@ -1050,6 +1059,7 @@ int main(void) {
             cycle_length_t cycle_length;
             cycles_t cycle = cycle_get(cycles, cur_max_cycle_length, c, &cycle_length);
             memset(transitions_used, 0, transitions_used_size * sizeof(bool));
+            rotation_state_clear(num_vertices);
             start_cycle_order[c] = start_cycles_seen;
             start_cycles_seen++;
             cycle_index_t current_start_cycle_order = start_cycle_order[c];
@@ -1057,8 +1067,7 @@ int main(void) {
                 show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
-            if (!is_valid_rotation_system(used_cycles, cycles, cur_max_cycle_length, num_cycles,
-                                          num_vertices, c)) {
+            if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
                 show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
@@ -1096,6 +1105,7 @@ int main(void) {
                 free(cycle_length_available);
                 free(length_cache_without_required);
                 free(length_cache_with_required);
+                rotation_state_free();
                 free(transitions_used);
                 transitions_used = NULL;
                 fclose(output_file);
@@ -1105,6 +1115,7 @@ int main(void) {
             // mark start cycle as unused
             used_cycles[c] = false;
             cycle_set_transitions(cycle, cycle_length, false);
+            cycle_remove_rotation_system(cycle, cycle_length);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
             }
@@ -1152,6 +1163,7 @@ int main(void) {
             free(cycle_length_available);
             free(length_cache_without_required);
             free(length_cache_with_required);
+            rotation_state_free();
             free(transitions_used);
             transitions_used = NULL;
             fclose(output_file);
@@ -1178,6 +1190,7 @@ int main(void) {
         free(cycles_by_edge);
         free(length_cache_without_required);
         free(length_cache_with_required);
+        rotation_state_free();
         free(transitions_used);
         transitions_used = NULL;
     }
@@ -1209,6 +1222,7 @@ int main(void) {
     transitions_used = (bool*)malloc(transitions_used_size * sizeof(bool));
     assert(transitions_used != NULL,
            "Error allocating memory for the used transition table\n");
+    rotation_state_init(num_vertices);
     vertex_t start_vertex;
     vertex_t end_vertex;
     cycle_index_t num_start_cycles =
@@ -1267,6 +1281,7 @@ int main(void) {
             cycle_length_t cycle_length;
             cycles_t cycle = cycle_get(cycles, cycles_max_cycle_length, c, &cycle_length);
             memset(transitions_used, 0, transitions_used_size * sizeof(bool));
+            rotation_state_clear(num_vertices);
             start_cycle_order[c] = start_cycles_seen;
             start_cycles_seen++;
             cycle_index_t current_start_cycle_order = start_cycle_order[c];
@@ -1274,8 +1289,7 @@ int main(void) {
                 show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
-            if (!is_valid_rotation_system(used_cycles, cycles, cycles_max_cycle_length, num_cycles,
-                                          num_vertices, c)) {
+            if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
                 show_progress(start_cycles_seen / (double)num_start_cycles);
                 continue;
             }
@@ -1312,6 +1326,7 @@ int main(void) {
                 free(cycle_length_available);
                 free(length_cache_without_required);
                 free(length_cache_with_required);
+                rotation_state_free();
                 free(transitions_used);
                 transitions_used = NULL;
                 fclose(output_file);
@@ -1321,6 +1336,7 @@ int main(void) {
             // mark start cycle as unused
             used_cycles[c] = false;
             cycle_set_transitions(cycle, cycle_length, false);
+            cycle_remove_rotation_system(cycle, cycle_length);
             for (cycle_length_t i = 0; i < cycle_length; i++) {
                 adj_undo_remove_edge(adjacency_list, cycle[i], cycle[i + 1]);
             }
@@ -1347,6 +1363,7 @@ int main(void) {
     free(start_cycle_order);
     free(vertex_uses);
     free(cycle_length_available);
+    rotation_state_free();
     free(transitions_used);
     transitions_used = NULL;
     fclose(output_file);
@@ -1413,124 +1430,6 @@ void show_progress(double fraction) {
         fprintf(stderr, "\n");
     }
     prev_percent = (int)(fraction * 100);
-}
-
-bool is_valid_rotation_system(bool* used_cycles, cycles_t cycles, cycle_length_t max_cycle_length,
-                              cycle_index_t num_cycles, vertex_t num_vertices,
-                              cycle_index_t cycle_to_check) {
-    if (VERTEX_DEGREE <= 5) {
-        return true;  // ijk criterion is sufficient
-    }
-
-    // TODO: optimize by storing the rotation in the adjacency list as cycles
-    // are added
-
-    edge_t row_size = 2 * VERTEX_DEGREE + 1;
-    vertex_t* pairs = (vertex_t*)malloc(row_size * num_vertices * sizeof(vertex_t));
-    assert(pairs != NULL, "Error allocating memory for the pairs\n");
-    bool* pair_seen = (bool*)malloc(VERTEX_DEGREE * sizeof(bool));
-    assert(pair_seen != NULL, "Error allocating memory for the pair seen flags\n");
-    for (vertex_t i = 0; i < num_vertices; i++) {
-        pairs[i * row_size] = 0;
-    }
-
-    for (cycle_index_t c = 0; c < num_cycles; c++) {
-        if (used_cycles[c] || c == cycle_to_check) {
-            cycle_length_t cycle_length;
-            vertex_t* cycle = cycle_get(cycles, max_cycle_length, c, &cycle_length);
-
-            degree_t num_pairs = pairs[cycle[0] * row_size];
-            pairs[cycle[0] * row_size + 2 * num_pairs + 1] = cycle[cycle_length - 1];
-            pairs[cycle[0] * row_size + 2 * num_pairs + 2] = cycle[1];
-            pairs[cycle[0] * row_size] = num_pairs + 1;
-
-            for (cycle_length_t i = 1; i < cycle_length - 1; i++) {
-                degree_t num_pairs = pairs[cycle[i] * row_size];
-                pairs[cycle[i] * row_size + 2 * num_pairs + 1] = cycle[i - 1];
-                pairs[cycle[i] * row_size + 2 * num_pairs + 2] = cycle[i + 1];
-                pairs[cycle[i] * row_size] = num_pairs + 1;
-            }
-
-            num_pairs = pairs[cycle[cycle_length - 1] * row_size];
-            pairs[cycle[cycle_length - 1] * row_size + 2 * num_pairs + 1] = cycle[cycle_length - 2];
-            pairs[cycle[cycle_length - 1] * row_size + 2 * num_pairs + 2] = cycle[cycle_length];
-            pairs[cycle[cycle_length - 1] * row_size] = num_pairs + 1;
-        }
-    }
-
-    for (vertex_t i = 0; i < num_vertices; i++) {
-        degree_t num_pairs = pairs[i * row_size];
-        if (num_pairs == 0) continue;
-
-        for (degree_t start_pair = 0; start_pair < num_pairs; start_pair++) {
-            vertex_t start = pairs[i * row_size + 2 * start_pair + 1];
-            vertex_t next = pairs[i * row_size + 2 * start_pair + 2];
-            degree_t component_size = 1;
-            for (degree_t j = 0; j < num_pairs; j++) {
-                pair_seen[j] = false;
-            }
-            pair_seen[start_pair] = true;
-
-            while (next != start) {
-                bool found = false;
-                for (degree_t j = 0; j < num_pairs; j++) {
-                    if (pairs[i * row_size + 2 * j + 1] == next) {
-                        if (pair_seen[j]) {
-                            free(pair_seen);
-                            free(pairs);
-                            return false;
-                        }
-                        next = pairs[i * row_size + 2 * j + 2];
-                        pair_seen[j] = true;
-                        component_size++;
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    break;
-                }
-            }
-
-            if (next == start && component_size < vertex_degrees[i]) {
-                free(pair_seen);
-                free(pairs);
-                return false;
-            }
-        }
-
-        if (num_pairs == vertex_degrees[i]) {
-            degree_t pairs_used = 0;
-            vertex_t start = pairs[i * row_size + 1];
-            vertex_t next = start;
-            do {
-                bool found = false;
-                for (degree_t j = 0; j < num_pairs; j++) {
-                    if (pairs[i * row_size + 2 * j + 1] == next) {
-                        next = pairs[i * row_size + 2 * j + 2];
-                        pairs_used++;
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    free(pair_seen);
-                    free(pairs);
-                    return false;
-                }
-            } while (next != start && pairs_used <= num_pairs);
-
-            if (pairs_used != num_pairs || next != start) {
-                free(pair_seen);
-                free(pairs);
-                return false;
-            }
-        }
-    }
-
-    free(pair_seen);
-    free(pairs);
-    return true;
 }
 
 bool search(cycle_index_t cycles_to_use,                    // state
@@ -1738,8 +1637,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
         if (VERTEX_DEGREE > 2 && !cycle_transitions_good(cycle, cycle_length)) {
             continue;
         }
-        if (!is_valid_rotation_system(used_cycles, cycles, max_cycle_length, num_cycles,
-                                      num_vertices, cycle_index)) {
+        if (!cycle_try_add_rotation_system(cycle, cycle_length)) {
             continue;
         }
 
@@ -1767,6 +1665,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
             if (next_required_cycles_to_use > 0) {
                 used_cycles[cycle_index] = false;
                 cycle_set_transitions(cycle, cycle_length, false);
+                cycle_remove_rotation_system(cycle, cycle_length);
                 for (cycle_length_t j = 0; j < cycle_length; j++) {
                     adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
 
@@ -1787,6 +1686,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 if (!all_vertices_used) {
                     used_cycles[cycle_index] = false;
                     cycle_set_transitions(cycle, cycle_length, false);
+                    cycle_remove_rotation_system(cycle, cycle_length);
                     for (cycle_length_t j = 0; j < cycle_length; j++) {
                         adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
 
@@ -1812,6 +1712,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
         // un-use the cycle
         used_cycles[cycle_index] = false;
         cycle_set_transitions(cycle, cycle_length, false);
+        cycle_remove_rotation_system(cycle, cycle_length);
         for (cycle_length_t j = 0; j < cycle_length; j++) {
             adj_undo_remove_edge(adjacency_list, cycle[j], cycle[j + 1]);
 
@@ -1870,6 +1771,149 @@ void cycle_set_transitions(vertex_t* cycle, cycle_length_t cycle_length, bool us
         size_t transition_index =
             ((size_t)center * VERTEX_DEGREE + prev_index) * VERTEX_DEGREE + next_index;
         transitions_used[transition_index] = used;
+    }
+}
+
+void rotation_state_init(vertex_t num_vertices) {
+    if (VERTEX_DEGREE <= 5) {
+        rotation_next = NULL;
+        rotation_prev = NULL;
+        rotation_pair_count = NULL;
+        rotation_state_size = 0;
+        return;
+    }
+
+    rotation_state_size = (size_t)num_vertices * VERTEX_DEGREE;
+    rotation_next = (vertex_t*)malloc(rotation_state_size * sizeof(vertex_t));
+    rotation_prev = (vertex_t*)malloc(rotation_state_size * sizeof(vertex_t));
+    rotation_pair_count = (degree_t*)malloc(num_vertices * sizeof(degree_t));
+    assert(rotation_next != NULL && rotation_prev != NULL && rotation_pair_count != NULL,
+           "Error allocating memory for the rotation system state\n");
+    rotation_state_clear(num_vertices);
+}
+
+void rotation_state_clear(vertex_t num_vertices) {
+    if (VERTEX_DEGREE <= 5) {
+        return;
+    }
+
+    assert(rotation_state_size == (size_t)num_vertices * VERTEX_DEGREE,
+           "Error clearing rotation system state with unexpected size\n");
+    for (size_t i = 0; i < rotation_state_size; i++) {
+        rotation_next[i] = MAX_VERTICES;
+        rotation_prev[i] = MAX_VERTICES;
+    }
+    for (vertex_t i = 0; i < num_vertices; i++) {
+        rotation_pair_count[i] = 0;
+    }
+}
+
+void rotation_state_free(void) {
+    free(rotation_next);
+    free(rotation_prev);
+    free(rotation_pair_count);
+    rotation_next = NULL;
+    rotation_prev = NULL;
+    rotation_pair_count = NULL;
+    rotation_state_size = 0;
+}
+
+bool rotation_transition_add(vertex_t center, degree_t prev_index, degree_t next_index) {
+    if (VERTEX_DEGREE <= 5) {
+        return true;
+    }
+
+    size_t source = (size_t)center * VERTEX_DEGREE + prev_index;
+    size_t target = (size_t)center * VERTEX_DEGREE + next_index;
+    if (prev_index == next_index || rotation_next[source] != MAX_VERTICES ||
+        rotation_prev[target] != MAX_VERTICES) {
+        return false;
+    }
+
+    vertex_t component_size = 1;
+    bool closes_component = false;
+    vertex_t cursor = next_index;
+    while (rotation_next[(size_t)center * VERTEX_DEGREE + cursor] != MAX_VERTICES) {
+        cursor = rotation_next[(size_t)center * VERTEX_DEGREE + cursor];
+        component_size++;
+        if (cursor == prev_index) {
+            closes_component = true;
+            break;
+        }
+        if (component_size > vertex_degrees[center]) {
+            return false;
+        }
+    }
+
+    if (closes_component && component_size < vertex_degrees[center]) {
+        return false;
+    }
+    if (!closes_component && rotation_pair_count[center] + 1 == vertex_degrees[center]) {
+        return false;
+    }
+
+    rotation_next[source] = next_index;
+    rotation_prev[target] = prev_index;
+    rotation_pair_count[center]++;
+    return true;
+}
+
+void rotation_transition_remove(vertex_t center, degree_t prev_index, degree_t next_index) {
+    if (VERTEX_DEGREE <= 5) {
+        return;
+    }
+
+    size_t source = (size_t)center * VERTEX_DEGREE + prev_index;
+    size_t target = (size_t)center * VERTEX_DEGREE + next_index;
+    assert(rotation_next[source] == next_index && rotation_prev[target] == prev_index &&
+               rotation_pair_count[center] > 0,
+           "Error removing missing rotation system transition\n");
+    rotation_next[source] = MAX_VERTICES;
+    rotation_prev[target] = MAX_VERTICES;
+    rotation_pair_count[center]--;
+}
+
+bool cycle_try_add_rotation_system(vertex_t* cycle, cycle_length_t cycle_length) {
+    if (VERTEX_DEGREE <= 5) {
+        return true;
+    }
+
+    for (cycle_length_t i = 0; i < cycle_length; i++) {
+        vertex_t center = cycle[i];
+        vertex_t prev = i == 0 ? cycle[cycle_length - 1] : cycle[i - 1];
+        vertex_t next = i + 1 == cycle_length ? cycle[0] : cycle[i + 1];
+        degree_t prev_index = adj_neighbor_index(full_adjacency_list, center, prev);
+        degree_t next_index = adj_neighbor_index(full_adjacency_list, center, next);
+        if (!rotation_transition_add(center, prev_index, next_index)) {
+            for (cycle_length_t j = 0; j < i; j++) {
+                vertex_t undo_center = cycle[j];
+                vertex_t undo_prev = j == 0 ? cycle[cycle_length - 1] : cycle[j - 1];
+                vertex_t undo_next = j + 1 == cycle_length ? cycle[0] : cycle[j + 1];
+                degree_t undo_prev_index =
+                    adj_neighbor_index(full_adjacency_list, undo_center, undo_prev);
+                degree_t undo_next_index =
+                    adj_neighbor_index(full_adjacency_list, undo_center, undo_next);
+                rotation_transition_remove(undo_center, undo_prev_index, undo_next_index);
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void cycle_remove_rotation_system(vertex_t* cycle, cycle_length_t cycle_length) {
+    if (VERTEX_DEGREE <= 5) {
+        return;
+    }
+
+    for (cycle_length_t i = 0; i < cycle_length; i++) {
+        vertex_t center = cycle[i];
+        vertex_t prev = i == 0 ? cycle[cycle_length - 1] : cycle[i - 1];
+        vertex_t next = i + 1 == cycle_length ? cycle[0] : cycle[i + 1];
+        degree_t prev_index = adj_neighbor_index(full_adjacency_list, center, prev);
+        degree_t next_index = adj_neighbor_index(full_adjacency_list, center, next);
+        rotation_transition_remove(center, prev_index, next_index);
     }
 }
 
