@@ -41,6 +41,7 @@
 #define LENGTH_COMPOSITION_WORK_LIMIT 25000000ULL
 #define LENGTH_FEASIBILITY_CACHE_LIMIT 10000000ULL
 #define SHORTEST_PACKING_CALL_LIMIT 1000000ULL
+#define DIRECTED_EDGE_LOOKUP_EMPTY UINT32_MAX
 
 // consequences of assumptions:
 #define START_CYCLE_LENGTH 3
@@ -91,19 +92,34 @@ static vertex_t start_index = 0;
 static degree_t vertex_degree = 3;
 static cycle_index_t pre_genus_lower_bound = 0;
 static char* adj_filename = NULL;
-static edge_t num_edges_remaining = 0;
+static cycle_index_t num_edges_remaining = 0;
 static cycle_length_t smallest_cycle_length;
 static bool output_to_stdout = false;
 static bool progress_bar_newline = false;
 static degree_t* vertex_degrees = NULL;
 static degree_t* initial_vertex_uses = NULL;
 static adj_t full_adjacency_list = NULL;
+static cycle_index_t num_directed_edges = 0;
+static cycle_index_t* directed_edge_ids = NULL;
+static bool* directed_edge_remaining = NULL;
+static uint32_t* directed_edge_lookup_keys = NULL;
+static cycle_index_t* directed_edge_lookup_ids = NULL;
+static cycle_index_t directed_edge_lookup_capacity = 0;
 static bool* transitions_used = NULL;
 static size_t transitions_used_size = 0;
 
 // auxiliary data structures
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
 vertex_t* adj_get_neighbors(adj_t adjacency_list, vertex_t vertex);
+void graph_free(adj_t adjacency_list);
+uint32_t directed_edge_key(vertex_t start_vertex, vertex_t end_vertex);
+cycle_index_t directed_edge_lookup_slot(uint32_t key, bool allow_empty);
+void directed_edge_lookup_insert(vertex_t start_vertex, vertex_t end_vertex,
+                                 cycle_index_t edge_id);
+bool adj_try_edge_id(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex,
+                     cycle_index_t* edge_id);
+cycle_index_t adj_edge_id(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex);
+bool adj_slot_has_edge(vertex_t start_vertex, degree_t neighbor_index);
 void adj_remove_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex);
 void adj_undo_remove_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex);
 bool adj_has_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex);
@@ -741,8 +757,7 @@ int main(void) {
         fprintf(output_file, "Genus found: %" PRIcycle_index_t " in 0 iterations:\n",
                 genus_lower_bound);
         fclose(output_file);
-        free(adjacency_list);
-        free(vertex_degrees);
+        graph_free(adjacency_list);
         return 0;
     }
 
@@ -927,8 +942,7 @@ int main(void) {
 
             if (genus_lower_bound == genus_upper_bound && !FIND_FULL_CYCLE_FITTING) {
                 fprintf(stderr, "The genus is %" PRIcycle_index_t ".\n", genus_lower_bound);
-                free(adjacency_list);
-                free(vertex_degrees);
+                graph_free(adjacency_list);
                 free(cycles);
                 free(cycle_length_available);
                 fclose(output_file);
@@ -1072,8 +1086,7 @@ int main(void) {
                 show_progress(1.0);
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
                               num_cycles, used_cycles, cycles, cur_max_cycle_length);
-                free(adjacency_list);
-                free(vertex_degrees);
+                graph_free(adjacency_list);
                 free(vertex_uses);
                 free(cycles);
                 free(cycles_by_vertex);
@@ -1132,8 +1145,7 @@ int main(void) {
             free(used_cycles);
             free(start_cycle_order);
             free(vertex_uses);
-            free(adjacency_list);
-            free(vertex_degrees);
+            graph_free(adjacency_list);
             free(cycles);
             free(cycles_by_vertex);
             free(cycles_by_edge);
@@ -1290,8 +1302,7 @@ int main(void) {
                 show_progress(1.0);
                 show_solution(genus_lower_bound, genus_lower_bound_implied_fit, num_search_calls,
                               num_cycles, used_cycles, cycles, cycles_max_cycle_length);
-                free(adjacency_list);
-                free(vertex_degrees);
+                graph_free(adjacency_list);
                 free(vertex_uses);
                 free(cycles);
                 free(cycles_by_vertex);
@@ -1328,8 +1339,7 @@ int main(void) {
             implied_max_genus_for_fit(genus_lower_bound_implied_fit, num_vertices, num_edges);
     }
 
-    free(adjacency_list);
-    free(vertex_degrees);
+    graph_free(adjacency_list);
     free(cycles);
     free(cycles_by_vertex);
     free(cycles_by_edge);
@@ -1554,7 +1564,8 @@ bool search(cycle_index_t cycles_to_use,                    // state
 
             vertex_t* neighbors = adj_get_neighbors(adjacency_list, i);
             for (degree_t j = 0; j < VERTEX_DEGREE; j++) {
-                if (neighbors[j] == MAX_VERTICES || vertex_uses[neighbors[j]] >= VERTEX_USE_LIMIT) {
+                if (neighbors[j] == MAX_VERTICES || !adj_slot_has_edge(i, j) ||
+                    vertex_uses[neighbors[j]] >= VERTEX_USE_LIMIT) {
                     continue;
                 }
                 degree_t comb_uses = vertex_uses[i] + vertex_uses[neighbors[j]];
@@ -1945,6 +1956,54 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
         full_adjacency_list[i] = adjacency_list[i];
     }
 
+    cycle_index_t edge_slot_capacity = (cycle_index_t)(*num_vertices) * VERTEX_DEGREE;
+    num_directed_edges = 2 * (cycle_index_t)(*num_edges);
+    directed_edge_ids =
+        (cycle_index_t*)malloc(edge_slot_capacity * sizeof(cycle_index_t));
+    directed_edge_remaining =
+        (bool*)malloc((num_directed_edges == 0 ? 1 : num_directed_edges) * sizeof(bool));
+    assert(directed_edge_ids != NULL && directed_edge_remaining != NULL,
+           "Error allocating memory for the directed edge state\n");
+    for (cycle_index_t i = 0; i < edge_slot_capacity; i++) {
+        directed_edge_ids[i] = MAX_CYCLES;
+    }
+
+    directed_edge_lookup_capacity = 1;
+    while (directed_edge_lookup_capacity < 4 * num_directed_edges) {
+        directed_edge_lookup_capacity <<= 1;
+    }
+    directed_edge_lookup_keys =
+        (uint32_t*)malloc(directed_edge_lookup_capacity * sizeof(uint32_t));
+    directed_edge_lookup_ids =
+        (cycle_index_t*)malloc(directed_edge_lookup_capacity * sizeof(cycle_index_t));
+    assert(directed_edge_lookup_keys != NULL && directed_edge_lookup_ids != NULL,
+           "Error allocating memory for the directed edge lookup\n");
+    for (cycle_index_t i = 0; i < directed_edge_lookup_capacity; i++) {
+        directed_edge_lookup_keys[i] = DIRECTED_EDGE_LOOKUP_EMPTY;
+    }
+
+    cycle_index_t edge_id = 0;
+    for (vertex_t vertex = 0; vertex < *num_vertices; vertex++) {
+        vertex_t* neighbors = adj_get_neighbors(adjacency_list, vertex);
+        for (degree_t neighbor_index = 0; neighbor_index < VERTEX_DEGREE; neighbor_index++) {
+            if (neighbors[neighbor_index] == MAX_VERTICES) {
+                continue;
+            }
+            assert(edge_id < num_directed_edges,
+                   "Error: adjacency list contains more than %" PRIcycle_index_t
+                   " directed edges\n",
+                   num_directed_edges);
+            directed_edge_ids[vertex * VERTEX_DEGREE + neighbor_index] = edge_id;
+            directed_edge_remaining[edge_id] = true;
+            directed_edge_lookup_insert(vertex, neighbors[neighbor_index], edge_id);
+            edge_id++;
+        }
+    }
+    assert(edge_id == num_directed_edges,
+           "Error: adjacency list contains %" PRIcycle_index_t
+           " directed edges, expected %" PRIcycle_index_t "\n",
+           edge_id, num_directed_edges);
+
     fclose(fp);
 
     if (PRINT_PROGRESS) {
@@ -1969,7 +2028,7 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
         fprintf(stderr, "\n");
     }
 
-    num_edges_remaining = 2 * *num_edges;
+    num_edges_remaining = num_directed_edges;
     return adjacency_list;
 }
 
@@ -1977,37 +2036,114 @@ vertex_t* adj_get_neighbors(adj_t adjacency_list, vertex_t vertex) {
     return &adjacency_list[vertex * VERTEX_DEGREE];
 }
 
-void adj_remove_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex) {
-    vertex_t* neighbors = adj_get_neighbors(adjacency_list, start_vertex);
-    for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
-        if (neighbors[i] == end_vertex) {
-            num_edges_remaining -= 1;
-            neighbors[i] = MAX_VERTICES;
-            return;
+void graph_free(adj_t adjacency_list) {
+    free(adjacency_list);
+    free(full_adjacency_list);
+    full_adjacency_list = NULL;
+    free(vertex_degrees);
+    vertex_degrees = NULL;
+    free(initial_vertex_uses);
+    initial_vertex_uses = NULL;
+    free(directed_edge_ids);
+    directed_edge_ids = NULL;
+    free(directed_edge_remaining);
+    directed_edge_remaining = NULL;
+    free(directed_edge_lookup_keys);
+    directed_edge_lookup_keys = NULL;
+    free(directed_edge_lookup_ids);
+    directed_edge_lookup_ids = NULL;
+    directed_edge_lookup_capacity = 0;
+    num_directed_edges = 0;
+    num_edges_remaining = 0;
+}
+
+uint32_t directed_edge_key(vertex_t start_vertex, vertex_t end_vertex) {
+    assert(start_vertex != MAX_VERTICES && end_vertex != MAX_VERTICES,
+           "Error: invalid directed edge key %" PRIvertex_t " -> %" PRIvertex_t "\n",
+           start_vertex, end_vertex);
+    return ((uint32_t)start_vertex << 16) | end_vertex;
+}
+
+cycle_index_t directed_edge_lookup_slot(uint32_t key, bool allow_empty) {
+    assert(directed_edge_lookup_capacity > 0 && directed_edge_lookup_keys != NULL,
+           "Error: directed edge lookup has not been initialized\n");
+    cycle_index_t slot =
+        (cycle_index_t)((key * 2654435761u) & (directed_edge_lookup_capacity - 1));
+    while (directed_edge_lookup_keys[slot] != key) {
+        if (directed_edge_lookup_keys[slot] == DIRECTED_EDGE_LOOKUP_EMPTY) {
+            if (allow_empty) {
+                return slot;
+            }
+            assert(false, "Error finding directed edge key %" PRIu32 "\n", key);
         }
+        slot = (slot + 1) & (directed_edge_lookup_capacity - 1);
     }
+    return slot;
+}
+
+void directed_edge_lookup_insert(vertex_t start_vertex, vertex_t end_vertex,
+                                 cycle_index_t edge_id) {
+    uint32_t key = directed_edge_key(start_vertex, end_vertex);
+    cycle_index_t slot = directed_edge_lookup_slot(key, true);
+    assert(directed_edge_lookup_keys[slot] == DIRECTED_EDGE_LOOKUP_EMPTY,
+           "Error: duplicate directed edge %" PRIvertex_t " -> %" PRIvertex_t "\n",
+           start_vertex, end_vertex);
+    directed_edge_lookup_keys[slot] = key;
+    directed_edge_lookup_ids[slot] = edge_id;
+}
+
+bool adj_try_edge_id(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex,
+                     cycle_index_t* edge_id) {
+    (void)adjacency_list;
+    uint32_t key = directed_edge_key(start_vertex, end_vertex);
+    cycle_index_t slot = directed_edge_lookup_slot(key, true);
+    if (directed_edge_lookup_keys[slot] == DIRECTED_EDGE_LOOKUP_EMPTY) {
+        return false;
+    }
+    *edge_id = directed_edge_lookup_ids[slot];
+    return true;
+}
+
+cycle_index_t adj_edge_id(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex) {
+    cycle_index_t edge_id;
+    assert(adj_try_edge_id(adjacency_list, start_vertex, end_vertex, &edge_id),
+           "Error finding directed edge %" PRIvertex_t " -> %" PRIvertex_t "\n",
+           start_vertex, end_vertex);
+    return edge_id;
+}
+
+bool adj_slot_has_edge(vertex_t start_vertex, degree_t neighbor_index) {
+    cycle_index_t edge_id = directed_edge_ids[start_vertex * VERTEX_DEGREE + neighbor_index];
+    return edge_id != MAX_CYCLES && directed_edge_remaining[edge_id];
+}
+
+void adj_remove_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex) {
+    cycle_index_t edge_id = adj_edge_id(adjacency_list, start_vertex, end_vertex);
+    assert(directed_edge_remaining[edge_id],
+           "Error: directed edge %" PRIvertex_t " -> %" PRIvertex_t
+           " was removed twice\n",
+           start_vertex, end_vertex);
+    num_edges_remaining -= 1;
+    directed_edge_remaining[edge_id] = false;
 }
 
 // must have been previously removed, otherwise undefined behavior
 void adj_undo_remove_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex) {
-    vertex_t* neighbors = adj_get_neighbors(adjacency_list, start_vertex);
-    for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
-        if (neighbors[i] == MAX_VERTICES) {
-            num_edges_remaining += 1;
-            neighbors[i] = end_vertex;
-            return;
-        }
-    }
+    cycle_index_t edge_id = adj_edge_id(adjacency_list, start_vertex, end_vertex);
+    assert(!directed_edge_remaining[edge_id],
+           "Error: directed edge %" PRIvertex_t " -> %" PRIvertex_t
+           " was restored before being removed\n",
+           start_vertex, end_vertex);
+    num_edges_remaining += 1;
+    directed_edge_remaining[edge_id] = true;
 }
 
 bool adj_has_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex) {
-    vertex_t* neighbors = adj_get_neighbors(adjacency_list, start_vertex);
-    for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
-        if (neighbors[i] == end_vertex) {
-            return true;
-        }
+    cycle_index_t edge_id;
+    if (!adj_try_edge_id(adjacency_list, start_vertex, end_vertex, &edge_id)) {
+        return false;
     }
-    return false;
+    return directed_edge_remaining[edge_id];
 }
 
 struct fifo {
