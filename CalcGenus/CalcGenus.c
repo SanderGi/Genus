@@ -3258,7 +3258,7 @@ cycle_index_t* start_cycles_prune_by_symmetry(cycles_t cycles,
 
     if (PRINT_PROGRESS && *pruned_start_count < raw_start_count) {
         fprintf(stderr,
-                "\rSymmetry pruning reduced start cycles from %" PRIcycle_index_t
+                "\033[2K\rSymmetry pruning reduced start cycles from %" PRIcycle_index_t
                 " to %" PRIcycle_index_t ".\n",
                 raw_start_count, *pruned_start_count);
         show_progress(0.0);
