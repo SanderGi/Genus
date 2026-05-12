@@ -156,6 +156,7 @@ static _Thread_local cycle_index_t num_edges_remaining = 0;
 static cycle_length_t smallest_cycle_length;
 static bool output_to_stdout = false;
 static bool progress_bar_newline = false;
+static bool cubic_exact_cover_mode = false;
 static degree_t* vertex_degrees = NULL;
 static degree_t* initial_vertex_uses = NULL;
 static adj_t full_adjacency_list = NULL;
@@ -231,6 +232,10 @@ cycle_index_t* start_cycles_prune_by_symmetry(cycles_t cycles,
 void cycle_edge_conflicts_init(cycle_index_t num_cycles);
 void cycle_edge_conflicts_clear(cycle_index_t num_cycles);
 void cycle_edge_conflicts_free(void);
+bool candidate_length_possible(cycle_length_t cycle_length,
+                               cycle_index_t cycles_to_use,
+                               length_feasibility_t* length_feasibility,
+                               cycle_index_t required_cycles_to_use);
 void cycle_set_edge_conflicts(vertex_t* cycle, cycle_length_t cycle_length,
                               cycle_index_t max_cycles_per_edge, cbe_t cycles_by_edge,
                               bool used);
@@ -896,86 +901,104 @@ int main(void) {
     cycles_t cycles = NULL;
     cycle_index_t num_cycles = 0;
     cycle_length_t cycles_max_cycle_length = 0;
+    cycle_index_t current_length_cycle_count = 0;
     cycle_index_t last_searched_fit = MAX_CYCLES;
     for (cycle_length_t cur_max_cycle_length = START_CYCLE_LENGTH;
          cur_max_cycle_length <= max_search_cycle_length; cur_max_cycle_length++) {
-        if (PRINT_PROGRESS) {
-            fprintf(stderr,
-                    "Loading auxiliary data structures for cycles of length "
-                    "%" PRIcycle_length_t "... ",
-                    cur_max_cycle_length);
-        }
-
-        cycle_index_t num_new_cycles;
-        cycles_t new_cycles =
-            cycle_generate(adjacency_list, num_vertices, cur_max_cycle_length, &num_new_cycles);
-        num_cycles += num_new_cycles;
-
-        if (num_new_cycles == 0) {
-            // no cycles of this length, skip to the next length
-            free(new_cycles);
+        bool reusing_current_length =
+            cur_max_cycle_length == cycles_max_cycle_length &&
+            current_length_cycle_count > 0;
+        cycle_index_t num_new_cycles = current_length_cycle_count;
+        if (reusing_current_length) {
             if (PRINT_PROGRESS) {
-                fprintf(stderr, "No cycles of length %" PRIcycle_length_t " found. Skipping.\n",
+                fprintf(stderr,
+                        "Rechecking cycles of length up to %" PRIcycle_length_t
+                        " for the new target fit.\n",
                         cur_max_cycle_length);
             }
-            continue;
-        }
-        assert(new_cycles != NULL, "Error: new cycles is NULL but there are new cycles\n");
-        if (PRINT_PROGRESS) {
-            fprintf(stderr,
-                    "Found %" PRIcycle_index_t " cycles of length %" PRIcycle_length_t ".\n",
-                    num_new_cycles, cur_max_cycle_length);
-        }
-
-        cycle_length_available[cur_max_cycle_length] = true;
-
-        // keep the smallest cycle length up to date
-        if (cur_max_cycle_length < smallest_cycle_length) {
-            smallest_cycle_length = cur_max_cycle_length;
-            num_shortest_cycles = num_new_cycles;
-            max_shortest_cycles = num_new_cycles < 2 * num_edges / smallest_cycle_length
-                                      ? num_new_cycles
-                                      : 2 * num_edges / smallest_cycle_length;
-        } else if (cur_max_cycle_length > smallest_cycle_length &&
-                   second_smallest_cycle_length == 0) {
-            second_smallest_cycle_length = cur_max_cycle_length;
-        }
-
-        // the smallest cycle length limits how many cycles we can fit and hence the
-        // genus
-        cycle_index_t genus_lower_bound_from_smallest_cycle_length =
-            genus_lower_bound_from_fit_upper_bound(2 * num_edges / smallest_cycle_length,
-                                                   num_vertices, num_edges);
-        if (genus_lower_bound_from_smallest_cycle_length > genus_lower_bound) {
-            genus_lower_bound = genus_lower_bound_from_smallest_cycle_length;
-            genus_lower_bound_implied_fit =
-                implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
-        }
-
-        // add the new cycles to the old ones
-        if (cycles == NULL) {
-            cycles = new_cycles;
-            cycles_max_cycle_length = cur_max_cycle_length;
         } else {
-            cycles_t combined =
-                (cycles_t)malloc(num_cycles * (cur_max_cycle_length + 2) * sizeof(vertex_t));
-            assert(combined != NULL, "Error allocating memory for the combined cycles\n");
-            for (cycle_index_t i = 0; i < num_cycles - num_new_cycles; i++) {
-                for (cycle_length_t j = 0; j < cycles_max_cycle_length + 2; j++) {
-                    combined[i * (cur_max_cycle_length + 2) + j] =
-                        cycles[i * (cycles_max_cycle_length + 2) + j];
-                }
+            if (PRINT_PROGRESS) {
+                fprintf(stderr,
+                        "Loading auxiliary data structures for cycles of length "
+                        "%" PRIcycle_length_t "... ",
+                        cur_max_cycle_length);
             }
-            for (cycle_index_t i = 0; i < num_new_cycles; i++) {
-                for (cycle_length_t j = 0; j < cur_max_cycle_length + 2; j++) {
-                    combined[(num_cycles - num_new_cycles + i) * (cur_max_cycle_length + 2) + j] =
-                        new_cycles[i * (cur_max_cycle_length + 2) + j];
+
+            cycles_t new_cycles =
+                cycle_generate(adjacency_list, num_vertices, cur_max_cycle_length,
+                               &num_new_cycles);
+            current_length_cycle_count = num_new_cycles;
+            num_cycles += num_new_cycles;
+
+            if (num_new_cycles == 0) {
+                // no cycles of this length, skip to the next length
+                free(new_cycles);
+                if (PRINT_PROGRESS) {
+                    fprintf(stderr,
+                            "No cycles of length %" PRIcycle_length_t " found. Skipping.\n",
+                            cur_max_cycle_length);
                 }
+                continue;
             }
-            cycles_max_cycle_length = cur_max_cycle_length;
-            free(cycles);
-            free(new_cycles);
-            cycles = combined;
+            assert(new_cycles != NULL, "Error: new cycles is NULL but there are new cycles\n");
+            if (PRINT_PROGRESS) {
+                fprintf(stderr,
+                        "Found %" PRIcycle_index_t " cycles of length %" PRIcycle_length_t ".\n",
+                        num_new_cycles, cur_max_cycle_length);
+            }
+
+            cycle_length_available[cur_max_cycle_length] = true;
+
+            // keep the smallest cycle length up to date
+            if (cur_max_cycle_length < smallest_cycle_length) {
+                smallest_cycle_length = cur_max_cycle_length;
+                num_shortest_cycles = num_new_cycles;
+                max_shortest_cycles = num_new_cycles < 2 * num_edges / smallest_cycle_length
+                                          ? num_new_cycles
+                                          : 2 * num_edges / smallest_cycle_length;
+            } else if (cur_max_cycle_length > smallest_cycle_length &&
+                       second_smallest_cycle_length == 0) {
+                second_smallest_cycle_length = cur_max_cycle_length;
+            }
+
+            // the smallest cycle length limits how many cycles we can fit and hence the
+            // genus
+            cycle_index_t genus_lower_bound_from_smallest_cycle_length =
+                genus_lower_bound_from_fit_upper_bound(2 * num_edges / smallest_cycle_length,
+                                                       num_vertices, num_edges);
+            if (genus_lower_bound_from_smallest_cycle_length > genus_lower_bound) {
+                genus_lower_bound = genus_lower_bound_from_smallest_cycle_length;
+                genus_lower_bound_implied_fit =
+                    implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
+            }
+
+            // add the new cycles to the old ones
+            if (cycles == NULL) {
+                cycles = new_cycles;
+                cycles_max_cycle_length = cur_max_cycle_length;
+            } else {
+                cycles_t combined =
+                    (cycles_t)malloc(num_cycles * (cur_max_cycle_length + 2) * sizeof(vertex_t));
+                assert(combined != NULL, "Error allocating memory for the combined cycles\n");
+                for (cycle_index_t i = 0; i < num_cycles - num_new_cycles; i++) {
+                    for (cycle_length_t j = 0; j < cycles_max_cycle_length + 2; j++) {
+                        combined[i * (cur_max_cycle_length + 2) + j] =
+                            cycles[i * (cycles_max_cycle_length + 2) + j];
+                    }
+                }
+                for (cycle_index_t i = 0; i < num_new_cycles; i++) {
+                    for (cycle_length_t j = 0; j < cur_max_cycle_length + 2; j++) {
+                        combined[(num_cycles - num_new_cycles + i) *
+                                     (cur_max_cycle_length + 2) +
+                                 j] =
+                            new_cycles[i * (cur_max_cycle_length + 2) + j];
+                    }
+                }
+                cycles_max_cycle_length = cur_max_cycle_length;
+                free(cycles);
+                free(new_cycles);
+                cycles = combined;
+            }
         }
 
         if (genus_lower_bound < PRE_GENUS_LOWER_BOUND) {
@@ -1053,6 +1076,7 @@ int main(void) {
             genus_lower_bound_implied_fit =
                 implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
             genus_upper_bound = implied_max_genus_for_fit(max_fit, num_vertices, num_edges);
+            bool target_fit_changed = genus_lower_bound_implied_fit != searched_fit;
 
             if (genus_lower_bound == genus_upper_bound && !FIND_FULL_CYCLE_FITTING) {
                 fprintf(stderr, "The genus is %" PRIcycle_index_t ".\n", genus_lower_bound);
@@ -1069,6 +1093,9 @@ int main(void) {
                         "between %" PRIcycle_index_t " and %" PRIcycle_index_t ". Used %" PRId64
                         " iterations so far.\n",
                         genus_lower_bound, genus_upper_bound, num_search_calls);
+            }
+            if (target_fit_changed) {
+                cur_max_cycle_length--;
             }
             continue;
         }
@@ -1345,6 +1372,7 @@ int main(void) {
             implied_max_fit_for_genus(genus_lower_bound, num_vertices, num_edges);
         // as a bonus, we might have found a better upper bound
         genus_upper_bound = implied_max_genus_for_fit(max_fit, num_vertices, num_edges);
+        bool target_fit_changed = genus_lower_bound_implied_fit != searched_fit;
 
         if (genus_lower_bound == genus_upper_bound &&
             (!FIND_FULL_CYCLE_FITTING || max_fit == genus_lower_bound_implied_fit)) {
@@ -1395,6 +1423,9 @@ int main(void) {
         rotation_state_free();
         free(transitions_used);
         transitions_used = NULL;
+        if (target_fit_changed) {
+            cur_max_cycle_length--;
+        }
     }
 
     genus_lower_bound_implied_fit--;
@@ -1765,9 +1796,10 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 for (cycle_index_t k = 0; k < num_cycles_for_constraint; k++) {
                     cycle_index_t cycle_index = cycle_indices_for_edge[k];
                     if (cycle_search_candidate_usable(
-                            used_cycles, vertex_uses, adjacency_list, cycles, max_cycle_length,
-                            cycle_index, start_cycle_order, current_start_cycle_order,
-                            cycles_to_use, length_feasibility, required_cycles_to_use,
+                            used_cycles, vertex_uses, adjacency_list, cycles,
+                            max_cycle_length, cycle_index, start_cycle_order,
+                            current_start_cycle_order, cycles_to_use,
+                            length_feasibility, required_cycles_to_use,
                             exact_column_count, false, NULL, NULL, NULL)) {
                         cycle_options++;
                         if (found &&
@@ -1916,7 +1948,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 }
                 continue;
             }
-            if (FIND_FULL_CYCLE_FITTING) {
+            if (FIND_FULL_CYCLE_FITTING && !cubic_exact_cover_mode) {
                 // check that all vertices have been used enough times
                 bool all_vertices_used = true;
                 for (vertex_t i = 0; i < num_vertices; i++) {
@@ -2026,6 +2058,31 @@ void cycle_edge_conflicts_free(void) {
     cycle_edge_conflicts = NULL;
 }
 
+bool candidate_length_possible(cycle_length_t cycle_length,
+                               cycle_index_t cycles_to_use,
+                               length_feasibility_t* length_feasibility,
+                               cycle_index_t required_cycles_to_use) {
+    if (cycle_length > num_edges_remaining) {
+        return false;
+    }
+
+    if (((cycles_to_use - 1) * smallest_cycle_length > num_edges_remaining - cycle_length) ||
+        ((cycles_to_use - 1) * length_feasibility->max_cycle_length <
+         num_edges_remaining - cycle_length)) {
+        return false;
+    }
+
+    cycle_index_t remaining_required_cycles_to_use = required_cycles_to_use;
+    if (remaining_required_cycles_to_use > 0 &&
+        cycle_length == length_feasibility->required_length) {
+        remaining_required_cycles_to_use--;
+    }
+    return cached_length_composition_possible(length_feasibility,
+                                              num_edges_remaining - cycle_length,
+                                              cycles_to_use - 1,
+                                              remaining_required_cycles_to_use);
+}
+
 void cycle_set_edge_conflicts(vertex_t* cycle, cycle_length_t cycle_length,
                               cycle_index_t max_cycles_per_edge, cbe_t cycles_by_edge,
                               bool used) {
@@ -2070,24 +2127,13 @@ bool cycle_search_candidate_usable(bool* used_cycles, degree_t* vertex_uses,
 
     cycle_length_t cycle_length;
     vertex_t* cycle = cycle_get(cycles, max_cycle_length, cycle_index, &cycle_length);
-    if (cycle_length > num_edges_remaining) {
-        return false;
-    }
-
-    if (((cycles_to_use - 1) * smallest_cycle_length > num_edges_remaining - cycle_length) ||
-        ((cycles_to_use - 1) * max_cycle_length < num_edges_remaining - cycle_length)) {
-        return false;
-    }
-
     cycle_index_t remaining_required_cycles_to_use = required_cycles_to_use;
     if (remaining_required_cycles_to_use > 0 &&
         cycle_length == length_feasibility->required_length) {
         remaining_required_cycles_to_use--;
     }
-    if (!cached_length_composition_possible(length_feasibility,
-                                            num_edges_remaining - cycle_length,
-                                            cycles_to_use - 1,
-                                            remaining_required_cycles_to_use)) {
+    if (!candidate_length_possible(cycle_length, cycles_to_use, length_feasibility,
+                                   required_cycles_to_use)) {
         return false;
     }
 
@@ -2095,7 +2141,8 @@ bool cycle_search_candidate_usable(bool* used_cycles, degree_t* vertex_uses,
         (void)adjacency_list;
         assert(cycle_edge_conflicts != NULL, "Error: cycle edge conflicts not initialized\n");
         if (cycle_edge_conflicts[cycle_index] != 0 ||
-            !cycle_vertex_uses_fit(cycle, cycle_length, vertex_uses)) {
+            (!cubic_exact_cover_mode &&
+             !cycle_vertex_uses_fit(cycle, cycle_length, vertex_uses))) {
             return false;
         }
     }
@@ -2627,6 +2674,11 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
            " directed edges, expected %" PRIcycle_index_t "\n",
            edge_id, num_directed_edges);
 
+    cubic_exact_cover_mode = VERTEX_DEGREE == 3;
+    for (vertex_t i = 0; i < *num_vertices && cubic_exact_cover_mode; i++) {
+        cubic_exact_cover_mode = vertex_degrees[i] == 3;
+    }
+
     fclose(fp);
 
     if (PRINT_PROGRESS) {
@@ -2678,6 +2730,7 @@ void graph_free(adj_t adjacency_list) {
     directed_edge_lookup_capacity = 0;
     num_directed_edges = 0;
     num_edges_remaining = 0;
+    cubic_exact_cover_mode = false;
     automorphism_list_free(&graph_automorphisms);
 }
 
