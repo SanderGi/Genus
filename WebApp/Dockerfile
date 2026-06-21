@@ -1,5 +1,5 @@
 # Compile C code first so we don't need to keep the C compiler in the final image
-FROM gcc as builder
+FROM gcc AS builder
 
 WORKDIR /app
 
@@ -10,13 +10,24 @@ RUN gcc -DONLY_SIMPLE_CYCLES=1 -O3 -ftree-vectorize -funroll-loops -Wall -std=c1
 
 COPY MultiGenus/multi_genus_longtype.c multi_genus_longtype.c
 RUN gcc -O3 -DLONG -march=native -o multi_genus_128 multi_genus_longtype.c -lm
+COPY MultiGenus/planar_cutthroughedges_draw.c planar_cutthroughedges_draw.c
+RUN gcc -std=gnu89 -O3 -o planar_cutthroughedges_draw planar_cutthroughedges_draw.c -lm
 
 # Now we take a minimal python image and copy the compiled C binary to it
 FROM python:3.9-slim
 
 WORKDIR /app
 
-COPY --from=builder /app/CalcGenus /app/CalcGenusSC /app/multi_genus_128 /app/ 
+COPY --from=builder /app/CalcGenus /app/CalcGenusSC /app/multi_genus_128 /app/planar_cutthroughedges_draw /app/
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        poppler-utils \
+        texlive-latex-base \
+        texlive-latex-extra \
+        texlive-latex-recommended \
+        texlive-pictures \
+    && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
 COPY WebApp/requirements.txt requirements.txt
@@ -30,4 +41,3 @@ COPY WebApp/static/* static/
 EXPOSE 8080
 
 CMD gunicorn --workers=$((2 * $(python -c 'import os; print(os.cpu_count())') + 1)) --threads=1 --bind=0.0.0.0:8080 --timeout 600 main:app
-

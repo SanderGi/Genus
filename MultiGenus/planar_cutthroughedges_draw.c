@@ -16,7 +16,7 @@
 #define MAXVAL 50  /* maximale valenz */
 #define MAXFACE 50 /* maximale Flaechengroesse 255 */
 #define MAXCYC 40 // maximum number of cycles looked for
-#define MAXCOLOURGENUS 5 // otherwise the colour list must be updated -- already for genus 5 (10+1 colours) colours are sometimes difficult to distinguish
+#define MAXCOLOURGENUS 5 // for larger genus, keep labels and generate additional colours programmatically
 #define MAXGENUS 20
 #define NOTINGRAPH ((-5)*MAXGENUS)
 #define RADIUS (100.0)
@@ -91,7 +91,7 @@ int nullvertices, numcycles;
 int available_edges, used_edges;
 KANTE *edgebuffer;
 KANTE *edgelist[MAXEDGES];
-int maxcross=0, blackwhite=0, drawvertexnumbers=1, labels=0, straight=0, text=0;
+int maxcross=0, blackwhite=0, forceblackwhite=0, drawvertexnumbers=1, labels=0, straight=0, text=0;
 int chosenvertex=0, chosenedge[2]={0};
 int firstpage=1;
 char allowedcut[SMALLN][SMALLN];
@@ -150,6 +150,37 @@ static unsigned int vmarks[N+1];
 int dbcycle[100],dbcyclelength;
 
 char colours[11][16]={"black","blue","red","green","orange","olive","gray","pink","yellow","lime","cyan"};
+
+char *cyclecolour(int cyclenumber)
+{
+  static char generated[8][64];
+  static int slot=0;
+  int n, red, green, blue;
+
+  n=abs(cyclenumber);
+  if (forceblackwhite) return "gray";
+  if (n<11) return colours[n];
+
+  slot=(slot+1)%8;
+  red=(53*n+97)%206+50;
+  green=(97*n+53)%206+50;
+  blue=(149*n+29)%206+50;
+  snprintf(generated[slot],64,"color={rgb,255:red,%d;green,%d;blue,%d}",red,green,blue);
+  return generated[slot];
+}
+
+char *cyclelabel(int cyclenumber)
+{
+  static char labels[8][16];
+  static int slot=0;
+  int n;
+
+  n=abs(cyclenumber);
+  slot=(slot+1)%8;
+  if (n<=26) snprintf(labels[slot],16,"%c",'A'-1+n);
+  else snprintf(labels[slot],16,"%d",n);
+  return labels[slot];
+}
 
 /***************************SCHREIBEEDGE********************************/
 
@@ -1727,11 +1758,11 @@ void output(double coord[][2])
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){A}\n",c[0]*hoekmove, c[1]*hoekmove );
 	      rotate_clockwise_to(c,coord[run2->name],-rot_angle);
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){B}\n",c[0]*hoekmove, c[1]*hoekmove);
-	      if (straight) fprintf(stdout,"\\draw[->,line width=0.9mm, gray](A) to (B);\n");
+	      if (straight) fprintf(stdout,"\\draw[->,line width=0.9mm, %s](A) to (B);\n",cyclecolour(run->cyclenumber));
 	      else
 		{
 		  fprintf(stdout,"\\tkzDefPoint(0.0,0.0){C}\n");
-		  fprintf(stdout,"\\tkzDrawArc[->,line width=0.9mm, gray](C,B)(A)\n");
+		  fprintf(stdout,"\\tkzDrawArc[->,line width=0.9mm, %s](C,B)(A)\n",cyclecolour(run->cyclenumber));
 		}
 	    }
 	  else
@@ -1741,26 +1772,26 @@ void output(double coord[][2])
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){A}\n",c[0]*hoekmove, c[1]*hoekmove );
 	      rotate_clockwise_to(c,coord[run2->name],-rot_angle);
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){B}\n",c[0]*hoekmove, c[1]*hoekmove);
-	      if (straight) fprintf(stdout,"\\draw[<-,line width=0.9mm, gray](A) to (B);\n");
+	      if (straight) fprintf(stdout,"\\draw[<-,line width=0.9mm, %s](A) to (B);\n",cyclecolour(run->cyclenumber));
 	      else
 		{
 		  fprintf(stdout,"\\tkzDefPoint(0.0,0.0){C}\n");
-		  fprintf(stdout,"\\tkzDrawArc[<-,line width=0.9mm, gray](C,B)(A)\n");
+		  fprintf(stdout,"\\tkzDrawArc[<-,line width=0.9mm, %s](C,B)(A)\n",cyclecolour(run->cyclenumber));
 		}
 	    }
 	  if (straight)
 	    {
 	      rotate_clockwise_to(c,coord[run->ursprung],(M_PI)/((double)(numcycles)));
-	      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",
-				  scale3,(c[0]+coord[run->ursprung][0])*0.6,(c[1]+coord[run->ursprung][1])*0.59,'A'-1+abs(run->cyclenumber));
-	      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",
-			   scale3,(c[0]+coord[run->ursprung][0])*0.56,(c[1]+coord[run->ursprung][1])*0.55,'A'-1+abs(run->cyclenumber));
+		      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",
+					  scale3,(c[0]+coord[run->ursprung][0])*0.6,(c[1]+coord[run->ursprung][1])*0.59,cyclelabel(run->cyclenumber));
+		      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",
+				   scale3,(c[0]+coord[run->ursprung][0])*0.56,(c[1]+coord[run->ursprung][1])*0.55,cyclelabel(run->cyclenumber));
 	    }
 	  else
 	    {
 	      rotate_clockwise_to(c,coord[run->ursprung],(M_PI)/((double)(2*numcycles)));
-	      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",scale3,c[0]*1.15,c[1]*1.15,'A'-1+abs(run->cyclenumber));
-	      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",scale3,c[0]*1.06,c[1]*1.06,'A'-1+abs(run->cyclenumber));
+		      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",scale3,c[0]*1.15,c[1]*1.15,cyclelabel(run->cyclenumber));
+		      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",scale3,c[0]*1.06,c[1]*1.06,cyclelabel(run->cyclenumber));
 	    }
 	  run=run2->invers->next;
 	}
@@ -2487,7 +2518,7 @@ void usage(char str[])
   fprintf(stderr,"Option f: take a point inside a face as the common point of the cutting cycles.\n");
   fprintf(stderr,"In case both options are given, two drawings of each input graph are produced -- one with face center, one with vertex center.\n\n");
   fprintf(stderr,"Option b: for black and white -- use labels A, B, C for the edges to be identified instead of colours (default).\n");
-  fprintf(stderr," \t For genus 6 or larger this is done automatically as colours would be hard to distinguish.\n\n");
+  fprintf(stderr," \t For genus 6 or larger labels are added automatically, but colours are still used.\n\n");
   fprintf(stderr,"Option n: Do not give vertex numbers, but just draw black dots.\n\n");
   fprintf(stderr,"Option l: Write small labels at the boundary -- indicating where edges crossing the boundary will finally go to.\n\n");
   fprintf(stderr,"Option: mx: (with x a number) first look only for cuts that never cut the same edge twice -- in the drawing no edge of the graph crosses the boundary twice.\n");
@@ -2554,7 +2585,7 @@ int main(int argc, char *argv[])
     {
       if (argv[i][0]=='m') { maxcross=atoi(argv[i]+1); }
       else if (argv[i][0]=='n') { drawvertexnumbers=0;}
-      else if (argv[i][0]=='b') { lblackwhite=1; }
+      else if (argv[i][0]=='b') { lblackwhite=1; forceblackwhite=1; }
       else if (argv[i][0]=='f') facestart=1;
       else if (argv[i][0]=='v') vertexstart=1;
       else if (argv[i][0]=='p') progress=1;
@@ -2654,6 +2685,3 @@ for (;lesecode(code,&lauf,stdin);)
 return(0);
 
 }
-
-
-

@@ -1,4 +1,5 @@
 const algorithm = document.getElementById("algorithm");
+const outputFormat = document.getElementById("output_format");
 const adjlist = document.getElementById("adjlist");
 const calculate = document.getElementById("calculate");
 const stderr = document.getElementById("stderr");
@@ -15,6 +16,7 @@ const progressRegex = /\[\s*#*\s*\]\s*\d+%/g;
 
 calculate.onclick = () => {
   const alg = algorithm.value;
+  const format = outputFormat.value;
   const adj = [];
   for (const line of adjlist.value.trim().split("\n")) {
     const neighbors = line
@@ -42,7 +44,9 @@ calculate.onclick = () => {
   let laststderr = "";
   let progress = "";
   socket.onmessage = async (event) => {
-    const [type, data] = event.data.split(":", 2);
+    const separator = event.data.indexOf(":");
+    const type = separator === -1 ? event.data : event.data.slice(0, separator);
+    const data = separator === -1 ? "" : event.data.slice(separator + 1);
 
     if (type === "STDERR") {
       const line = data + "<br>";
@@ -61,11 +65,27 @@ calculate.onclick = () => {
       stdout.innerHTML += data + "<br>";
     } else if (type === "TIME") {
       runtime.innerHTML = data;
+    } else if (type === "JSON") {
+      stdout.innerHTML = "";
+      const pre = document.createElement("pre");
+      try {
+        pre.textContent = JSON.stringify(JSON.parse(data), null, 2);
+      } catch {
+        pre.textContent = data;
+      }
+      stdout.appendChild(pre);
+    } else if (type === "IMAGE") {
+      stdout.innerHTML = "";
+      const image = document.createElement("img");
+      image.src = data;
+      image.alt = "Graph embedding drawing";
+      image.className = "embedding-image";
+      stdout.appendChild(image);
     }
   };
 
   socket.onopen = () => {
-    socket.send(JSON.stringify({ adj, alg }));
+    socket.send(JSON.stringify({ adj, alg, outputFormat: format }));
   };
 
   socket.onclose = () => {

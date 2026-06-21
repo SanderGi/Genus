@@ -1,0 +1,6 @@
+.embedding-image {
+    display: block;
+    width: min(100%, 760px);
+    max-height: 68vh;
+    object-fit: contain;
+}

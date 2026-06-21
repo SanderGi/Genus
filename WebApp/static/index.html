@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CalcGenus</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <h1>Practical Algorithm for Graph Embedding (PAGE)</h1>
@@ -13,6 +14,16 @@
             <option value="page">PAGE</option>
             <option value="page_sc">PAGE Simple-Cycle-Upperbound</option>
             <option value="multi_genus">MULTI_GENUS</option>
+            <option value="none">None</option>
+        </select>
+    </label>
+    <br>
+    <label>
+        Output format:
+        <select id="output_format">
+            <option value="text">Text</option>
+            <option value="json">JSON</option>
+            <option value="drawing">Drawing</option>
         </select>
     </label>
     <p>Enter your adjacency list below to calculate the genus of the graph.</p>
