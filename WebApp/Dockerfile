@@ -18,9 +18,9 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-COPY --from=builder /app/CalcGenus /app/CalcGenusSC /app/multi_genus_128 /app/planar_cutthroughedges_draw /app/
-
-RUN apt-get update \
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update \
     && apt-get install -y --no-install-recommends \
         poppler-utils \
         texlive-latex-base \
@@ -33,6 +33,9 @@ RUN apt-get update \
 COPY WebApp/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy compiled C binaries
+COPY --from=builder /app/CalcGenus /app/CalcGenusSC /app/multi_genus_128 /app/planar_cutthroughedges_draw /app/
+    
 # Copy the rest of the files
 COPY CalcGenus/adjacency_lists/* adjacency_lists/
 COPY WebApp/main.py main.py

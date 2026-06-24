@@ -485,6 +485,36 @@ def render_multicode_png(multicode):
         return crop_png((tmpdir / "embedding.png").read_bytes())
 
 
+def render_multicode_obj(multicode):
+    draw_cmd = find_executable(
+        "./planar_cutthroughedges_draw",
+        "../MultiGenus/planar_cutthroughedges_draw",
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        prefix = tmpdir / "surface"
+        draw = subprocess.run(
+            [draw_cmd, "f", "l", "o", str(prefix)],
+            input=multicode,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if draw.returncode != 0:
+            raise RuntimeError(draw.stderr.decode("utf-8", errors="replace"))
+
+        obj_path = tmpdir / "surface.obj"
+        mtl_path = tmpdir / "surface.mtl"
+        if not obj_path.exists():
+            raise RuntimeError("3D exporter did not write the expected OBJ file")
+
+        return {
+            "obj": obj_path.read_text(encoding="utf-8", errors="replace"),
+            "mtl": mtl_path.read_text(encoding="utf-8", errors="replace")
+            if mtl_path.exists()
+            else "",
+        }
+
 def suppress_latex_page_numbers(output):
     text = output.decode("utf-8", errors="replace")
     if "\\pagestyle{empty}" in text:
@@ -727,6 +757,32 @@ def stream(ws):
                     "IMAGE:data:image/png;base64,"
                     + base64.b64encode(png).decode("ascii")
                 )
+        if runtime is not None:
+            ws.send("TIME:" + f"{runtime} seconds")
+    elif output_format == "3d":
+        runtime = None
+
+        def send_status(line):
+            ws.send("STDERR:" + line)
+
+        try:
+            result, multicode, _, _, runtime = run_algorithm_capture(
+                algorithm, adj_list, status_callback=send_status
+            )
+        except Exception as exc:
+            result = {"error": str(exc)}
+            multicode = None
+        if multicode is None:
+            ws.send("JSON:" + json.dumps(result, sort_keys=True))
+        else:
+            try:
+                model = render_multicode_obj(multicode)
+            except Exception as exc:
+                ws.send("JSON:" + json.dumps({"error": str(exc)}, sort_keys=True))
+            else:
+                if "genus" in result:
+                    model["genus"] = result["genus"]
+                ws.send("MODEL:" + json.dumps(model))
         if runtime is not None:
             ws.send("TIME:" + f"{runtime} seconds")
     else:

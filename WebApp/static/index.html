@@ -24,6 +24,7 @@
             <option value="text">Text</option>
             <option value="json">JSON</option>
             <option value="drawing">Drawing</option>
+            <option value="3d">3D</option>
         </select>
     </label>
     <p>Enter your adjacency list below to calculate the genus of the graph.</p>
@@ -44,6 +45,13 @@
     <h2>Runtime:</h2>
     <p id="runtime"></p>
 
-    <script src="script.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "/vendor/three.js"
+            }
+        }
+    </script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>

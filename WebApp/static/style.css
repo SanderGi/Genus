@@ -4,3 +4,15 @@
     max-height: 68vh;
     object-fit: contain;
 }
+
+.model-viewer {
+    width: min(100%, 900px);
+    height: min(72vh, 720px);
+    min-height: 420px;
+    border: 1px solid #d5d5d0;
+    background: #f7f7f4;
+}
+
+.model-viewer canvas {
+    display: block;
+}
