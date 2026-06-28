@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K3,3 Rotation Systems</title>
+    <link rel="stylesheet" href="k33_rotation_animation.css">
+</head>
+<body>
+    <main class="app-shell">
+        <section class="stage" aria-label="K3,3 rotation system animation">
+            <div id="viewer" class="viewer"></div>
+
+            <div class="topbar">
+                <div class="action-stack">
+                    <button id="show_embedding" class="primary-action" type="button"></button>
+                    <div class="playback-controls" aria-label="Animation playback controls">
+                        <button id="playback_start" class="playback-button" type="button" aria-label="Skip to start">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M5 5v14"></path>
+                                <path d="M19 6l-7 6 7 6"></path>
+                                <path d="M12 6l-7 6 7 6"></path>
+                            </svg>
+                        </button>
+                        <button id="playback_back" class="playback-button" type="button" aria-label="Step backward">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M15 6l-7 6 7 6"></path>
+                            </svg>
+                        </button>
+                        <button id="playback_forward" class="playback-button" type="button" aria-label="Step forward">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M9 6l7 6-7 6"></path>
+                            </svg>
+                        </button>
+                        <button id="playback_end" class="playback-button" type="button" aria-label="Skip to end">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M19 5v14"></path>
+                                <path d="M5 6l7 6-7 6"></path>
+                                <path d="M12 6l7 6-7 6"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="status" class="status" aria-live="polite"></div>
+            </div>
+
+            <aside class="rotation-panel" aria-label="Active rotation system">
+                <div class="panel-title">
+                    <span id="rotation_title"></span>
+                    <span id="genus_badge" class="genus-badge"></span>
+                </div>
+                <div id="rotation_list" class="rotation-list"></div>
+            </aside>
+
+            <div class="slider-panel">
+                <label for="rotation_slider" class="slider-label">
+                    <span id="slider_label"></span>
+                </label>
+                <div class="slider-controls">
+                    <input id="rotation_slider" type="range" min="0" max="63" value="0" step="1">
+                    <input id="rotation_number" class="rotation-number" type="number" min="1" max="64" value="1" step="1" aria-label="Rotation number">
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "/vendor/three.js"
+            }
+        }
+    </script>
+    <script type="module" src="k33_rotation_animation.js"></script>
+</body>
+</html>
