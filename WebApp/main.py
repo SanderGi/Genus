@@ -774,6 +774,20 @@ def stream(ws):
             multicode = None
         if multicode is None:
             ws.send("JSON:" + json.dumps(result, sort_keys=True))
+        elif result.get("genus", 0) > 1:
+            ws.send(
+                "JSON:"
+                + json.dumps(
+                    {
+                        "error": (
+                            "3D output is currently supported only for genus 0 "
+                            "and genus 1 embeddings."
+                        ),
+                        "genus": result["genus"],
+                    },
+                    sort_keys=True,
+                )
+            )
         else:
             try:
                 model = render_multicode_obj(multicode)

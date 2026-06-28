@@ -11,3 +11,5 @@ MultiGenus/multi_genus_longtype_128
 MultiGenus/planar_cutthroughedges_draw
 __pycache__
 genus_properties
+.venv
+.matplotlib-cache
