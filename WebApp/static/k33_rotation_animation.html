@@ -44,13 +44,19 @@
                 <div id="status" class="status" aria-live="polite"></div>
             </div>
 
-            <aside class="rotation-panel" aria-label="Active rotation system">
-                <div class="panel-title">
-                    <span id="rotation_title"></span>
-                    <span id="genus_badge" class="genus-badge"></span>
-                </div>
-                <div id="rotation_list" class="rotation-list"></div>
-            </aside>
+            <div class="side-stack">
+                <aside class="rotation-panel" aria-label="Active rotation system">
+                    <div class="panel-title">
+                        <span id="rotation_title"></span>
+                        <span id="genus_badge" class="genus-badge"></span>
+                    </div>
+                    <div id="rotation_list" class="rotation-list"></div>
+                </aside>
+
+                <aside class="explanation-card" aria-label="Rotation system explanation">
+                    <p id="explanation_text"></p>
+                </aside>
+            </div>
 
             <div class="slider-panel">
                 <label for="rotation_slider" class="slider-label">

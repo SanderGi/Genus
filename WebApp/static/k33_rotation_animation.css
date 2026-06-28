@@ -147,19 +147,35 @@ input {
     display: none;
 }
 
-.rotation-panel {
+.side-stack {
     position: absolute;
     top: 18px;
     right: 18px;
     z-index: 5;
     width: 230px;
     max-width: calc(100vw - 36px);
+    display: grid;
+    gap: 10px;
+}
+
+.rotation-panel,
+.explanation-card {
     padding: 14px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--panel-strong);
     box-shadow: 0 12px 34px rgba(30, 36, 43, 0.14);
     backdrop-filter: blur(16px);
+}
+
+.explanation-card {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.explanation-card p {
+    margin: 0;
 }
 
 .panel-title {
@@ -321,7 +337,7 @@ input {
         align-items: stretch;
     }
 
-    .rotation-panel {
+    .side-stack {
         top: 120px;
         left: 12px;
         right: 12px;

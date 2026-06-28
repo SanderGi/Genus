@@ -23,6 +23,11 @@ const EDGES = [];
 for (let left = 0; left < 3; left++) {
   for (let right = 3; right < 6; right++) EDGES.push([left, right]);
 }
+const INTRO_EXPLANATION = "A rotation system defines a cyclic ordering of the incident edges (darts) for each vertex. Click each line to view.";
+const START_TRACE_EXPLANATION = "We start by choosing an arbitrary dart.";
+const FINISHED_FACE_EXPLANATION = "We have finished a face, so we choose an arbitrary unused dart.";
+const ALL_DARTS_EXPLANATION = "We have used all the darts. Now we have the faces of a 3D surface which is formed by gluing the faces at matching edges.";
+const FINAL_EXPLANATION = "In the final embedding, the cyclic ordering of the rotation system is oriented following the right-hand rule (counter-clockwise). Click each line to see.";
 
 const el = {
   viewer: document.getElementById("viewer"),
@@ -35,6 +40,7 @@ const el = {
   rotationTitle: document.getElementById("rotation_title"),
   genusBadge: document.getElementById("genus_badge"),
   rotationList: document.getElementById("rotation_list"),
+  explanationText: document.getElementById("explanation_text"),
   slider: document.getElementById("rotation_slider"),
   rotationNumber: document.getElementById("rotation_number"),
   sliderLabel: document.getElementById("slider_label"),
@@ -177,12 +183,48 @@ function setRotation(index) {
   el.showEmbedding.textContent = `Show Genus ${system.genus} Embedding`;
   el.showEmbedding.disabled = false;
   el.status.textContent = "";
+  setExplanation(INTRO_EXPLANATION);
   buildRotationList(system);
   resetToFlatScene();
 }
 
 function currentSystem() {
   return systems[state.index];
+}
+
+function setExplanation(text) {
+  el.explanationText.textContent = text;
+}
+
+function rotationOrderText(order) {
+  return `(${order.join(", ")})`;
+}
+
+function vertexRotationExplanation(system, vertex) {
+  return `The local rotation at vertex ${vertex} has cyclic ordering ${rotationOrderText(system.rotation[vertex])}.`;
+}
+
+function nextAfterIncoming(system, vertex, incoming) {
+  const rotation = system.rotation[vertex];
+  const index = rotation.indexOf(incoming);
+  if (index === -1) return rotation[0];
+  return rotation[(index + 1) % rotation.length];
+}
+
+function traceStepExplanation(system, step) {
+  if (step <= 0) return START_TRACE_EXPLANATION;
+  step -= 1;
+  const timeline = traceTimeline(system);
+  const current = timeline[step];
+  if (!current) return ALL_DARTS_EXPLANATION;
+  const face = system.faces[current.faceIndex];
+  const isLastDartInFace = current.dartIndex === face.length - 1;
+  const isLastDartOverall = step === timeline.length - 1;
+  if (isLastDartInFace && !isLastDartOverall) return FINISHED_FACE_EXPLANATION;
+  const x = current.dart.to;
+  const y = current.dart.from;
+  const z = nextAfterIncoming(system, x, y);
+  return `We entered ${x} from ${y} so the next vertex after ${y} in ${x}'s local rotation is ${z}.`;
 }
 
 function buildRotationList(system) {
@@ -279,6 +321,7 @@ async function playVertexRotation(vertex) {
   clearGroup(state.vertexHighlightGroup);
   highlightVertex(vertex);
   const system = currentSystem();
+  setExplanation(vertexRotationExplanation(system, vertex));
   const darts = system.rotation[vertex].map((to) => ({ from: vertex, to }));
   if (state.phase === "surface") animateCounterclockwiseArrow(vertex, token);
 
@@ -301,6 +344,7 @@ async function showEmbedding() {
   state.manualMode = false;
   state.manualStep = -1;
   resetToFlatScene();
+  setExplanation(INTRO_EXPLANATION);
   el.showEmbedding.disabled = true;
   el.slider.disabled = true;
   el.rotationNumber.disabled = true;
@@ -320,6 +364,7 @@ async function showEmbedding() {
   await traceFaces(system, token);
   if (token !== state.animationToken) return;
 
+  setExplanation(ALL_DARTS_EXPLANATION);
   el.status.textContent = "Showing traced faces";
   await Promise.all([
     animateCamera(TRACED_FACES_CAMERA_POSITION, TRACED_FACES_CAMERA_TARGET, 980),
@@ -357,6 +402,7 @@ async function showEmbedding() {
   state.phase = "surface";
   state.manualMode = false;
   state.manualStep = traceTimeline(system).length + 1;
+  setExplanation(FINAL_EXPLANATION);
   clearGroup(state.highlightGroup);
   clearGroup(state.traceGroup);
   clearGroup(state.vertexHighlightGroup);
@@ -405,6 +451,7 @@ async function renderManualStep(system, step, token, options = {}) {
   if (state.manualStep === -1) {
     state.manualMode = false;
     resetToFlatScene();
+    setExplanation(INTRO_EXPLANATION);
     el.status.textContent = "";
     return;
   }
@@ -413,6 +460,7 @@ async function renderManualStep(system, step, token, options = {}) {
     resetManualTraceScene();
     renderTracePrefix(system, state.manualStep);
     const current = timeline[state.manualStep];
+    setExplanation(traceStepExplanation(system, state.manualStep));
     el.status.textContent = `Tracing face ${current.faceIndex + 1} / ${system.faces.length}`;
     return;
   }
@@ -421,6 +469,7 @@ async function renderManualStep(system, step, token, options = {}) {
     resetManualTraceScene();
     if (animateBoundary && previousStep === facesStep - 1) {
       renderTracePrefix(system, timeline.length - 1, { highlightCurrent: false });
+      setExplanation(ALL_DARTS_EXPLANATION);
       el.status.textContent = "Showing traced faces";
       await Promise.all([
         animateCamera(TRACED_FACES_CAMERA_POSITION, TRACED_FACES_CAMERA_TARGET, 980),
@@ -431,6 +480,7 @@ async function renderManualStep(system, step, token, options = {}) {
     renderLiftedFaces(system);
     setGroupOpacity(state.flatGroup, 0.18);
     setCameraPose(TRACED_FACES_CAMERA_POSITION, TRACED_FACES_CAMERA_TARGET);
+    setExplanation(ALL_DARTS_EXPLANATION);
     el.status.textContent = "Showing traced faces";
     return;
   }
@@ -465,6 +515,7 @@ async function renderManualStep(system, step, token, options = {}) {
     if (token !== state.animationToken || !state.manualMode) return;
     state.manualMode = false;
     state.manualStep = finalStep;
+    setExplanation(FINAL_EXPLANATION);
     clearActiveList();
     clearGroup(state.highlightGroup);
     clearGroup(state.traceGroup);
@@ -501,6 +552,7 @@ async function renderManualStep(system, step, token, options = {}) {
   el.status.textContent = "";
   state.manualMode = false;
   state.manualStep = finalStep;
+  setExplanation(FINAL_EXPLANATION);
   el.showEmbedding.disabled = false;
   el.slider.disabled = false;
   el.rotationNumber.disabled = false;
@@ -572,16 +624,23 @@ async function traceFaces(system, token) {
   for (let faceIndex = 0; faceIndex < system.faces.length; faceIndex++) {
     const face = system.faces[faceIndex];
     if (token !== state.animationToken) return;
+    if (faceIndex === 0) setExplanation(START_TRACE_EXPLANATION);
     el.status.textContent = `Tracing face ${faceIndex + 1} / ${system.faces.length}`;
     for (const dart of face) {
       step += 1;
       if (token !== state.animationToken) return;
       state.manualStep = step;
+      if (step > 0) setExplanation(traceStepExplanation(system, step));
       addTraceDart(dart, FACE_COLORS[faceIndex % FACE_COLORS.length]);
       highlightDart(dart, FACE_COLORS[faceIndex % FACE_COLORS.length]);
       await delay(620);
     }
     addFaceCycle(face, faceIndex, system.faces.length);
+    if (faceIndex < system.faces.length - 1) {
+      setExplanation(FINISHED_FACE_EXPLANATION);
+    } else {
+      setExplanation(ALL_DARTS_EXPLANATION);
+    }
     await delay(290);
   }
 }
