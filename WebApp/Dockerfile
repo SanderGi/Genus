@@ -39,7 +39,7 @@ COPY --from=builder /app/CalcGenus /app/CalcGenusSC /app/multi_genus_128 /app/pl
 # Copy the rest of the files
 COPY CalcGenus/adjacency_lists/* adjacency_lists/
 COPY WebApp/main.py main.py
-COPY WebApp/static/* static/
+COPY WebApp/static/ static/
 
 EXPOSE 8080
 
