@@ -165,7 +165,9 @@ def genus_from_rotation(adj_list):
 
 
 def parse_page_solution(stdout_text, stderr_text, adj_list):
-    genus_match = PAGE_GENUS_RE.search(stdout_text) or PAGE_GENUS_FOUND_RE.search(stdout_text)
+    genus_match = PAGE_GENUS_RE.search(stdout_text) or PAGE_GENUS_FOUND_RE.search(
+        stdout_text
+    )
     if not genus_match:
         genus_match = PAGE_GENUS_RE.search(stderr_text)
     if not genus_match:
@@ -206,13 +208,17 @@ def parse_page_solution(stdout_text, stderr_text, adj_list):
         current = first
         for _ in range(1, len(normalized_neighbors)):
             if current not in next_neighbor[vertex]:
-                raise ValueError(f"Could not reconstruct rotation at vertex {vertex + start}")
+                raise ValueError(
+                    f"Could not reconstruct rotation at vertex {vertex + start}"
+                )
             current = next_neighbor[vertex][current]
             ordered.append(current)
         if next_neighbor[vertex].get(current) != first:
             raise ValueError(f"Rotation at vertex {vertex + start} is not cyclic")
         if set(ordered) != set(normalized_neighbors):
-            raise ValueError(f"Rotation at vertex {vertex + start} does not match input")
+            raise ValueError(
+                f"Rotation at vertex {vertex + start} does not match input"
+            )
         rotation.append([neighbor + start for neighbor in ordered])
 
     return genus, rotation
@@ -323,10 +329,16 @@ def run_algorithm_capture(algorithm, adj_list, status_callback=None):
     if algorithm == "none":
         start_time = time.perf_counter()
         genus = genus_from_rotation(adj_list)
-        return {
-            "genus": genus,
-            "rotation_system": adj_list,
-        }, rotation_to_multicode(adj_list)[0], "", "", time.perf_counter() - start_time
+        return (
+            {
+                "genus": genus,
+                "rotation_system": adj_list,
+            },
+            rotation_to_multicode(adj_list)[0],
+            "",
+            "",
+            time.perf_counter() - start_time,
+        )
 
     with tempfile.NamedTemporaryFile(mode="w") as f:
         if algorithm == "page":
@@ -402,18 +414,30 @@ def run_algorithm_capture(algorithm, adj_list, status_callback=None):
     stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
     stdout_text = stdout_bytes.decode("utf-8", errors="replace")
     if returncode != 0:
-        return {
-            "error": f"{algorithm} exited with status {returncode}",
-            "stderr": stderr_text,
-        }, None, stdout_text, stderr_text, runtime
+        return (
+            {
+                "error": f"{algorithm} exited with status {returncode}",
+                "stderr": stderr_text,
+            },
+            None,
+            stdout_text,
+            stderr_text,
+            runtime,
+        )
 
     if algorithm == "multi_genus":
         genus_match = MULTIGENUS_RE.search(stderr_text)
         if not genus_match:
-            return {
-                "error": "MULTI_GENUS did not report a genus",
-                "stderr": stderr_text,
-            }, None, stdout_text, stderr_text, runtime
+            return (
+                {
+                    "error": "MULTI_GENUS did not report a genus",
+                    "stderr": stderr_text,
+                },
+                None,
+                stdout_text,
+                stderr_text,
+                runtime,
+            )
         start = graph_label_start(adj_list)
         rotation = decode_multicode_rotation(stdout_bytes, label_start=start)
         result = {
@@ -425,17 +449,29 @@ def run_algorithm_capture(algorithm, adj_list, status_callback=None):
     try:
         genus, rotation = parse_page_solution(stdout_text, stderr_text, adj_list)
     except ValueError as exc:
-        return {
-            "error": str(exc),
-            "stdout": stdout_text,
-            "stderr": stderr_text,
-        }, None, stdout_text, stderr_text, runtime
+        return (
+            {
+                "error": str(exc),
+                "stdout": stdout_text,
+                "stderr": stderr_text,
+            },
+            None,
+            stdout_text,
+            stderr_text,
+            runtime,
+        )
 
     multicode, _ = rotation_to_multicode(rotation)
-    return {
-        "genus": genus,
-        "rotation_system": rotation,
-    }, multicode, stdout_text, stderr_text, runtime
+    return (
+        {
+            "genus": genus,
+            "rotation_system": rotation,
+        },
+        multicode,
+        stdout_text,
+        stderr_text,
+        runtime,
+    )
 
 
 def render_multicode_png(multicode):
@@ -475,7 +511,15 @@ def render_multicode_png(multicode):
         pdf_path = tmpdir / "embedding.pdf"
         png_base = tmpdir / "embedding"
         convert = subprocess.run(
-            ["pdftoppm", "-png", "-singlefile", "-r", "180", str(pdf_path), str(png_base)],
+            [
+                "pdftoppm",
+                "-png",
+                "-singlefile",
+                "-r",
+                "180",
+                str(pdf_path),
+                str(png_base),
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
@@ -510,10 +554,13 @@ def render_multicode_obj(multicode):
 
         return {
             "obj": obj_path.read_text(encoding="utf-8", errors="replace"),
-            "mtl": mtl_path.read_text(encoding="utf-8", errors="replace")
-            if mtl_path.exists()
-            else "",
+            "mtl": (
+                mtl_path.read_text(encoding="utf-8", errors="replace")
+                if mtl_path.exists()
+                else ""
+            ),
         }
+
 
 def suppress_latex_page_numbers(output):
     text = output.decode("utf-8", errors="replace")
@@ -554,8 +601,8 @@ def crop_png(png, background_threshold=250, margin=24):
     if ihdr is None or not idat:
         return png
 
-    width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
-        ">IIBBBBB", ihdr
+    width, height, bit_depth, color_type, compression, filter_method, interlace = (
+        struct.unpack(">IIBBBBB", ihdr)
     )
     if compression != 0 or filter_method != 0 or interlace != 0 or bit_depth != 8:
         return png
@@ -572,7 +619,11 @@ def crop_png(png, background_threshold=250, margin=24):
     for y, row in enumerate(rgba_rows):
         for x in range(width):
             r, g, b, a = row[x * 4 : x * 4 + 4]
-            if a > 0 and (r < background_threshold or g < background_threshold or b < background_threshold):
+            if a > 0 and (
+                r < background_threshold
+                or g < background_threshold
+                or b < background_threshold
+            ):
                 left = min(left, x)
                 top = min(top, y)
                 right = max(right, x)
@@ -665,7 +716,11 @@ def row_to_rgba(row, width, color_type, palette, transparency):
                 raise ValueError("Palette PNG is missing PLTE")
             index = row[x]
             p = index * 3
-            alpha = transparency[index] if transparency and index < len(transparency) else 255
+            alpha = (
+                transparency[index]
+                if transparency and index < len(transparency)
+                else 255
+            )
             rgba = (palette[p], palette[p + 1], palette[p + 2], alpha)
         elif color_type == 4:
             i = x * 2
@@ -681,7 +736,12 @@ def row_to_rgba(row, width, color_type, palette, transparency):
 def encode_rgba_png(width, height, scanlines):
     def chunk(chunk_type, data):
         checksum = binascii.crc32(chunk_type + data) & 0xFFFFFFFF
-        return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", checksum)
+        return (
+            struct.pack(">I", len(data))
+            + chunk_type
+            + data
+            + struct.pack(">I", checksum)
+        )
 
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
     return b"".join(
@@ -759,7 +819,7 @@ def stream(ws):
                 )
         if runtime is not None:
             ws.send("TIME:" + f"{runtime} seconds")
-    elif output_format == "3d":
+    elif output_format in ("3d", "3d_raw"):
         runtime = None
 
         def send_status(line):
@@ -774,7 +834,7 @@ def stream(ws):
             multicode = None
         if multicode is None:
             ws.send("JSON:" + json.dumps(result, sort_keys=True))
-        elif result.get("genus", 0) > 1:
+        elif output_format == "3d" and result.get("genus", 0) > 1:
             ws.send(
                 "JSON:"
                 + json.dumps(

@@ -11,6 +11,8 @@ const SURFACE_CAMERA_POSITION = new THREE.Vector3(0, -4.75, 2.35);
 const SURFACE_CAMERA_TARGET = new THREE.Vector3(0, 0, 0);
 const TORUS_GLUE_DURATION = 1280;
 const TORUS_GLUE_HOLD = 620;
+const GENUS2_REPRESENTATIVE_MASK = 1;
+const GENUS2_MANUAL_LAYOUT_URL = "k33_genus2_manual_layout.json";
 const K33_BASE = [
   [3, 4, 5],
   [3, 4, 5],
@@ -49,6 +51,9 @@ const el = {
 
 const systems = makeRotationSystems();
 const modelCache = new Map();
+const k33Automorphisms = makeK33Automorphisms();
+let genusTwoManualLayoutPromise = null;
+let genusTwoRawModelPromise = null;
 const mobileQuery = window.matchMedia("(max-width: 760px)");
 const state = {
   index: 0,
@@ -68,6 +73,7 @@ const state = {
   surfacePaths: new Map(),
   surfaceVertices: new Map(),
   surfaceCenter: new THREE.Vector3(),
+  surfaceNormalAt: null,
   surfaceStrokeRadius: 0.006,
   finalOpacity: null,
 };
@@ -127,15 +133,19 @@ mobileQuery.addEventListener("change", () => setShowEmbeddingLabel(currentSystem
 function makeRotationSystems() {
   const all = [];
   for (let mask = 0; mask < 64; mask++) {
-    const rotation = K33_BASE.map((neighbors, vertex) => {
-      const ordered = [neighbors[0], neighbors[1], neighbors[2]];
-      if ((mask >> vertex) & 1) return [ordered[0], ordered[2], ordered[1]];
-      return ordered;
-    });
+    const rotation = rotationFromMask(mask);
     const faces = computeFaces(rotation);
     all.push({ index: mask, rotation, faces, genus: genusFromFaces(rotation, faces) });
   }
   return all;
+}
+
+function rotationFromMask(mask) {
+  return K33_BASE.map((neighbors, vertex) => {
+    const ordered = [neighbors[0], neighbors[1], neighbors[2]];
+    if ((mask >> vertex) & 1) return [ordered[0], ordered[2], ordered[1]];
+    return ordered;
+  });
 }
 
 function computeFaces(rotation) {
@@ -342,11 +352,6 @@ async function playVertexRotation(vertex) {
 
 async function showEmbedding() {
   const system = currentSystem();
-  if (system.genus > 1) {
-    el.status.textContent = "Genus 2 3D animation is not supported yet.";
-    return;
-  }
-
   const token = ++state.animationToken;
   state.sequenceToken++;
   state.manualMode = false;
@@ -391,6 +396,7 @@ async function showEmbedding() {
   state.modelGroup = modelGroup.group;
   state.surfacePaths = modelGroup.pathsByEdge;
   state.surfaceVertices = modelGroup.vertexPositions;
+  state.surfaceNormalAt = modelGroup.normalAt || torusNormal;
   state.finalOpacity = modelGroup.setOpacity;
   modelGroup.setOpacity(0);
   scene.add(modelGroup.group);
@@ -423,11 +429,6 @@ async function showEmbedding() {
 
 async function usePlayback(action) {
   const system = currentSystem();
-  if (system.genus > 1) {
-    el.status.textContent = "Genus 2 3D animation is not supported yet.";
-    return;
-  }
-
   state.manualMode = true;
   const token = ++state.animationToken;
   state.sequenceToken++;
@@ -506,6 +507,7 @@ async function renderManualStep(system, step, token, options = {}) {
     state.modelGroup = modelGroup.group;
     state.surfacePaths = modelGroup.pathsByEdge;
     state.surfaceVertices = modelGroup.vertexPositions;
+    state.surfaceNormalAt = modelGroup.normalAt || torusNormal;
     state.finalOpacity = modelGroup.setOpacity;
     modelGroup.setOpacity(0);
     scene.add(modelGroup.group);
@@ -547,6 +549,7 @@ async function renderManualStep(system, step, token, options = {}) {
   state.modelGroup = modelGroup.group;
   state.surfacePaths = modelGroup.pathsByEdge;
   state.surfaceVertices = modelGroup.vertexPositions;
+  state.surfaceNormalAt = modelGroup.normalAt || torusNormal;
   state.finalOpacity = modelGroup.setOpacity;
   modelGroup.setOpacity(1, true);
   scene.add(modelGroup.group);
@@ -993,6 +996,7 @@ async function crossFadeToSurface(setOpacity, token) {
 }
 
 async function getModel(system) {
+  if (system.genus === 2) return getGenusTwoManualModel(system);
   const key = rotationKey(system.rotation);
   if (modelCache.has(key)) return modelCache.get(key);
   const model = await requestModel(system.rotation);
@@ -1000,12 +1004,115 @@ async function getModel(system) {
   return model;
 }
 
-function requestModel(rotation) {
+async function getGenusTwoManualModel(system) {
+  const key = `manual-genus2:${system.index}`;
+  if (modelCache.has(key)) return modelCache.get(key);
+  const [layout, rawModel] = await Promise.all([
+    loadGenusTwoManualLayout(),
+    requestGenusTwoRawModel(),
+  ]);
+  const automorphism = findAutomorphism(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), system.rotation);
+  if (!automorphism) throw new Error("Could not map the genus-2 representative to this rotation system.");
+  const model = {
+    ...rawModel,
+    genus: 2,
+    manualLayout: mapManualLayout(layout, automorphism),
+  };
+  modelCache.set(key, model);
+  return model;
+}
+
+function loadGenusTwoManualLayout() {
+  if (!genusTwoManualLayoutPromise) {
+    genusTwoManualLayoutPromise = fetch(GENUS2_MANUAL_LAYOUT_URL).then((response) => {
+      if (!response.ok) throw new Error("Could not load the saved genus-2 manual layout.");
+      return response.json();
+    });
+  }
+  return genusTwoManualLayoutPromise;
+}
+
+function requestGenusTwoRawModel() {
+  if (!genusTwoRawModelPromise) {
+    genusTwoRawModelPromise = requestModel(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), "3d_raw");
+  }
+  return genusTwoRawModelPromise;
+}
+
+function mapManualLayout(layout, automorphism) {
+  const vertices = new Map();
+  const edges = [];
+  Object.entries(layout.vertices || {}).forEach(([vertex, point]) => {
+    vertices.set(automorphism[Number(vertex)], arrayToVector(point));
+  });
+  Object.entries(layout.edges || {}).forEach(([key, route]) => {
+    const [from, to] = key.split("-").map(Number);
+    const mappedFrom = automorphism[from];
+    const mappedTo = automorphism[to];
+    const points = [
+      arrayToVector(layout.vertices[String(from)]),
+      ...route.map(arrayToVector),
+      arrayToVector(layout.vertices[String(to)]),
+    ];
+    edges.push({
+      key: edgeKey(mappedFrom, mappedTo),
+      ends: [mappedFrom, mappedTo],
+      segment: [mappedFrom, mappedTo],
+      points,
+    });
+  });
+  return { vertices, edges };
+}
+
+function findAutomorphism(sourceRotation, targetRotation) {
+  for (const permutation of k33Automorphisms) {
+    if (rotationsMatch(applyAutomorphism(sourceRotation, permutation), targetRotation)) return permutation;
+  }
+  return null;
+}
+
+function applyAutomorphism(rotation, permutation) {
+  const mapped = Array.from({ length: rotation.length }, () => []);
+  rotation.forEach((neighbors, vertex) => {
+    mapped[permutation[vertex]] = neighbors.map((neighbor) => permutation[neighbor]);
+  });
+  return mapped;
+}
+
+function rotationsMatch(actual, expected) {
+  return actual.every((neighbors, vertex) => cyclicOrderEqual(neighbors, expected[vertex]));
+}
+
+function cyclicOrderEqual(actual, expected) {
+  if (actual.length !== expected.length) return false;
+  return expected.some((_, shift) => actual.every((value, index) => value === expected[(index + shift) % expected.length]));
+}
+
+function makeK33Automorphisms() {
+  const permutations = [
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0],
+  ];
+  const automorphisms = [];
+  for (const left of permutations) {
+    for (const right of permutations) {
+      automorphisms.push([left[0], left[1], left[2], 3 + right[0], 3 + right[1], 3 + right[2]]);
+      automorphisms.push([3 + left[0], 3 + left[1], 3 + left[2], right[0], right[1], right[2]]);
+    }
+  }
+  return automorphisms;
+}
+
+function requestModel(rotation, outputFormat = "3d") {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/stream_calc_genus`);
     let done = false;
     socket.onopen = () => {
-      socket.send(JSON.stringify({ alg: "none", outputFormat: "3d", adj: rotation }));
+      socket.send(JSON.stringify({ alg: "none", outputFormat, adj: rotation }));
     };
     socket.onmessage = (event) => {
       const separator = event.data.indexOf(":");
@@ -1053,6 +1160,8 @@ function prefetchNearby() {
 }
 
 function buildModelGroup(model) {
+  if (model.manualLayout) return buildManualLayoutModelGroup(model);
+
   const parsed = parseObj(model.obj);
   parsed.geometry.computeBoundingBox();
   const center = new THREE.Vector3();
@@ -1149,7 +1258,113 @@ function buildModelGroup(model) {
     pointGeometry.dispose();
     disposeGroupChildren(group);
   };
-  return { group, pathsByEdge, vertexPositions, setOpacity };
+  return { group, pathsByEdge, vertexPositions, setOpacity, normalAt: torusNormal };
+}
+
+function buildManualLayoutModelGroup(model) {
+  const parsed = parseObj(model.obj);
+  parsed.geometry.computeBoundingBox();
+  const center = new THREE.Vector3();
+  parsed.geometry.boundingBox.getCenter(center);
+  parsed.geometry.translate(-center.x, -center.y, -center.z);
+  parsed.geometry.computeBoundingSphere();
+  state.surfaceCenter.copy(center);
+
+  const surfaceTriangles = buildSurfaceTriangles(parsed.geometry);
+  const normalAt = (point) => orientedProjectToSurface(point, surfaceTriangles).normal;
+  const group = new THREE.Group();
+  const surfaceMaterial = new THREE.MeshStandardMaterial({
+    color: SURFACE,
+    roughness: 0.68,
+    metalness: 0.02,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 1,
+  });
+  const surface = new THREE.Mesh(parsed.geometry, surfaceMaterial);
+  group.add(surface);
+
+  const graphMaterial = makeBasicMaterial(BLACK, 1, {
+    depthTest: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    transparent: false,
+  });
+  const pointMaterial = makeBasicMaterial(0xf4f4ef, 1, {
+    depthTest: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    transparent: false,
+  });
+  const pathsByEdge = new Map();
+  const vertexPositions = new Map(model.manualLayout.vertices);
+  const radius = parsed.geometry.boundingSphere?.radius || 1;
+  const strokeRadius = Math.max(radius * 0.0032, 0.0048);
+  const graphLift = strokeRadius * 0.18;
+  state.surfaceStrokeRadius = strokeRadius;
+
+  for (const [label, point] of [...vertexPositions.entries()]) {
+    vertexPositions.set(label, liftPointToSurface(point, surfaceTriangles, graphLift, null, strokeRadius * 3.0));
+  }
+
+  for (const edge of model.manualLayout.edges) {
+    const displayPoints = refineManualSurfacePath(edge.points, surfaceTriangles, graphLift, radius, strokeRadius);
+    const start = vertexPositions.get(edge.ends[0]);
+    const end = vertexPositions.get(edge.ends[1]);
+    if (start && displayPoints.length) displayPoints[0] = start.clone();
+    if (end && displayPoints.length) displayPoints[displayPoints.length - 1] = end.clone();
+    const tube = makeTube(displayPoints, strokeRadius, graphMaterial, Math.max(16, displayPoints.length - 1));
+    tube.userData.edge = edge.key;
+    group.add(tube);
+    addTubeCaps(displayPoints, strokeRadius, graphMaterial, group);
+    if (!pathsByEdge.has(edge.key)) pathsByEdge.set(edge.key, []);
+    pathsByEdge.get(edge.key).push({
+      ends: edge.ends,
+      segment: edge.segment,
+      points: displayPoints,
+    });
+  }
+
+  const pointGeometry = new THREE.SphereGeometry(strokeRadius * 2.25, 18, 12);
+  for (const [vertexLabel, pos] of vertexPositions.entries()) {
+    const dot = new THREE.Mesh(pointGeometry, pointMaterial);
+    dot.position.copy(pos);
+    group.add(dot);
+    const labelSprite = makeTextSprite(String(vertexLabel), Math.max(radius * 0.085, 0.13), { depthTest: true });
+    labelSprite.position.copy(pos).addScaledVector(normalAt(pos), strokeRadius * 8.0);
+    group.add(labelSprite);
+  }
+
+  const setOpacity = (opacity, solid = false) => {
+    const clamped = Math.max(0, Math.min(1, opacity));
+    const materialOpacity = solid ? 1 : clamped;
+    surfaceMaterial.transparent = !solid;
+    surfaceMaterial.opacity = materialOpacity;
+    graphMaterial.transparent = !solid;
+    graphMaterial.opacity = materialOpacity;
+    pointMaterial.transparent = !solid;
+    pointMaterial.opacity = materialOpacity;
+    surfaceMaterial.needsUpdate = true;
+    graphMaterial.needsUpdate = true;
+    pointMaterial.needsUpdate = true;
+    group.traverse((child) => {
+      if (child.isSprite && child.material) {
+        child.material.transparent = true;
+        child.material.opacity = materialOpacity;
+      }
+    });
+  };
+  group.userData.dispose = () => {
+    parsed.geometry.dispose();
+    surfaceMaterial.dispose();
+    graphMaterial.dispose();
+    pointMaterial.dispose();
+    pointGeometry.dispose();
+    disposeGroupChildren(group);
+  };
+  return { group, pathsByEdge, vertexPositions, setOpacity, normalAt };
 }
 
 function parseObj(objText) {
@@ -1237,6 +1452,176 @@ function parseObj(objText) {
   return { geometry, graphLines, graphPoints };
 }
 
+function buildSurfaceTriangles(geometry) {
+  const positions = geometry.getAttribute("position");
+  const index = geometry.index;
+  const triangles = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const faceCount = index ? index.count / 3 : positions.count / 3;
+  for (let face = 0; face < faceCount; face++) {
+    const i0 = index ? index.getX(face * 3) : face * 3;
+    const i1 = index ? index.getX(face * 3 + 1) : face * 3 + 1;
+    const i2 = index ? index.getX(face * 3 + 2) : face * 3 + 2;
+    a.fromBufferAttribute(positions, i0);
+    b.fromBufferAttribute(positions, i1);
+    c.fromBufferAttribute(positions, i2);
+    ab.subVectors(b, a);
+    ac.subVectors(c, a);
+    normal.crossVectors(ab, ac);
+    if (normal.lengthSq() < 1e-14) continue;
+    triangles.push({
+      a: a.clone(),
+      b: b.clone(),
+      c: c.clone(),
+      normal: normal.normalize().clone(),
+    });
+  }
+  return triangles;
+}
+
+function projectToSurface(point, triangles) {
+  const closest = new THREE.Vector3();
+  const candidate = new THREE.Vector3();
+  let bestDistanceSq = Infinity;
+  let bestNormal = new THREE.Vector3(0, 0, 1);
+  for (const triangle of triangles) {
+    closestPointOnTriangle(point, triangle.a, triangle.b, triangle.c, candidate);
+    const distanceSq = point.distanceToSquared(candidate);
+    if (distanceSq < bestDistanceSq) {
+      bestDistanceSq = distanceSq;
+      closest.copy(candidate);
+      bestNormal = triangle.normal;
+    }
+  }
+  if (!Number.isFinite(bestDistanceSq)) return { point: point.clone(), normal: bestNormal.clone() };
+  return { point: closest, normal: bestNormal.clone() };
+}
+
+function orientedProjectToSurface(point, triangles, previousNormal = null, maxSnap = Infinity) {
+  const projection = projectToSurface(point, triangles);
+  const normal = projection.normal.clone();
+  if (Number.isFinite(maxSnap) && point.distanceToSquared(projection.point) > maxSnap * maxSnap) {
+    return {
+      point: point.clone(),
+      normal: previousNormal ? previousNormal.clone() : normal,
+    };
+  }
+  const offset = point.clone().sub(projection.point);
+  if (offset.lengthSq() > 1e-12) {
+    if (normal.dot(offset) < 0) normal.negate();
+  } else if (previousNormal && normal.dot(previousNormal) < 0) {
+    normal.negate();
+  }
+  if (previousNormal && normal.dot(previousNormal) < -0.35) normal.negate();
+  return { point: projection.point, normal };
+}
+
+function liftPointToSurface(point, triangles, lift, previousNormal = null, maxSnap = Infinity) {
+  const projection = orientedProjectToSurface(point, triangles, previousNormal, maxSnap);
+  return projection.point.clone().addScaledVector(projection.normal, lift);
+}
+
+function refineManualSurfacePath(points, triangles, lift, surfaceRadius, strokeRadius) {
+  const clean = points.filter(Boolean).map((point) => point.clone());
+  if (clean.length < 2) return clean.map((point) => liftPointToSurface(point, triangles, lift));
+
+  const length = polylineLength(clean);
+  const spacing = Math.max(strokeRadius * 3.5, surfaceRadius * 0.0065, 0.012);
+  const sampleCount = Math.max(32, Math.min(220, Math.ceil(length / spacing)));
+  const refined = [];
+  let previousNormal = null;
+  const maxSnap = Math.max(strokeRadius * 4.0, surfaceRadius * 0.006, 0.018);
+  for (let i = 0; i <= sampleCount; i++) {
+    const t = i / sampleCount;
+    const sample = samplePolyline(clean, t);
+    const projection = orientedProjectToSurface(sample, triangles, previousNormal, maxSnap);
+    previousNormal = projection.normal.clone();
+    refined.push(projection.point.clone().addScaledVector(projection.normal, lift));
+  }
+  return removeNearDuplicatePoints(refined, strokeRadius * 0.16);
+}
+
+function samplePolyline(points, t) {
+  if (points.length === 1) return points[0].clone();
+  const total = polylineLength(points);
+  if (total < 1e-8) return points[0].clone();
+  const target = total * Math.max(0, Math.min(1, t));
+  let covered = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const span = points[i].distanceTo(points[i + 1]);
+    if (covered + span >= target) {
+      const local = span > 1e-8 ? (target - covered) / span : 0;
+      return new THREE.Vector3().lerpVectors(points[i], points[i + 1], local);
+    }
+    covered += span;
+  }
+  return points[points.length - 1].clone();
+}
+
+function removeNearDuplicatePoints(points, epsilon) {
+  if (points.length < 2) return points;
+  const kept = [points[0]];
+  const thresholdSq = epsilon * epsilon;
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].distanceToSquared(kept[kept.length - 1]) > thresholdSq) kept.push(points[i]);
+  }
+  if (kept.length === 1 && points.length > 1) kept.push(points[points.length - 1]);
+  return kept;
+}
+
+function polylineLength(points) {
+  let total = 0;
+  for (let i = 0; i < points.length - 1; i++) total += points[i].distanceTo(points[i + 1]);
+  return total;
+}
+
+function closestPointOnTriangle(point, a, b, c, target) {
+  const ab = b.clone().sub(a);
+  const ac = c.clone().sub(a);
+  const ap = point.clone().sub(a);
+  const d1 = ab.dot(ap);
+  const d2 = ac.dot(ap);
+  if (d1 <= 0 && d2 <= 0) return target.copy(a);
+
+  const bp = point.clone().sub(b);
+  const d3 = ab.dot(bp);
+  const d4 = ac.dot(bp);
+  if (d3 >= 0 && d4 <= d3) return target.copy(b);
+
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+    const v = d1 / (d1 - d3);
+    return target.copy(a).addScaledVector(ab, v);
+  }
+
+  const cp = point.clone().sub(c);
+  const d5 = ab.dot(cp);
+  const d6 = ac.dot(cp);
+  if (d6 >= 0 && d5 <= d6) return target.copy(c);
+
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+    const w = d2 / (d2 - d6);
+    return target.copy(a).addScaledVector(ac, w);
+  }
+
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
+    const w = (d4 - d3) / (d4 - d3 + d5 - d6);
+    return target.copy(b).addScaledVector(c.clone().sub(b), w);
+  }
+
+  const denom = 1 / (va + vb + vc);
+  const v = vb * denom;
+  const w = vc * denom;
+  return target.copy(a).addScaledVector(ab, v).addScaledVector(ac, w);
+}
+
 function highlightDart(dart, color = BLUE) {
   clearGroup(state.highlightGroup);
   clearActiveList();
@@ -1313,7 +1698,8 @@ function drawCounterclockwiseArrow(vertex, progress) {
   clearGroup(state.arrowGroup);
   const center = state.surfaceVertices.get(vertex);
   if (!center) return;
-  const normal = torusNormal(center);
+  const normal = (state.surfaceNormalAt || torusNormal)(center).clone().normalize();
+  if (normal.lengthSq() < 1e-8) normal.set(0, 0, 1);
   const basisA = new THREE.Vector3(0, 0, 1).cross(normal);
   if (basisA.lengthSq() < 1e-5) basisA.set(1, 0, 0);
   basisA.normalize();
@@ -1522,6 +1908,7 @@ function disposeModelGroup() {
   state.modelGroup = null;
   state.surfacePaths = new Map();
   state.surfaceVertices = new Map();
+  state.surfaceNormalAt = null;
   state.finalOpacity = null;
 }
 
@@ -1600,6 +1987,10 @@ function easeInOut(t) {
 
 function lerpScalar(a, b, t) {
   return a + (b - a) * t;
+}
+
+function arrayToVector(value) {
+  return new THREE.Vector3(Number(value[0]), Number(value[1]), Number(value[2]));
 }
 
 function easeOut(t) {
