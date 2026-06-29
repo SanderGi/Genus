@@ -5,9 +5,9 @@ const BLUE = 0x0867d8;
 const BLACK = 0x151719;
 const SURFACE = 0xc7cbc6;
 const FACE_COLORS = [0x0a67c5, 0xb46a00, 0x237052, 0x7d4ac7, 0xbb3f4a, 0x47606f];
-const TRACED_FACES_CAMERA_POSITION = new THREE.Vector3(0, -5.0, 2.75);
+const TRACED_FACES_CAMERA_POSITION = new THREE.Vector3(0, -5.85, 3.15);
 const TRACED_FACES_CAMERA_TARGET = new THREE.Vector3(0, 0, 0.2);
-const SURFACE_CAMERA_POSITION = new THREE.Vector3(0, -4.75, 2.35);
+const SURFACE_CAMERA_POSITION = new THREE.Vector3(0, -6.15, 2.95);
 const SURFACE_CAMERA_TARGET = new THREE.Vector3(0, 0, 0);
 const TORUS_GLUE_DURATION = 1280;
 const TORUS_GLUE_HOLD = 620;
@@ -54,6 +54,7 @@ const modelCache = new Map();
 const k33Automorphisms = makeK33Automorphisms();
 let genusTwoManualLayoutPromise = null;
 let genusTwoRawModelPromise = null;
+let genusTwoBaseRenderDataPromise = null;
 const mobileQuery = window.matchMedia("(max-width: 760px)");
 const state = {
   index: 0,
@@ -108,6 +109,7 @@ resizeObserver.observe(el.viewer);
 resize();
 setRotation(0);
 animate();
+prefetchGenusTwo();
 setTimeout(prefetchNearby, 750);
 
 el.slider.addEventListener("input", () => setRotation(Number(el.slider.value)));
@@ -1007,19 +1009,36 @@ async function getModel(system) {
 async function getGenusTwoManualModel(system) {
   const key = `manual-genus2:${system.index}`;
   if (modelCache.has(key)) return modelCache.get(key);
-  const [layout, rawModel] = await Promise.all([
-    loadGenusTwoManualLayout(),
-    requestGenusTwoRawModel(),
-  ]);
+  const baseRenderData = await loadGenusTwoBaseRenderData();
   const automorphism = findAutomorphism(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), system.rotation);
   if (!automorphism) throw new Error("Could not map the genus-2 representative to this rotation system.");
   const model = {
-    ...rawModel,
     genus: 2,
-    manualLayout: mapManualLayout(layout, automorphism),
+    manualSurfaceData: baseRenderData,
+    manualLayout: mapPreparedManualLayout(baseRenderData, automorphism),
   };
   modelCache.set(key, model);
   return model;
+}
+
+function prefetchGenusTwo() {
+  loadGenusTwoBaseRenderData()
+    .then((baseRenderData) => {
+      for (const system of systems) {
+        if (system.genus !== 2) continue;
+        const automorphism = findAutomorphism(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), system.rotation);
+        if (!automorphism) continue;
+        const key = `manual-genus2:${system.index}`;
+        if (!modelCache.has(key)) {
+          modelCache.set(key, {
+            genus: 2,
+            manualSurfaceData: baseRenderData,
+            manualLayout: mapPreparedManualLayout(baseRenderData, automorphism),
+          });
+        }
+      }
+    })
+    .catch(() => {});
 }
 
 function loadGenusTwoManualLayout() {
@@ -1034,33 +1053,93 @@ function loadGenusTwoManualLayout() {
 
 function requestGenusTwoRawModel() {
   if (!genusTwoRawModelPromise) {
-    genusTwoRawModelPromise = requestModel(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), "3d_raw");
+    genusTwoRawModelPromise = requestModel(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), "3d_raw")
+      .catch((error) => {
+        genusTwoRawModelPromise = null;
+        throw error;
+      });
   }
   return genusTwoRawModelPromise;
 }
 
-function mapManualLayout(layout, automorphism) {
+function loadGenusTwoBaseRenderData() {
+  if (!genusTwoBaseRenderDataPromise) {
+    genusTwoBaseRenderDataPromise = Promise.all([
+      loadGenusTwoManualLayout(),
+      requestGenusTwoRawModel(),
+    ])
+      .then(([layout, rawModel]) => prepareGenusTwoBaseRenderData(layout, rawModel))
+      .catch((error) => {
+        genusTwoBaseRenderDataPromise = null;
+        throw error;
+      });
+  }
+  return genusTwoBaseRenderDataPromise;
+}
+
+function prepareGenusTwoBaseRenderData(layout, rawModel) {
+  const parsed = parseObj(rawModel.obj);
+  parsed.geometry.computeBoundingBox();
+  const center = new THREE.Vector3();
+  parsed.geometry.boundingBox.getCenter(center);
+  parsed.geometry.translate(-center.x, -center.y, -center.z);
+  parsed.geometry.computeBoundingSphere();
+  const surfaceTriangles = buildSurfaceTriangles(parsed.geometry);
+  const radius = parsed.geometry.boundingSphere?.radius || 1;
+  const strokeRadius = Math.max(radius * 0.0032, 0.0048);
+  const graphLift = strokeRadius * 0.18;
+  const normalAt = (point) => orientedProjectToSurface(point, surfaceTriangles).normal;
   const vertices = new Map();
-  const edges = [];
   Object.entries(layout.vertices || {}).forEach(([vertex, point]) => {
-    vertices.set(automorphism[Number(vertex)], arrayToVector(point));
+    vertices.set(Number(vertex), liftPointToSurface(arrayToVector(point), surfaceTriangles, graphLift, null, strokeRadius * 3.0));
   });
+  const edges = [];
   Object.entries(layout.edges || {}).forEach(([key, route]) => {
     const [from, to] = key.split("-").map(Number);
-    const mappedFrom = automorphism[from];
-    const mappedTo = automorphism[to];
     const points = [
       arrayToVector(layout.vertices[String(from)]),
       ...route.map(arrayToVector),
       arrayToVector(layout.vertices[String(to)]),
     ];
+    const displayPoints = refineManualSurfacePath(points, surfaceTriangles, graphLift, radius, strokeRadius);
+    const start = vertices.get(from);
+    const end = vertices.get(to);
+    if (start && displayPoints.length) displayPoints[0] = start.clone();
+    if (end && displayPoints.length) displayPoints[displayPoints.length - 1] = end.clone();
+    edges.push({
+      key,
+      ends: [from, to],
+      segment: [from, to],
+      points: displayPoints,
+    });
+  });
+  return {
+    geometry: parsed.geometry,
+    center,
+    radius,
+    strokeRadius,
+    normalAt,
+    vertices,
+    edges,
+  };
+}
+
+function mapPreparedManualLayout(baseRenderData, automorphism) {
+  const vertices = new Map();
+  const edges = [];
+  for (const [vertex, point] of baseRenderData.vertices.entries()) {
+    vertices.set(automorphism[vertex], point.clone());
+  }
+  for (const edge of baseRenderData.edges) {
+    const mappedFrom = automorphism[edge.ends[0]];
+    const mappedTo = automorphism[edge.ends[1]];
     edges.push({
       key: edgeKey(mappedFrom, mappedTo),
       ends: [mappedFrom, mappedTo],
       segment: [mappedFrom, mappedTo],
-      points,
+      points: edge.points.map((point) => point.clone()),
     });
-  });
+  }
   return { vertices, edges };
 }
 
@@ -1262,16 +1341,10 @@ function buildModelGroup(model) {
 }
 
 function buildManualLayoutModelGroup(model) {
-  const parsed = parseObj(model.obj);
-  parsed.geometry.computeBoundingBox();
-  const center = new THREE.Vector3();
-  parsed.geometry.boundingBox.getCenter(center);
-  parsed.geometry.translate(-center.x, -center.y, -center.z);
-  parsed.geometry.computeBoundingSphere();
-  state.surfaceCenter.copy(center);
-
-  const surfaceTriangles = buildSurfaceTriangles(parsed.geometry);
-  const normalAt = (point) => orientedProjectToSurface(point, surfaceTriangles).normal;
+  const data = model.manualSurfaceData;
+  const surfaceGeometry = data.geometry.clone();
+  const normalAt = data.normalAt;
+  state.surfaceCenter.copy(data.center);
   const group = new THREE.Group();
   const surfaceMaterial = new THREE.MeshStandardMaterial({
     color: SURFACE,
@@ -1281,7 +1354,7 @@ function buildManualLayoutModelGroup(model) {
     transparent: true,
     opacity: 1,
   });
-  const surface = new THREE.Mesh(parsed.geometry, surfaceMaterial);
+  const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
   group.add(surface);
 
   const graphMaterial = makeBasicMaterial(BLACK, 1, {
@@ -1300,21 +1373,12 @@ function buildManualLayoutModelGroup(model) {
   });
   const pathsByEdge = new Map();
   const vertexPositions = new Map(model.manualLayout.vertices);
-  const radius = parsed.geometry.boundingSphere?.radius || 1;
-  const strokeRadius = Math.max(radius * 0.0032, 0.0048);
-  const graphLift = strokeRadius * 0.18;
+  const radius = data.radius;
+  const strokeRadius = data.strokeRadius;
   state.surfaceStrokeRadius = strokeRadius;
 
-  for (const [label, point] of [...vertexPositions.entries()]) {
-    vertexPositions.set(label, liftPointToSurface(point, surfaceTriangles, graphLift, null, strokeRadius * 3.0));
-  }
-
   for (const edge of model.manualLayout.edges) {
-    const displayPoints = refineManualSurfacePath(edge.points, surfaceTriangles, graphLift, radius, strokeRadius);
-    const start = vertexPositions.get(edge.ends[0]);
-    const end = vertexPositions.get(edge.ends[1]);
-    if (start && displayPoints.length) displayPoints[0] = start.clone();
-    if (end && displayPoints.length) displayPoints[displayPoints.length - 1] = end.clone();
+    const displayPoints = edge.points.map((point) => point.clone());
     const tube = makeTube(displayPoints, strokeRadius, graphMaterial, Math.max(16, displayPoints.length - 1));
     tube.userData.edge = edge.key;
     group.add(tube);
@@ -1357,7 +1421,7 @@ function buildManualLayoutModelGroup(model) {
     });
   };
   group.userData.dispose = () => {
-    parsed.geometry.dispose();
+    surfaceGeometry.dispose();
     surfaceMaterial.dispose();
     graphMaterial.dispose();
     pointMaterial.dispose();
@@ -1628,7 +1692,7 @@ function highlightDart(dart, color = BLUE) {
   const chip = el.rotationList.querySelector(`[data-dart="${dart.from}-${dart.to}"]`);
   chip?.classList.add("active");
   chip?.closest(".rotation-row")?.classList.add("active");
-  highlightVertex(dart.from);
+  highlightVertex(dart.from, color);
   if (state.phase === "surface") highlightSurfaceDart(dart, color);
   else highlightFlatDart(dart, color);
 }
@@ -1723,14 +1787,14 @@ function drawCounterclockwiseArrow(vertex, progress) {
   }
 }
 
-function highlightVertex(vertex) {
+function highlightVertex(vertex, color = BLUE) {
   clearGroup(state.vertexHighlightGroup);
   const position = state.phase === "surface"
     ? state.surfaceVertices.get(vertex)
     : flatPosition(vertex);
   if (!position) return;
   const radius = state.phase === "surface" ? state.surfaceStrokeRadius * 4.0 : 0.115;
-  const material = makeBasicMaterial(BLUE, 1, { depthTest: false });
+  const material = makeBasicMaterial(color, 1, { depthTest: false });
   const dot = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 16), material);
   dot.position.copy(position);
   dot.renderOrder = 40;
