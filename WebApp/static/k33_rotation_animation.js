@@ -44,10 +44,12 @@ const el = {
   slider: document.getElementById("rotation_slider"),
   rotationNumber: document.getElementById("rotation_number"),
   sliderLabel: document.getElementById("slider_label"),
+  nextRotation: document.getElementById("next_rotation"),
 };
 
 const systems = makeRotationSystems();
 const modelCache = new Map();
+const mobileQuery = window.matchMedia("(max-width: 760px)");
 const state = {
   index: 0,
   phase: "flat",
@@ -119,6 +121,8 @@ el.playbackStart.addEventListener("click", () => usePlayback("start"));
 el.playbackBack.addEventListener("click", () => usePlayback("back"));
 el.playbackForward.addEventListener("click", () => usePlayback("forward"));
 el.playbackEnd.addEventListener("click", () => usePlayback("end"));
+el.nextRotation.addEventListener("click", () => setRotation((state.index + 1) % systems.length));
+mobileQuery.addEventListener("change", () => setShowEmbeddingLabel(currentSystem()));
 
 function makeRotationSystems() {
   const all = [];
@@ -180,7 +184,7 @@ function setRotation(index) {
   el.genusBadge.textContent = `genus ${system.genus}`;
   el.sliderLabel.textContent = `Rotation ${index + 1} of 64`;
   el.rotationNumber.value = String(index + 1);
-  el.showEmbedding.textContent = `Show Genus ${system.genus} Embedding`;
+  setShowEmbeddingLabel(system);
   el.showEmbedding.disabled = false;
   el.status.textContent = "";
   setExplanation(INTRO_EXPLANATION);
@@ -194,6 +198,10 @@ function currentSystem() {
 
 function setExplanation(text) {
   el.explanationText.textContent = text;
+}
+
+function setShowEmbeddingLabel(system) {
+  el.showEmbedding.textContent = mobileQuery.matches ? "Embed" : `Show Genus ${system.genus} Embedding`;
 }
 
 function rotationOrderText(order) {
