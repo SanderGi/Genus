@@ -978,14 +978,15 @@ function addMorphVertexVisual(position, radius, group) {
 }
 
 async function crossFadeToSurface(setOpacity, token) {
-  const duration = 1050;
+  const modelFadeDuration = 820;
+  const colorFadeDuration = 620;
   const start = performance.now();
-  while (performance.now() - start < duration) {
+  while (performance.now() - start < modelFadeDuration) {
     if (token !== state.animationToken) return;
-    const t = easeInOut((performance.now() - start) / duration);
+    const t = easeInOut((performance.now() - start) / modelFadeDuration);
     setOpacity(t);
     setGroupOpacity(state.flatGroup, 0);
-    setGroupOpacity(state.traceGroup, 1 - t);
+    setGroupOpacity(state.traceGroup, 1);
     state.faceGroup.children.forEach((face) => {
       face.userData.setOpacity?.(0);
     });
@@ -993,6 +994,20 @@ async function crossFadeToSurface(setOpacity, token) {
   }
   setOpacity(1, true);
   setGroupOpacity(state.flatGroup, 0);
+  setGroupOpacity(state.traceGroup, 1);
+  state.faceGroup.children.forEach((face) => face.userData.setOpacity?.(0));
+  await nextFrame();
+  await nextFrame();
+
+  const fadeStart = performance.now();
+  while (performance.now() - fadeStart < colorFadeDuration) {
+    if (token !== state.animationToken) return;
+    const t = easeInOut((performance.now() - fadeStart) / colorFadeDuration);
+    setOpacity(1, true);
+    setGroupOpacity(state.traceGroup, 1 - t);
+    await nextFrame();
+  }
+  setOpacity(1, true);
   setGroupOpacity(state.traceGroup, 0);
   state.faceGroup.children.forEach((face) => face.userData.setOpacity?.(0));
 }
