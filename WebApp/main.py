@@ -270,10 +270,10 @@ def calc_genus(algorithm, adj_list: list[list[int]]):
     with tempfile.NamedTemporaryFile(mode="w") as f:
         if algorithm == "page":
             env, adj_file, inp_type = setup_page(adj_list, f.name)
-            cmd = [find_executable("./CalcGenus", "../CalcGenus/CalcGenus")]
+            cmd = [find_executable("./page", "../PAGE/page")]
         elif algorithm == "page_sc":
             env, adj_file, inp_type = setup_page(adj_list, f.name)
-            cmd = [find_executable("./CalcGenusSC", "../CalcGenus/CalcGenus")]
+            cmd = [find_executable("./pageSC", "../PAGE/page")]
         elif algorithm == "multi_genus":
             env, adj_file, inp_type = setup_multi_genus(adj_list)
             cmd = [
@@ -343,10 +343,10 @@ def run_algorithm_capture(algorithm, adj_list, status_callback=None):
     with tempfile.NamedTemporaryFile(mode="w") as f:
         if algorithm == "page":
             env, adj_file, inp_type = setup_page(adj_list, f.name)
-            cmd = [find_executable("./CalcGenus", "../CalcGenus/CalcGenus")]
+            cmd = [find_executable("./page", "../PAGE/page")]
         elif algorithm == "page_sc":
             env, adj_file, inp_type = setup_page(adj_list, f.name)
-            cmd = [find_executable("./CalcGenusSC", "../CalcGenus/CalcGenus")]
+            cmd = [find_executable("./pageSC", "../PAGE/page")]
         elif algorithm == "multi_genus":
             env, adj_file, inp_type = setup_multi_genus(adj_list)
             cmd = [
@@ -392,7 +392,7 @@ def run_algorithm_capture(algorithm, adj_list, status_callback=None):
 
         def read_stdout():
             while True:
-                chunk = proc.stdout.read(8192)
+                chunk = proc.stdout.read(8192)  # type: ignore
                 if not chunk:
                     break
                 stdout_chunks.append(chunk)

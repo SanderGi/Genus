@@ -4,9 +4,9 @@ FROM gcc AS builder
 WORKDIR /app
 
 # Copy the C code and compile it
-COPY CalcGenus/CalcGenus.c CalcGenus.c
-RUN gcc -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o CalcGenus CalcGenus.c
-RUN gcc -DONLY_SIMPLE_CYCLES=1 -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o CalcGenusSC CalcGenus.c
+COPY PAGE/page.c page.c
+RUN gcc -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o page page.c
+RUN gcc -DONLY_SIMPLE_CYCLES=1 -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o pageSC page.c
 
 COPY MultiGenus/multi_genus_longtype.c multi_genus_longtype.c
 RUN gcc -O3 -DLONG -march=native -o multi_genus_128 multi_genus_longtype.c -lm
@@ -34,10 +34,10 @@ COPY WebApp/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy compiled C binaries
-COPY --from=builder /app/CalcGenus /app/CalcGenusSC /app/multi_genus_128 /app/planar_cutthroughedges_draw /app/
+COPY --from=builder /app/page /app/pageSC /app/multi_genus_128 /app/planar_cutthroughedges_draw /app/
     
 # Copy the rest of the files
-COPY CalcGenus/adjacency_lists/* adjacency_lists/
+COPY PAGE/adjacency_lists/* adjacency_lists/
 COPY WebApp/main.py main.py
 COPY WebApp/static/ static/
 
