@@ -1,7 +1,7 @@
 # Practical Performance
 The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), computation time for the genus using SageMath (SM time), and computation time using multi_genus.c (MG time).
-\#                                                | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s)
-------------------------------------------------- | --- | --- | ---- | ----- | ---------- | ---------- | -------- | ----------- | -----------
+\#                                              | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s)
+----------------------------------------------- | --- | --- | ---- | ----- | ---------- | ---------- | -------- | ----------- | -----------
 [1/1](../PAGE/adjacency_lists/3-3-cage.txt)     | 3   | 3   | 4    | 6     | 24         | 0          | 0.004    | 0.004       | 0.006
 [1/1](../PAGE/adjacency_lists/3-4-cage.txt)     | 3   | 4   | 6    | 9     | 72         | 1          | 0.003    | 0.039       | 0.006
 [1/1](../PAGE/adjacency_lists/3-5-cage.txt)     | 3   | 5   | 10   | 15    | 120        | 1          | 0.005    | 0.027       | 0.006
@@ -51,8 +51,8 @@ The genus for various cage graphs using the adjacency lists from [win.tue.nl](ht
 [1/1](../PAGE/adjacency_lists/7-6-cage.txt)     | 7   | 6   | 90   | 315   | 15120      | [61, 110]  | DNF      | DNF         | DNF
   
 The genus for various complete graphs generated using the `CompleteGraph` function in SageMath follows. 
-\#                                       | k   | g   | v    | e     | \|G\|              | genus    | time (s) | SM time (s) | MG time (s)
----------------------------------------- | --- | --- | ---- | ----- | ------------------ | -------- | -------- | ----------- | -----------
+\#                                     | k   | g   | v    | e     | \|G\|              | genus    | time (s) | SM time (s) | MG time (s)
+-------------------------------------- | --- | --- | ---- | ----- | ------------------ | -------- | -------- | ----------- | -----------
 [k2](../PAGE/adjacency_lists/k2.txt)   | 1   | Inf | 2    | 1     | 2                  | 0        | ---      | 0.004       | ---
 [k3](../PAGE/adjacency_lists/k3.txt)   | 2   | 3   | 3    | 3     | 6                  | 0        | 0.004    | 0.004       | 0.008
 [k4](../PAGE/adjacency_lists/k4.txt)   | 3   | 3   | 4    | 6     | 24                 | 0        | 0.004    | 0.003       | 0.008
@@ -63,24 +63,24 @@ The genus for various complete graphs generated using the `CompleteGraph` functi
 [k9](../PAGE/adjacency_lists/k9.txt)   | 8   | 3   | 9    | 36    | 362880             | 3        | 0.004    | DNF         | 0.008
 
 The genus for various complete bipartite graphs generated using the `CompleteBipartiteGraph` function in SageMath follows. Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), and computation time for the genus using SageMath (SM time).
-\#                                         | k   | g   | v    | e     | \|G\|        | genus    | time (s) | SM time (s) | MG time (s)
------------------------------------------- | --- | --- | ---- | ----- | ------------ | -------- | -------- | ----------- | -----------
+\#                                       | k   | g   | v    | e     | \|G\|        | genus    | time (s) | SM time (s) | MG time (s)
+---------------------------------------- | --- | --- | ---- | ----- | ------------ | -------- | -------- | ----------- | -----------
 [k3-3](../PAGE/adjacency_lists/k3-3.txt) | 3   | 4   | 6    | 9     | 72           | 1        | 0.004    | 0.047       | 0.006
 [k4-4](../PAGE/adjacency_lists/k4-4.txt) | 4   | 4   | 8    | 16    | 1152         | 1        | 0.004    | 0.010       | 0.010
 [k5-5](../PAGE/adjacency_lists/k5-5.txt) | 5   | 4   | 10   | 25    | 28800        | 3        | 0.008    | DNF         | 0.008
 [k6-6](../PAGE/adjacency_lists/k6-6.txt) | 6   | 4   | 12   | 36    | 1036800      | 4        | 0.005    | DNF         | 0.009
 
 The genus for various complete n-partite graphs generated using the `CompleteMultipartiteGraph` function in SageMath follows.
-\#                                                                               | v    | e     | genus    | time (s) | MG time (s)
--------------------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
+\#                                                                             | v    | e     | genus    | time (s) | MG time (s)
+------------------------------------------------------------------------------ | ---- | ----- | -------- | -------- | -----------
 [k2-2](../PAGE/adjacency_lists/k2-2.txt)                                       | 4    | 4     | 0        | 0.004    | 0.008
 [k2-2-2](../PAGE/adjacency_lists/k2-2-2.txt)                                   | 6    | 12    | 0        | 0.004    | 0.009
 [k2-2-2-2](../PAGE/adjacency_lists/k2-2-2-2.txt)                               | 8    | 24    | 1        | 0.004    | 0.009
 [k2-2-2-2-2](../PAGE/adjacency_lists/k2-2-2-2-2.txt)                           | 10   | 40    | 3        | 0.006    | 0.009
 
 The genus for various Johnson graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus      | time (s) | MG time (s)
--------------------------------------------------------------------------------- | ---- | ----- | ---------- | -------- | -----------
+\#                                                                             | v    | e     | genus      | time (s) | MG time (s)
+------------------------------------------------------------------------------ | ---- | ----- | ---------- | -------- | -----------
 [Johnson (5, 2)](../PAGE/adjacency_lists/Johnson5-2.txt)                       | 10   | 30    | 2          | 0.004    | 0.009
 [Johnson (6, 2)](../PAGE/adjacency_lists/Johnson6-2.txt)                       | 15   | 60    | 5          | 23.101   | hours
 [Johnson (6, 3)](../PAGE/adjacency_lists/Johnson6-3.txt)                       | 20   | 90    | 7          | 19.374   | hours
@@ -88,8 +88,8 @@ The genus for various Johnson graphs generated using Mathematica follows.
 [Johnson (9, 4)](../PAGE/adjacency_lists/Johnson9-4.txt)                       | 70   | 560   | [148,558]  | days     | too big for bit operations
 
 The genus for various Circulant graphs generated using Mathematica follows.
-\#                                                                    | v    | e     | genus    | time (s) | MG time (s)
-----------------------------------------------------------------------| ---- | ----- | -------- | -------- | -----------
+\#                                                                  | v    | e     | genus    | time (s) | MG time (s)
+------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
 [C10_1,2,5](../PAGE/adjacency_lists/Circulant10_1-2-5.txt)          | 10   | 25    | 1        | 0.005    | 0.007
 [C10_1,2,4,5](../PAGE/adjacency_lists/Circulant10_1-2-4-5.txt)      | 10   | 35    | 3        | 0.009    | 0.023
 [C14_1,2,3,6](../PAGE/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 48    | 4        | 0.013    | 0.896
@@ -106,8 +106,8 @@ The genus for various Circulant graphs generated using Mathematica follows.
 [C20_*](../PAGE/adjacency_lists/Circulant20_1-3-5-7-9-10.txt)       | 20   | 110   | [10, 17] | hours    | hours
 
 The genus for various Cyclotomic graphs generated using Mathematica follows.
-\#                                                                    | v    | e     | genus    | time (s) | MG time (s)
-----------------------------------------------------------------------| ---- | ----- | -------- | -------- | -----------
+\#                                                                  | v    | e     | genus    | time (s) | MG time (s)
+------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
 [16](../PAGE/adjacency_lists/Cyclotomic16.txt)                      | 16   | 40    | 4        | 0.117    | 0.042
 [19](../PAGE/adjacency_lists/Cyclotomic19.txt)                      | 19   | 57    | 1        | 0.009    | 0.010
 [31](../PAGE/adjacency_lists/Cyclotomic31.txt)                      | 31   | 155   | [12,58]  | hours    | hours
@@ -115,14 +115,14 @@ The genus for various Cyclotomic graphs generated using Mathematica follows.
 [67](../PAGE/adjacency_lists/Cyclotomic67.txt)                      | 67   | 737   | [91,325] | days     | too big for bit operations
 
 The genus for various DifferenceSetIncidence graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus    | time (s) | MG time (s)
--------------------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
+\#                                                                             | v    | e     | genus    | time (s) | MG time (s)
+------------------------------------------------------------------------------ | ---- | ----- | -------- | -------- | -----------
 [11,5,2](../PAGE/adjacency_lists/DifferenceSetIncidence11-5-2.txt)             | 22   | 55    | 5        | 0.914    | 1.770
 [40,13,4](../PAGE/adjacency_lists/DifferenceSetIncidence40-13-4.txt)           | 80   | 520   | [91,214] | hours    | too big for bit operations
 
 The genus for various Bipartite Kneser graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus     | time (s)                         | MG time (s)
--------------------------------------------------------------------------------- | ---- | ----- | --------- | -------------------------------- | -----------
+\#                                                                             | v    | e     | genus     | time (s)                         | MG time (s)
+------------------------------------------------------------------------------ | ---- | ----- | --------- | -------------------------------- | -----------
 [Bipartite Kneser (6, 2)](../PAGE/adjacency_lists/bipartite-kneser6-2.txt)     | 30   | 90    | [9,28]    | days                             | days
 [Bipartite Kneser (7, 2)](../PAGE/adjacency_lists/bipartite-kneser7-2.txt)     | 42   | 210   | [33,80]   | days                             | days
 [Bipartite Kneser (8, 2)](../PAGE/adjacency_lists/bipartite-kneser8-2.txt)     | 56   | 420   | [78,175]  | days                             | days
@@ -140,8 +140,8 @@ The genus for various Bipartite Kneser graphs generated using Mathematica follow
 [Bipartite Kneser (12, 4)](../PAGE/adjacency_lists/bipartite-kneser12-4.txt)   | 990  | 34650 | ?         | adjacency list too large to load | too big for bit operations
 
 The genus for various miscellaneous graphs generated using Mathematica follows.
-\#                                                                               | v    | e     | genus    | time (s) | MG time (s)
--------------------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
+\#                                                                             | v    | e     | genus    | time (s) | MG time (s)
+------------------------------------------------------------------------------ | ---- | ----- | -------- | -------- | -----------
 [Klein Bottle](../PAGE/adjacency_lists/KleinBottleTriangulation9-1.txt)        | 9    | 27    | 2        | 0.005    | 0.006
 [TRC](../PAGE/adjacency_lists/TriangleReplacedCoxeterGraph.txt)                | 84   | 126   | 3        | hours    | 0.006
 [Fan (3, 6)](../PAGE/adjacency_lists/Fan3-6.txt)                               | 9    | 23    | 1        | 0.004    | 0.006

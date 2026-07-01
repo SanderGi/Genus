@@ -22,7 +22,7 @@ This repo contains a fast algorithm for calculating the genus of arbitrary graph
 
 1) **Easily Parallelizable**: The algorithm can be easily parallelized since a parallelizable cycle finding algorithm is chosen and the search needs to go through each possible start cycle (which can be done in parallel). This allows for a speedup proportional to the number of cores available.
 
-1) **Simplicity of Implementation**: While there exist more efficient algorithms for certain graph families (e.g., `multi_genus` does better on lower genus high degree graphs), this algorithm is much simpler to implement (can be done in a few dozen lines of Python or a few hundred lines of C).
+1) **Simplicity of Implementation**: While there exist more efficient algorithms for certain graph families (e.g., `multi_genus` does better on lower genus high degree graphs), this algorithm is much simpler to implement (can be done in [a few hundred lines of code](PAGE/page.py)).
 
 ## Usage
 
