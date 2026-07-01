@@ -18,12 +18,22 @@ const serverhost = location.host;
 const progressRegex = /\[\s*#*\s*\]\s*\d+%/g;
 let activeViewer = null;
 
+function setPanelContent(panel, content, isEmpty = false) {
+  panel.innerHTML = content;
+  panel.classList.toggle("empty-state", isEmpty);
+}
+
+function markPanelActive(panel) {
+  panel.classList.remove("empty-state");
+}
+
 function clearOutput() {
   if (activeViewer) {
     activeViewer.dispose();
     activeViewer = null;
   }
   stdout.innerHTML = "";
+  stdout.classList.remove("empty-state");
 }
 
 calculate.onclick = () => {
@@ -43,9 +53,9 @@ calculate.onclick = () => {
   }
 
   calculate.disabled = true;
-  stderr.innerHTML = "";
+  setPanelContent(stderr, "Waiting for status...", true);
   clearOutput();
-  runtime.innerHTML = "";
+  setPanelContent(runtime, "Running...", true);
 
   const socket = new WebSocket(
     `${
@@ -72,10 +82,13 @@ calculate.onclick = () => {
         }
       }
       console.log(line, progressRegex.test(line)); // magic line that makes it work
+      markPanelActive(stderr);
       stderr.innerHTML = laststderr + "<br>" + progress;
     } else if (type === "STDOUT") {
+      markPanelActive(stdout);
       stdout.innerHTML += data + "<br>";
     } else if (type === "TIME") {
+      markPanelActive(runtime);
       runtime.innerHTML = data;
     } else if (type === "JSON") {
       clearOutput();
@@ -85,6 +98,7 @@ calculate.onclick = () => {
       } catch {
         pre.textContent = data;
       }
+      markPanelActive(stdout);
       stdout.appendChild(pre);
     } else if (type === "IMAGE") {
       clearOutput();
@@ -92,14 +106,17 @@ calculate.onclick = () => {
       image.src = data;
       image.alt = "Graph embedding drawing";
       image.className = "embedding-image";
+      markPanelActive(stdout);
       stdout.appendChild(image);
     } else if (type === "MODEL") {
       clearOutput();
       try {
+        markPanelActive(stdout);
         renderModel(JSON.parse(data), stdout);
       } catch (error) {
         const pre = document.createElement("pre");
         pre.textContent = error.stack || error.message || String(error);
+        markPanelActive(stdout);
         stdout.appendChild(pre);
       }
     }
