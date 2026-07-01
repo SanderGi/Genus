@@ -31,7 +31,7 @@ for line in Path("../docs/practical_performance.md").read_text().splitlines():
 
 # Run the graphs
 fail = []
-start = time.perf_counter()
+start_time = time.perf_counter()
 for idx, (path, degree, expected) in enumerate(rows, 1):
     start = float("Inf")
     with open(path, "r") as f:
@@ -89,6 +89,6 @@ for idx, (path, degree, expected) in enumerate(rows, 1):
     if status != "OK":
         fail.append((path, cp.returncode, expected, got, out[-500:]))
 
-print("TOTAL", time.perf_counter() - start, "failures", len(fail))
+print("TOTAL", time.perf_counter() - start_time, "failures", len(fail))
 for f in fail:
     print("FAILDETAIL", f)

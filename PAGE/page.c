@@ -20,21 +20,16 @@
 
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
-// whether to print a newline after each progress bar update:
-#define PROGRESS_BAR_NEWLINE progress_bar_newline
+#define PROGRESS_BAR_NEWLINE progress_bar_newline // whether to print a newline after each progress bar update
 #define DEBUG false  // whether to print debug messages
-// whether to output to stdout instead of file:
-#define OUTPUT_TO_STDOUT output_to_stdout
+#define OUTPUT_TO_STDOUT output_to_stdout // whether to output to stdout instead of file
 #define ADJACENCY_LIST_FILENAME adj_filename  // input file
 #define ADJACENCY_LIST_START start_index      // vertex numbering starts from
 #define OUTPUT_FILENAME "page.out"            // output file
 #define VERTEX_DEGREE vertex_degree           // must be >= 2
 #define PRE_GENUS_LOWER_BOUND pre_genus_lower_bound  // pre-computed lower bound on the genus
-// true if it should to find the full cycle fitting, otherwise stops early once
-// it is clear it exists (doesn't quite work with value false yet):
-#define FIND_FULL_CYCLE_FITTING true
-// true to branch on a remaining directed edge, otherwise uses the most used vertex
-#define CONSTRAINED_BY_TWO true
+#define FIND_FULL_CYCLE_FITTING true // true if the certificate should always be found, otherwise allow stopping if the genus can be determined via formula
+#define CONSTRAINED_BY_TWO true // true to branch on a remaining directed edge, otherwise uses the most used vertex
 #ifndef ONLY_SIMPLE_CYCLES
 #define ONLY_SIMPLE_CYCLES false  // only consider simple cycles
 #endif
@@ -678,6 +673,7 @@ bool shortest_packing_cycle_usable(shortest_packing_state_t* state, cycle_index_
                                 &cycle_length);
     assert(cycle_length == state->shortest_cycle_length,
            "Error: shortest packing got a non-shortest cycle\n");
+    // NOTE: deliberately does not account for duplicate vertices because this faster more lenient check is advantageous in practice
     for (cycle_length_t i = 0; i < cycle_length; i++) {
         if (state->vertex_uses[cycle[i]] >= vertex_degrees[cycle[i]]) {
             return false;
@@ -975,7 +971,7 @@ int main(void) {
     cycle_index_t max_fit = (2 * num_edges + num_vertices - 1) / num_vertices;
     cycle_index_t genus_upper_bound = implied_max_genus_for_fit(max_fit, num_vertices, num_edges);
 
-    if (genus_lower_bound == genus_upper_bound) {
+    if (genus_lower_bound == genus_upper_bound && !FIND_FULL_CYCLE_FITTING) {
         // we've found the genus!
         if (PRINT_PROGRESS) {
             fprintf(stderr,
@@ -1061,7 +1057,7 @@ int main(void) {
             cycle_length_available[cur_max_cycle_length] = true;
 
             // keep the smallest cycle length up to date
-            if (cur_max_cycle_length < smallest_cycle_length) {
+            if (num_shortest_cycles == 0 || cur_max_cycle_length < smallest_cycle_length) {
                 smallest_cycle_length = cur_max_cycle_length;
                 num_shortest_cycles = num_new_cycles;
                 max_shortest_cycles = num_new_cycles < 2 * num_edges / smallest_cycle_length
@@ -1189,14 +1185,7 @@ int main(void) {
             genus_upper_bound = implied_max_genus_for_fit(max_fit, num_vertices, num_edges);
             bool target_fit_changed = genus_lower_bound_implied_fit != searched_fit;
 
-            if (genus_lower_bound == genus_upper_bound && !FIND_FULL_CYCLE_FITTING) {
-                fprintf(stderr, "The genus is %" PRIcycle_index_t ".\n", genus_lower_bound);
-                graph_free(adjacency_list);
-                free(cycles);
-                free(cycle_length_available);
-                fclose(output_file);
-                return 0;
-            }
+            assert(genus_upper_bound >= genus_lower_bound, "\nInvalid state: genus lower bound exceeded the upper bound. Check the inputs.\n");
 
             if (PRINT_PROGRESS) {
                 fprintf(stderr,
@@ -1485,34 +1474,59 @@ int main(void) {
         genus_upper_bound = implied_max_genus_for_fit(max_fit, num_vertices, num_edges);
         bool target_fit_changed = genus_lower_bound_implied_fit != searched_fit;
 
-        if (genus_lower_bound == genus_upper_bound &&
-            (!FIND_FULL_CYCLE_FITTING || max_fit == genus_lower_bound_implied_fit)) {
+        if (genus_lower_bound == genus_upper_bound && max_fit == genus_lower_bound_implied_fit) {
             // we've found the genus!
-            show_solution(genus_lower_bound, max_fit, num_search_calls, num_cycles, used_cycles,
-                          cycles, cur_max_cycle_length);
-            free(used_cycles);
-            free(start_cycle_order);
-            free(start_cycles);
-            free(vertex_uses);
-            graph_free(adjacency_list);
-            free(cycles);
-            free(cycles_by_vertex);
-            free(cycles_by_edge);
-            free(cycle_length_available);
-            free(length_cache_without_required);
-            free(length_cache_with_required);
-            cycle_edge_conflicts_free();
-            rotation_state_free();
-            free(transitions_used);
-            transitions_used = NULL;
-            fclose(output_file);
-            return 0;
+            if (num_cycles == genus_lower_bound_implied_fit) {
+                show_solution(genus_lower_bound, max_fit, num_search_calls, num_cycles, used_cycles,
+                              cycles, cur_max_cycle_length);
+                free(used_cycles);
+                free(start_cycle_order);
+                free(start_cycles);
+                free(vertex_uses);
+                graph_free(adjacency_list);
+                free(cycles);
+                free(cycles_by_vertex);
+                free(cycles_by_edge);
+                free(cycle_length_available);
+                free(length_cache_without_required);
+                free(length_cache_with_required);
+                cycle_edge_conflicts_free();
+                rotation_state_free();
+                free(transitions_used);
+                transitions_used = NULL;
+                fclose(output_file);
+                return 0;
+            } else {
+                if (!FIND_FULL_CYCLE_FITTING) {
+                    if (PRINT_PROGRESS) {
+                        fprintf(stderr,
+                                "Found the genus! It is %" PRIcycle_index_t
+                                ". No further computation needed when the upper and lower bounds have converged.\n",
+                                genus_lower_bound);
+                    }
+                    fprintf(output_file, "Genus found: %" PRIcycle_index_t " in 0 iterations:\n",
+                            genus_lower_bound);
+                    free(used_cycles);
+                    free(start_cycle_order);
+                    free(start_cycles);
+                    free(vertex_uses);
+                    graph_free(adjacency_list);
+                    free(cycles);
+                    free(cycles_by_vertex);
+                    free(cycles_by_edge);
+                    free(cycle_length_available);
+                    free(length_cache_without_required);
+                    free(length_cache_with_required);
+                    cycle_edge_conflicts_free();
+                    rotation_state_free();
+                    free(transitions_used);
+                    transitions_used = NULL;
+                    fclose(output_file);
+                    return 0;
+                }
+            }
         }
-        assert(FIND_FULL_CYCLE_FITTING || (genus_lower_bound < genus_upper_bound),
-               "Error: genus lower bound (%" PRIcycle_index_t
-               ") is greater than upper bound (%" PRIcycle_index_t
-               " from max_fit %" PRIcycle_index_t ")\n",
-               genus_lower_bound, genus_upper_bound, max_fit);
+        assert(genus_upper_bound >= genus_lower_bound, "\nInvalid state: genus lower bound exceeded the upper bound. Check the inputs.\n");
 
         if (PRINT_PROGRESS) {
             fprintf(stderr,
@@ -1588,8 +1602,7 @@ int main(void) {
     memset(start_cycle_order, 0xff, num_cycles * sizeof(cycle_index_t));
     precompute_start_cycle_order(start_cycle_order, start_cycles, num_start_cycles);
 
-    while (FIND_FULL_CYCLE_FITTING ? genus_lower_bound <= genus_upper_bound
-                                   : genus_lower_bound < genus_upper_bound) {
+    while (genus_lower_bound <= genus_upper_bound) {
         if (PRINT_PROGRESS) {
             fprintf(stderr,
                     "Starting search for fit with %" PRIcycle_index_t
@@ -1795,15 +1808,10 @@ int main(void) {
     transitions_used = NULL;
     fclose(output_file);
 
-    if (FIND_FULL_CYCLE_FITTING) {
-        fprintf(stderr,
-                "Was not able to fit any cycles. Double check the settings "
-                "and adjacency list.\n");
-        return 1;
-    } else {
-        fprintf(stderr, "The genus is %" PRIcycle_index_t ".\n", genus_lower_bound);
-        return 0;
-    }
+    fprintf(stderr,
+        "Was not able to fit any cycles. Double check the settings "
+        "and adjacency list.\n");
+    return 1;
 }
 
 void show_solution(cycle_index_t genus_lower_bound, cycle_index_t genus_lower_bound_implied_fit,
@@ -2037,13 +2045,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
         }
 
         // if this is the final cycle needed to cover all edges, we're done
-        bool is_final_cycle =
-            FIND_FULL_CYCLE_FITTING
-                ? cycles_to_use == 1
-                : (cycles_to_use == 1 ||
-                   implied_max_genus_for_fit(max_used_cycles - cycles_to_use + 1, num_vertices,
-                                             num_edges) ==
-                       implied_max_genus_for_fit(max_used_cycles, num_vertices, num_edges));
+        bool is_final_cycle = cycles_to_use == 1;
         if (is_final_cycle) {
             if (next_required_cycles_to_use > 0) {
                 used_cycles[cycle_index] = false;
@@ -2059,7 +2061,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
                 }
                 continue;
             }
-            if (FIND_FULL_CYCLE_FITTING && !cubic_exact_cover_mode) {
+            if (!cubic_exact_cover_mode) {
                 // check that all vertices have been used enough times
                 bool all_vertices_used = true;
                 for (vertex_t i = 0; i < num_vertices; i++) {
