@@ -6,6 +6,7 @@ __pycache__
 .matplotlib-cache
 
 PAGE/page
+PAGE/page.exe
 PAGE/page.out
 PAGE/adjacency_lists/rome-graphml.tgz
 

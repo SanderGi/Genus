@@ -3,14 +3,20 @@
 // Run with `make run`. Works better for regular graphs (preferably of low degree).
 
 #include <inttypes.h>
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <pthread.h>
 #include <unistd.h>
+#define PAGE_THREAD_LOCAL _Thread_local
+#endif
 
 // configuration options:
 #define PRINT_PROGRESS true  // whether to print progress messages
@@ -74,6 +80,21 @@ typedef vertex_t* adj_t;
 typedef vertex_t* cycles_t;
 typedef cycle_index_t* cbv_t;
 typedef cycle_index_t* cbe_t;
+#ifdef _WIN32
+typedef SRWLOCK page_mutex_t;
+typedef HANDLE page_thread_t;
+typedef DWORD (WINAPI *page_thread_start_t)(LPVOID);
+#define PAGE_MUTEX_INITIALIZER SRWLOCK_INIT
+#define PAGE_THREAD_RETURN DWORD WINAPI
+#define PAGE_THREAD_RESULT 0
+#else
+typedef pthread_mutex_t page_mutex_t;
+typedef pthread_t page_thread_t;
+typedef void* (*page_thread_start_t)(void*);
+#define PAGE_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
+#define PAGE_THREAD_RETURN void*
+#define PAGE_THREAD_RESULT NULL
+#endif
 typedef enum {
     PACKING_IMPOSSIBLE,
     PACKING_FOUND,
@@ -126,7 +147,7 @@ typedef struct {
     length_feasibility_t length_feasibility_template;
     uint64_t length_cache_entries;
     bool require_max_cycle_if_start_is_shorter;
-    pthread_mutex_t mutex;
+    page_mutex_t mutex;
     cycle_index_t next_start_index;
     cycle_index_t completed_start_cycles;
     cycle_index_t best_max_fit;
@@ -144,13 +165,64 @@ typedef struct {
         exit(1);                      \
     }
 
+int page_mutex_init(page_mutex_t* mutex) {
+#ifdef _WIN32
+    InitializeSRWLock(mutex);
+    return 0;
+#else
+    return pthread_mutex_init(mutex, NULL);
+#endif
+}
+
+void page_mutex_lock(page_mutex_t* mutex) {
+#ifdef _WIN32
+    AcquireSRWLockExclusive(mutex);
+#else
+    pthread_mutex_lock(mutex);
+#endif
+}
+
+void page_mutex_unlock(page_mutex_t* mutex) {
+#ifdef _WIN32
+    ReleaseSRWLockExclusive(mutex);
+#else
+    pthread_mutex_unlock(mutex);
+#endif
+}
+
+void page_mutex_destroy(page_mutex_t* mutex) {
+#ifdef _WIN32
+    (void)mutex;
+#else
+    pthread_mutex_destroy(mutex);
+#endif
+}
+
+int page_thread_create(page_thread_t* thread, page_thread_start_t start, void* arg) {
+#ifdef _WIN32
+    *thread = CreateThread(NULL, 0, start, arg, 0, NULL);
+    return *thread == NULL ? -1 : 0;
+#else
+    return pthread_create(thread, NULL, start, arg);
+#endif
+}
+
+int page_thread_join(page_thread_t thread) {
+#ifdef _WIN32
+    DWORD wait_result = WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+    return wait_result == WAIT_OBJECT_0 ? 0 : -1;
+#else
+    return pthread_join(thread, NULL);
+#endif
+}
+
 // static variables
 static FILE* output_file = NULL;
 static vertex_t start_index = 0;
 static degree_t vertex_degree = 3;
 static cycle_index_t pre_genus_lower_bound = 0;
 static char* adj_filename = NULL;
-static _Thread_local cycle_index_t num_edges_remaining = 0;
 static cycle_length_t smallest_cycle_length;
 static bool output_to_stdout = false;
 static bool progress_bar_newline = false;
@@ -160,20 +232,61 @@ static degree_t* initial_vertex_uses = NULL;
 static adj_t full_adjacency_list = NULL;
 static cycle_index_t num_directed_edges = 0;
 static cycle_index_t* directed_edge_ids = NULL;
-static _Thread_local bool* directed_edge_remaining = NULL;
+#ifdef _WIN32
+typedef struct {
+    cycle_index_t num_edges_remaining;
+    bool* directed_edge_remaining;
+    bool* transitions_used;
+    size_t transitions_used_size;
+    cycle_index_t* cycle_edge_conflicts;
+    vertex_t* rotation_next;
+    vertex_t* rotation_prev;
+    degree_t* rotation_pair_count;
+    size_t rotation_state_size;
+    atomic_bool* search_stop_requested;
+} page_worker_state_t;
+
+static DWORD page_worker_state_tls = TLS_OUT_OF_INDEXES;
+static page_worker_state_t page_main_worker_state = {0};
+
+page_worker_state_t* page_worker_state_current(void) {
+    if (page_worker_state_tls != TLS_OUT_OF_INDEXES) {
+        page_worker_state_t* state =
+            (page_worker_state_t*)TlsGetValue(page_worker_state_tls);
+        if (state != NULL) {
+            return state;
+        }
+    }
+    return &page_main_worker_state;
+}
+
+#define num_edges_remaining (page_worker_state_current()->num_edges_remaining)
+#define directed_edge_remaining (page_worker_state_current()->directed_edge_remaining)
+#define transitions_used (page_worker_state_current()->transitions_used)
+#define transitions_used_size (page_worker_state_current()->transitions_used_size)
+#define cycle_edge_conflicts (page_worker_state_current()->cycle_edge_conflicts)
+#define rotation_next (page_worker_state_current()->rotation_next)
+#define rotation_prev (page_worker_state_current()->rotation_prev)
+#define rotation_pair_count (page_worker_state_current()->rotation_pair_count)
+#define rotation_state_size (page_worker_state_current()->rotation_state_size)
+#define search_stop_requested (page_worker_state_current()->search_stop_requested)
+#else
+static PAGE_THREAD_LOCAL cycle_index_t num_edges_remaining = 0;
+static PAGE_THREAD_LOCAL bool* directed_edge_remaining = NULL;
+static PAGE_THREAD_LOCAL bool* transitions_used = NULL;
+static PAGE_THREAD_LOCAL size_t transitions_used_size = 0;
+static PAGE_THREAD_LOCAL cycle_index_t* cycle_edge_conflicts = NULL;
+static PAGE_THREAD_LOCAL vertex_t* rotation_next = NULL;
+static PAGE_THREAD_LOCAL vertex_t* rotation_prev = NULL;
+static PAGE_THREAD_LOCAL degree_t* rotation_pair_count = NULL;
+static PAGE_THREAD_LOCAL size_t rotation_state_size = 0;
+static PAGE_THREAD_LOCAL atomic_bool* search_stop_requested = NULL;
+#endif
 static uint32_t* directed_edge_lookup_keys = NULL;
 static cycle_index_t* directed_edge_lookup_ids = NULL;
 static cycle_index_t directed_edge_lookup_capacity = 0;
-static _Thread_local bool* transitions_used = NULL;
-static _Thread_local size_t transitions_used_size = 0;
-static _Thread_local cycle_index_t* cycle_edge_conflicts = NULL;
-static _Thread_local vertex_t* rotation_next = NULL;
-static _Thread_local vertex_t* rotation_prev = NULL;
-static _Thread_local degree_t* rotation_pair_count = NULL;
-static _Thread_local size_t rotation_state_size = 0;
 static automorphism_list_t graph_automorphisms = {0, 0, 0, NULL};
-static _Thread_local atomic_bool* search_stop_requested = NULL;
-static pthread_mutex_t output_file_mutex = PTHREAD_MUTEX_INITIALIZER;
+static page_mutex_t output_file_mutex = PAGE_MUTEX_INITIALIZER;
 
 // auxiliary data structures
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
@@ -260,7 +373,7 @@ void precompute_start_cycle_order(cycle_index_t* start_cycle_order,
                                   cycle_index_t num_start_cycles);
 bool search_start_cycles_parallel(start_branch_search_t* context,
                                   unsigned num_threads);
-void* start_branch_worker(void* arg);
+PAGE_THREAD_RETURN start_branch_worker(void* arg);
 void rotation_state_init(vertex_t num_vertices);
 void rotation_state_clear(vertex_t num_vertices);
 void rotation_state_free(void);
@@ -1871,7 +1984,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
 
         if (all_used) {
             *max_fit = max_used_cycles - cycles_to_use;
-            pthread_mutex_lock(&output_file_mutex);
+            page_mutex_lock(&output_file_mutex);
             fprintf(output_file,
                     "New max fit: %" PRIcycle_index_t " (about to try vertex %" PRIvertex_t ")\n",
                     *max_fit, vertex);
@@ -1887,7 +2000,7 @@ bool search(cycle_index_t cycles_to_use,                    // state
             }
             fprintf(output_file, "\n");
             fflush(output_file);
-            pthread_mutex_unlock(&output_file_mutex);
+            page_mutex_unlock(&output_file_mutex);
         }
     }
 
@@ -2199,6 +2312,19 @@ void cycle_set_transitions(vertex_t* cycle, cycle_length_t cycle_length, bool us
     }
 }
 
+unsigned get_online_processor_count(void) {
+#ifdef _WIN32
+    SYSTEM_INFO system_info;
+    GetSystemInfo(&system_info);
+    return system_info.dwNumberOfProcessors > 0 ? system_info.dwNumberOfProcessors : 1;
+#elif defined(_SC_NPROCESSORS_ONLN)
+    long online_processors = sysconf(_SC_NPROCESSORS_ONLN);
+    return online_processors > 0 ? (unsigned)online_processors : 1;
+#else
+    return 1;
+#endif
+}
+
 unsigned get_start_branch_thread_count(cycle_index_t num_start_cycles,
                                        cycle_index_t num_cycles) {
     if (num_start_cycles < 4) {
@@ -2222,8 +2348,7 @@ unsigned get_start_branch_thread_count(cycle_index_t num_start_cycles,
         if (num_cycles < START_BRANCH_PARALLEL_MIN_CYCLES) {
             return 1;
         }
-        long online_processors = sysconf(_SC_NPROCESSORS_ONLN);
-        threads = online_processors > 0 ? (unsigned)online_processors : 1;
+        threads = get_online_processor_count();
         if (threads > START_BRANCH_THREAD_CAP) {
             threads = START_BRANCH_THREAD_CAP;
         }
@@ -2254,25 +2379,39 @@ bool search_start_cycles_parallel(start_branch_search_t* context,
     context->total_search_calls = 0;
     context->solution_found = false;
     atomic_init(&context->stop_requested, false);
-    assert(pthread_mutex_init(&context->mutex, NULL) == 0,
+    assert(page_mutex_init(&context->mutex) == 0,
            "Error initializing start branch mutex\n");
+#ifdef _WIN32
+    page_worker_state_tls = TlsAlloc();
+    assert(page_worker_state_tls != TLS_OUT_OF_INDEXES,
+           "Error allocating start branch worker TLS\n");
+#endif
 
-    pthread_t* threads = (pthread_t*)malloc(num_threads * sizeof(pthread_t));
+    page_thread_t* threads = (page_thread_t*)malloc(num_threads * sizeof(page_thread_t));
     assert(threads != NULL, "Error allocating start branch threads\n");
     for (unsigned i = 0; i < num_threads; i++) {
-        assert(pthread_create(&threads[i], NULL, start_branch_worker, context) == 0,
+        assert(page_thread_create(&threads[i], start_branch_worker, context) == 0,
                "Error creating start branch worker thread\n");
     }
     for (unsigned i = 0; i < num_threads; i++) {
-        assert(pthread_join(threads[i], NULL) == 0,
+        assert(page_thread_join(threads[i]) == 0,
                "Error joining start branch worker thread\n");
     }
     free(threads);
-    pthread_mutex_destroy(&context->mutex);
+#ifdef _WIN32
+    TlsFree(page_worker_state_tls);
+    page_worker_state_tls = TLS_OUT_OF_INDEXES;
+#endif
+    page_mutex_destroy(&context->mutex);
     return context->solution_found;
 }
 
-void* start_branch_worker(void* arg) {
+PAGE_THREAD_RETURN start_branch_worker(void* arg) {
+#ifdef _WIN32
+    page_worker_state_t worker_state = {0};
+    assert(TlsSetValue(page_worker_state_tls, &worker_state) != 0,
+           "Error setting start branch worker TLS\n");
+#endif
     start_branch_search_t* context = (start_branch_search_t*)arg;
     bool* used_cycles = (bool*)calloc(context->num_cycles, sizeof(bool));
     degree_t* vertex_uses =
@@ -2304,14 +2443,14 @@ void* start_branch_worker(void* arg) {
     search_stop_requested = &context->stop_requested;
 
     while (!atomic_load(&context->stop_requested)) {
-        pthread_mutex_lock(&context->mutex);
+        page_mutex_lock(&context->mutex);
         if (context->solution_found ||
             context->next_start_index >= context->num_start_cycles) {
-            pthread_mutex_unlock(&context->mutex);
+            page_mutex_unlock(&context->mutex);
             break;
         }
         cycle_index_t start_i = context->next_start_index++;
-        pthread_mutex_unlock(&context->mutex);
+        page_mutex_unlock(&context->mutex);
 
         if (length_cache_without_required != NULL) {
             memset(length_cache_without_required, 0xff,
@@ -2363,7 +2502,7 @@ void* start_branch_worker(void* arg) {
                 required_cycles_to_use);
         }
 
-        pthread_mutex_lock(&context->mutex);
+        page_mutex_lock(&context->mutex);
         context->total_search_calls += local_search_calls;
         if (local_max_fit > context->best_max_fit) {
             context->best_max_fit = local_max_fit;
@@ -2379,7 +2518,7 @@ void* start_branch_worker(void* arg) {
             show_progress(context->completed_start_cycles /
                           (double)context->num_start_cycles);
         }
-        pthread_mutex_unlock(&context->mutex);
+        page_mutex_unlock(&context->mutex);
     }
 
     search_stop_requested = NULL;
@@ -2395,7 +2534,10 @@ void* start_branch_worker(void* arg) {
     num_edges_remaining = 0;
     free(vertex_uses);
     free(used_cycles);
-    return NULL;
+#ifdef _WIN32
+    TlsSetValue(page_worker_state_tls, NULL);
+#endif
+    return PAGE_THREAD_RESULT;
 }
 
 void rotation_state_init(vertex_t num_vertices) {
