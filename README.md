@@ -1,5 +1,5 @@
 # A Practical Algorithm for Graph Embedding (PAGE)
-[![DOI](https://zenodo.org/badge/doi/10.1016/j.disc.2026.115308.svg)](http://doi.org/10.1016/j.disc.2026.115308)
+[![DOI](https://img.shields.io/badge/DOI-10.1016/j.disc.2026.115308-blue)](http://doi.org/10.1016/j.disc.2026.115308)
 [![arXiv](https://img.shields.io/badge/arXiv-2411.07347-b31b1b.svg)](https://arxiv.org/abs/2411.07347)
 [![maintenance-status](https://img.shields.io/badge/maintenance-actively--developed-brightgreen.svg)](https://gist.github.com/taiki-e/ad73eaea17e2e0372efb76ef6b38f17b)
 
