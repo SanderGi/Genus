@@ -16,8 +16,9 @@
 #define MAXVAL 50  /* maximale valenz */
 #define MAXFACE 50 /* maximale Flaechengroesse 255 */
 #define MAXCYC 40 // maximum number of cycles looked for
-#define MAXCOLOURGENUS 5 // otherwise the colour list must be updated -- already for genus 5 (10+1 colours) colours are sometimes difficult to distinguish
+#define MAXCOLOURGENUS 5 // for larger genus, keep labels and generate additional colours programmatically
 #define MAXGENUS 20
+#define TEXTURESIZE 2048
 #define NOTINGRAPH ((-5)*MAXGENUS)
 #define RADIUS (100.0)
 #define MAXEDGES (N<<5)
@@ -91,9 +92,13 @@ int nullvertices, numcycles;
 int available_edges, used_edges;
 KANTE *edgebuffer;
 KANTE *edgelist[MAXEDGES];
-int maxcross=0, blackwhite=0, drawvertexnumbers=1, labels=0, straight=0, text=0;
+int maxcross=0, blackwhite=0, forceblackwhite=0, drawvertexnumbers=1, labels=0, straight=0, text=0;
 int chosenvertex=0, chosenedge[2]={0};
 int firstpage=1;
+char *objprefix=NULL;
+int objdrawings=0;
+int boundary_side[N+1], boundary_cyc[N+1];
+double boundary_t[N+1];
 char allowedcut[SMALLN][SMALLN];
 #define CANBECUT(a,b) (((a)>=SMALLN) || (((b)>=SMALLN)) || allowedcut[a][b])
 
@@ -150,6 +155,37 @@ static unsigned int vmarks[N+1];
 int dbcycle[100],dbcyclelength;
 
 char colours[11][16]={"black","blue","red","green","orange","olive","gray","pink","yellow","lime","cyan"};
+
+char *cyclecolour(int cyclenumber)
+{
+  static char generated[8][64];
+  static int slot=0;
+  int n, red, green, blue;
+
+  n=abs(cyclenumber);
+  if (forceblackwhite) return "gray";
+  if (n<11) return colours[n];
+
+  slot=(slot+1)%8;
+  red=(53*n+97)%206+50;
+  green=(97*n+53)%206+50;
+  blue=(149*n+29)%206+50;
+  snprintf(generated[slot],64,"color={rgb,255:red,%d;green,%d;blue,%d}",red,green,blue);
+  return generated[slot];
+}
+
+char *cyclelabel(int cyclenumber)
+{
+  static char labels[8][16];
+  static int slot=0;
+  int n;
+
+  n=abs(cyclenumber);
+  slot=(slot+1)%8;
+  if (n<=26) snprintf(labels[slot],16,"%c",'A'-1+n);
+  else snprintf(labels[slot],16,"%d",n);
+  return labels[slot];
+}
 
 /***************************SCHREIBEEDGE********************************/
 
@@ -286,6 +322,12 @@ void cleargraph()
     }
   nv=0;
   startedge=NULL;
+  for (i=0;i<=N;i++)
+    {
+      boundary_side[i]=(-1);
+      boundary_cyc[i]=0;
+      boundary_t[i]=0.0;
+    }
 
 }
 
@@ -1465,6 +1507,1192 @@ void rotate_clockwise_to(double c[2], double coordinates[2], double angle)
 
 #define abs(a) ((a)>0?(a):(-(a)))
 
+int uf_find(int parent[], int x)
+{
+  while (parent[x]!=x)
+    {
+      parent[x]=parent[parent[x]];
+      x=parent[x];
+    }
+  return x;
+}
+
+void uf_union(int parent[], int a, int b)
+{
+  int ra, rb;
+  if ((a<0) || (b<0)) return;
+  ra=uf_find(parent,a);
+  rb=uf_find(parent,b);
+  if (ra!=rb) parent[rb]=ra;
+}
+
+void texture_bounds(double coord[][2], double *minx, double *maxx, double *miny, double *maxy)
+{
+  int i, first=1;
+  double padx, pady;
+
+  for (i=1;i<=nv;i++)
+    if (adj[i]>0)
+      {
+	if (first)
+	  { *minx=*maxx=coord[i][0]; *miny=*maxy=coord[i][1]; first=0; }
+	else
+	  {
+	    if (coord[i][0]<*minx) *minx=coord[i][0];
+	    if (coord[i][0]>*maxx) *maxx=coord[i][0];
+	    if (coord[i][1]<*miny) *miny=coord[i][1];
+	    if (coord[i][1]>*maxy) *maxy=coord[i][1];
+	  }
+      }
+  if (first) { *minx=*miny=-RADIUS; *maxx=*maxy=RADIUS; }
+  padx=0.08*((*maxx)-(*minx));
+  pady=0.08*((*maxy)-(*miny));
+  if (padx<1.0) padx=1.0;
+  if (pady<1.0) pady=1.0;
+  *minx-=padx; *maxx+=padx; *miny-=pady; *maxy+=pady;
+}
+
+void coord_to_uv(double coord[][2], int v, double minx, double maxx, double miny, double maxy, double *u, double *vv)
+{
+  *u=(coord[v][0]-minx)/(maxx-minx);
+  *vv=(coord[v][1]-miny)/(maxy-miny);
+  if (*u<0.0) *u=0.0; if (*u>1.0) *u=1.0;
+  if (*vv<0.0) *vv=0.0; if (*vv>1.0) *vv=1.0;
+}
+
+void canonical_point(double x, double y, int genus, double out[3])
+{
+  double theta, rho, t, local, major, minor, spacing, u, v, scale, r2;
+  int handle;
+
+  if (genus<=0)
+    {
+      scale=RADIUS;
+      x/=scale; y/=scale;
+      r2=x*x+y*y;
+      out[0]=1.45*(2.0*x/(1.0+r2));
+      out[1]=1.45*(2.0*y/(1.0+r2));
+      out[2]=1.45*((1.0-r2)/(1.0+r2));
+      return;
+    }
+
+  theta=atan2(y,x);
+  if (theta<0.0) theta += 2.0*M_PI;
+  rho=sqrt(x*x+y*y)/RADIUS;
+  if (rho>1.0) rho=1.0;
+  t=theta/(2.0*M_PI);
+  handle=(int)floor(t*((double)genus));
+  if (handle>=genus) handle=genus-1;
+  local=(t*((double)genus))-((double)handle);
+  u=2.0*M_PI*local;
+  v=2.0*M_PI*rho;
+  major=1.25;
+  minor=0.38;
+  spacing=3.0;
+  out[0]=(((double)handle)-(((double)genus)-1.0)/2.0)*spacing + (major+minor*cos(v))*cos(u);
+  out[1]=(major+minor*cos(v))*sin(u);
+  out[2]=minor*sin(v);
+}
+
+void texture_set(unsigned char *img, int x, int y, int r, int g, int b)
+{
+  int p;
+  if ((x<0) || (x>=TEXTURESIZE) || (y<0) || (y>=TEXTURESIZE)) return;
+  p=3*((TEXTURESIZE-1-y)*TEXTURESIZE+x);
+  img[p]=r; img[p+1]=g; img[p+2]=b;
+}
+
+void texture_line(unsigned char *img, int x0, int y0, int x1, int y1, int r, int g, int b, int width)
+{
+  int dx, dy, sx, sy, err, e2, wx, wy;
+
+  dx=abs(x1-x0); dy=abs(y1-y0);
+  sx=(x0<x1)?1:-1; sy=(y0<y1)?1:-1;
+  err=dx-dy;
+  for (;;)
+    {
+      for (wx=-width; wx<=width; wx++)
+	for (wy=-width; wy<=width; wy++)
+	  if ((wx*wx+wy*wy)<=width*width) texture_set(img,x0+wx,y0+wy,r,g,b);
+      if ((x0==x1) && (y0==y1)) break;
+      e2=2*err;
+      if (e2>-dy) { err-=dy; x0+=sx; }
+      if (e2<dx) { err+=dx; y0+=sy; }
+    }
+}
+
+void texture_circle(unsigned char *img, int cx, int cy, int radius, int r, int g, int b)
+{
+  int x,y;
+  for (x=-radius; x<=radius; x++)
+    for (y=-radius; y<=radius; y++)
+      if (x*x+y*y<=radius*radius) texture_set(img,cx+x,cy+y,r,g,b);
+}
+
+void write_texture(char *filename, double coord[][2], double minx, double maxx, double miny, double maxy)
+{
+  FILE *file;
+  unsigned char *img;
+  int i,j,x0,y0,x1,y1;
+  double u,vv;
+  KANTE *run;
+
+  img=malloc(3*TEXTURESIZE*TEXTURESIZE);
+  if (img==NULL) { fprintf(stderr,"Can't allocate texture image -- exit.\n"); exit(1); }
+  memset(img,255,3*TEXTURESIZE*TEXTURESIZE);
+
+  for (i=1;i<=nv;i++)
+    {
+      run=map[i];
+      for (j=0;j<adj[i];j++, run=run->next)
+	if ((run->ursprung<run->name) && (run->cyclenumber==0) && (type[run->ursprung]!=3) && (type[run->name]!=3))
+	  {
+	    coord_to_uv(coord,run->ursprung,minx,maxx,miny,maxy,&u,&vv);
+	    x0=(int)(u*(TEXTURESIZE-1)); y0=(int)(vv*(TEXTURESIZE-1));
+	    coord_to_uv(coord,run->name,minx,maxx,miny,maxy,&u,&vv);
+	    x1=(int)(u*(TEXTURESIZE-1)); y1=(int)(vv*(TEXTURESIZE-1));
+	    texture_line(img,x0,y0,x1,y1,20,25,30,4);
+	  }
+    }
+
+  for (i=1;i<=nv;i++)
+    if (type[i]==0)
+      {
+	coord_to_uv(coord,i,minx,maxx,miny,maxy,&u,&vv);
+	x0=(int)(u*(TEXTURESIZE-1)); y0=(int)(vv*(TEXTURESIZE-1));
+	texture_circle(img,x0,y0,9,10,10,10);
+	texture_circle(img,x0,y0,5,245,245,245);
+      }
+
+  file=fopen(filename,"wb");
+  if (file==NULL) { fprintf(stderr,"Can't open texture file %s -- exit.\n",filename); exit(1); }
+  fprintf(file,"P6\n%d %d\n255\n",TEXTURESIZE,TEXTURESIZE);
+  fwrite(img,3,TEXTURESIZE*TEXTURESIZE,file);
+  fclose(file);
+  free(img);
+}
+
+int canonical_mesh_id(int ring, int sector, int sectors)
+{
+  if (ring==0) return 0;
+  while (sector<0) sector+=sectors;
+  sector%=sectors;
+  return 1+(ring-1)*sectors+sector;
+}
+
+void canonical_mesh_point(int genus, int side_segments, int rings, int ring, int sector, double out[3])
+{
+  double rho, theta, local, ub, vb, u, v, major, minor, spacing;
+  int sectors, side, handle, q;
+
+  if (genus<=0)
+    {
+      theta=(2.0*M_PI*((double)sector))/64.0;
+      rho=((double)ring)/((double)rings);
+      canonical_point(RADIUS*rho*cos(theta),RADIUS*rho*sin(theta),0,out);
+      return;
+    }
+
+  sectors=4*genus*side_segments;
+  theta=(2.0*M_PI*((double)sector))/((double)sectors);
+  rho=((double)ring)/((double)rings);
+  side=sector/side_segments;
+  handle=side/4;
+  q=side%4;
+  local=((double)(sector%side_segments))/((double)side_segments);
+
+  if (q==0) { ub=local; vb=0.0; }
+  else if (q==1) { ub=1.0; vb=local; }
+  else if (q==2) { ub=1.0-local; vb=1.0; }
+  else { ub=0.0; vb=1.0-local; }
+
+  u=0.5*(1.0-rho)+rho*ub;
+  v=0.5*(1.0-rho)+rho*vb;
+  major=1.25;
+  minor=0.38;
+  spacing=3.0;
+
+  out[0]=(((double)handle)-(((double)genus)-1.0)/2.0)*spacing + (major+minor*cos(2.0*M_PI*v))*cos(2.0*M_PI*u);
+  out[1]=(major+minor*cos(2.0*M_PI*v))*sin(2.0*M_PI*u);
+  out[2]=minor*sin(2.0*M_PI*v) + 0.10*(1.0-rho)*sin(theta*((double)genus));
+}
+
+void clamp_unit(double *x)
+{
+  if (*x<0.0) *x=0.0;
+  if (*x>1.0) *x=1.0;
+}
+
+void projected_uv(double x, double y, double minx, double maxx, double miny, double maxy, double *u, double *v)
+{
+  *u=(x-minx)/(maxx-minx);
+  *v=(y-miny)/(maxy-miny);
+  clamp_unit(u);
+  clamp_unit(v);
+}
+
+typedef struct
+{
+  long long x;
+  long long y;
+  long long z;
+  long long u;
+  long long v;
+  int index;
+  unsigned char used;
+} OBJVERTEXCACHEENTRY;
+
+typedef struct
+{
+  OBJVERTEXCACHEENTRY *entries;
+  unsigned int capacity;
+} OBJVERTEXCACHE;
+
+long long quantize_obj_value(double x)
+{
+  if (x>=0.0) return (long long)(x*1000000.0+0.5);
+  return (long long)(x*1000000.0-0.5);
+}
+
+unsigned int obj_vertex_hash(long long x, long long y, long long z, long long u, long long v)
+{
+  unsigned long long h;
+  h=1469598103934665603ULL;
+  h=(h^(unsigned long long)x)*1099511628211ULL;
+  h=(h^(unsigned long long)y)*1099511628211ULL;
+  h=(h^(unsigned long long)z)*1099511628211ULL;
+  h=(h^(unsigned long long)u)*1099511628211ULL;
+  h=(h^(unsigned long long)v)*1099511628211ULL;
+  return (unsigned int)(h^(h>>32));
+}
+
+void obj_cache_init(OBJVERTEXCACHE *cache, unsigned int capacity)
+{
+  cache->capacity=capacity;
+  cache->entries=calloc(capacity,sizeof(OBJVERTEXCACHEENTRY));
+  if (cache->entries==NULL) { fprintf(stderr,"Can't allocate OBJ vertex cache -- exit.\n"); exit(1); }
+}
+
+void obj_cache_free(OBJVERTEXCACHE *cache)
+{
+  free(cache->entries);
+  cache->entries=NULL;
+  cache->capacity=0;
+}
+
+int obj_emit_vertex(FILE *obj, OBJVERTEXCACHE *cache, double x, double y, double z, double u, double v, int *vcount)
+{
+  long long qx,qy,qz,qu,qv;
+  unsigned int slot, start;
+
+  clamp_unit(&u);
+  clamp_unit(&v);
+  qx=quantize_obj_value(x);
+  qy=quantize_obj_value(y);
+  qz=quantize_obj_value(z);
+  qu=0;
+  qv=0;
+  slot=obj_vertex_hash(qx,qy,qz,qu,qv)&(cache->capacity-1);
+  start=slot;
+  while (cache->entries[slot].used)
+    {
+      if ((cache->entries[slot].x==qx) && (cache->entries[slot].y==qy) &&
+	  (cache->entries[slot].z==qz) && (cache->entries[slot].u==qu) &&
+	  (cache->entries[slot].v==qv))
+	return cache->entries[slot].index;
+      slot=(slot+1)&(cache->capacity-1);
+      if (slot==start) { fprintf(stderr,"OBJ vertex cache is full -- exit.\n"); exit(1); }
+    }
+  (*vcount)++;
+  cache->entries[slot].used=1;
+  cache->entries[slot].x=qx;
+  cache->entries[slot].y=qy;
+  cache->entries[slot].z=qz;
+  cache->entries[slot].u=qu;
+  cache->entries[slot].v=qv;
+  cache->entries[slot].index=*vcount;
+  fprintf(obj,"v %.8f %.8f %.8f\n",x,y,z);
+  fprintf(obj,"vt %.8f %.8f\n",u,v);
+  return *vcount;
+}
+
+void obj_emit_triangle(FILE *obj, OBJVERTEXCACHE *cache, double a[3], double b[3], double c[3], double au, double av, double bu, double bv, double cu, double cv, int *vcount, int *faces)
+{
+  int ia, ib, ic;
+  ia=obj_emit_vertex(obj,cache,a[0],a[1],a[2],au,av,vcount);
+  ib=obj_emit_vertex(obj,cache,b[0],b[1],b[2],bu,bv,vcount);
+  ic=obj_emit_vertex(obj,cache,c[0],c[1],c[2],cu,cv,vcount);
+  fprintf(obj,"f %d/%d %d/%d %d/%d\n",ia,ia,ib,ib,ic,ic);
+  (*faces)++;
+}
+
+void sphere_point(double theta, double phi, double out[3])
+{
+  double r;
+  r=1.45;
+  out[0]=r*sin(phi)*cos(theta);
+  out[1]=r*sin(phi)*sin(theta);
+  out[2]=r*cos(phi);
+}
+
+void sphere_uv(double p[3], double *u, double *v)
+{
+  *u=0.5 + p[0]/3.2;
+  *v=0.5 + p[1]/3.2;
+  clamp_unit(u);
+  clamp_unit(v);
+}
+
+void write_sphere_mesh(FILE *obj, OBJVERTEXCACHE *cache, int *vcount, int *faces)
+{
+  int lat, lon, i, j;
+  double p00[3], p01[3], p10[3], p11[3], u00,v00,u01,v01,u10,v10,u11,v11;
+  double phi0, phi1, th0, th1;
+
+  lat=56;
+  lon=112;
+  for (i=0;i<lat;i++)
+    {
+      phi0=M_PI*((double)i)/((double)lat);
+      phi1=M_PI*((double)(i+1))/((double)lat);
+      for (j=0;j<lon;j++)
+	{
+	  th0=2.0*M_PI*((double)j)/((double)lon);
+	  th1=2.0*M_PI*((double)(j+1))/((double)lon);
+	  sphere_point(th0,phi0,p00);
+	  sphere_point(th1,phi0,p01);
+	  sphere_point(th0,phi1,p10);
+	  sphere_point(th1,phi1,p11);
+	  sphere_uv(p00,&u00,&v00);
+	  sphere_uv(p01,&u01,&v01);
+	  sphere_uv(p10,&u10,&v10);
+	  sphere_uv(p11,&u11,&v11);
+	  if (i==0)
+	    obj_emit_triangle(obj,cache,p00,p10,p11,u00,v00,u10,v10,u11,v11,vcount,faces);
+	  else if (i==lat-1)
+	    obj_emit_triangle(obj,cache,p00,p10,p01,u00,v00,u10,v10,u01,v01,vcount,faces);
+	  else
+	    {
+	      obj_emit_triangle(obj,cache,p00,p10,p11,u00,v00,u10,v10,u11,v11,vcount,faces);
+	      obj_emit_triangle(obj,cache,p00,p11,p01,u00,v00,u11,v11,u01,v01,vcount,faces);
+	    }
+	}
+    }
+}
+
+void torus_point(double centerx, double major, double minor, double u, double v, double out[3])
+{
+  out[0]=centerx+(major+minor*cos(v))*cos(u);
+  out[1]=(major+minor*cos(v))*sin(u);
+  out[2]=minor*sin(v);
+}
+
+void write_torus_mesh(FILE *obj, int genus, OBJVERTEXCACHE *cache, int *vcount, int *faces)
+{
+  int seg_u, seg_v, i, j;
+  double centerx, major, minor, u0, u1, v0, v1;
+  double p00[3], p01[3], p10[3], p11[3];
+  double tu0, tu1, tv0, tv1;
+
+  seg_u=144;
+  seg_v=56;
+  centerx=0.0;
+  major=1.25;
+  minor=0.38;
+  for (i=0;i<seg_u;i++)
+    {
+      u0=2.0*M_PI*((double)i)/((double)seg_u);
+      u1=2.0*M_PI*((double)(i+1))/((double)seg_u);
+      tu0=((double)i)/((double)seg_u);
+      tu1=((double)(i+1))/((double)seg_u);
+      for (j=0;j<seg_v;j++)
+	{
+	  v0=2.0*M_PI*((double)j)/((double)seg_v);
+	  v1=2.0*M_PI*((double)(j+1))/((double)seg_v);
+	  tv0=((double)j)/((double)seg_v);
+	  tv1=((double)(j+1))/((double)seg_v);
+	  torus_point(centerx,major,minor,u0,v0,p00);
+	  torus_point(centerx,major,minor,u1,v0,p01);
+	  torus_point(centerx,major,minor,u0,v1,p10);
+	  torus_point(centerx,major,minor,u1,v1,p11);
+	  obj_emit_triangle(obj,cache,p00,p10,p11,tu0,tv0,tu0,tv1,tu1,tv1,vcount,faces);
+	  obj_emit_triangle(obj,cache,p00,p11,p01,tu0,tv0,tu1,tv1,tu1,tv0,vcount,faces);
+	}
+    }
+}
+
+double distance_to_segment(double x, double y, double z, double ax, double ay, double az, double bx, double by, double bz)
+{
+  double vx,vy,vz,wx,wy,wz,len2,t,px,py,pz,dx,dy,dz;
+  vx=bx-ax; vy=by-ay; vz=bz-az;
+  wx=x-ax; wy=y-ay; wz=z-az;
+  len2=vx*vx+vy*vy+vz*vz;
+  if (len2<=0.0) return sqrt(wx*wx+wy*wy+wz*wz);
+  t=(wx*vx+wy*vy+wz*vz)/len2;
+  if (t<0.0) t=0.0;
+  if (t>1.0) t=1.0;
+  px=ax+t*vx; py=ay+t*vy; pz=az+t*vz;
+  dx=x-px; dy=y-py; dz=z-pz;
+  return sqrt(dx*dx+dy*dy+dz*dz);
+}
+
+double smooth_min(double a, double b, double k)
+{
+  double h, m;
+  if (a>900.0) return b;
+  m=(a<b)?a:b;
+  h=k-abs(a-b);
+  if (h<=0.0) return m;
+  return m - (h*h)/(4.0*k);
+}
+
+double handle_chain_sdf(double x, double y, double z, int genus)
+{
+  double major, minor, spacing, blend, d, cx, cx2, q, tor, seg, a, b;
+  int h;
+
+  major=1.18;
+  minor=0.34;
+  spacing=2.55;
+  blend=0.26;
+  d=1000.0;
+  for (h=0;h<genus;h++)
+    {
+      cx=(((double)h)-(((double)genus)-1.0)/2.0)*spacing;
+      q=sqrt((x-cx)*(x-cx)+y*y)-major;
+      tor=sqrt(q*q+z*z)-minor;
+      d=smooth_min(d,tor,blend);
+      if (h<genus-1)
+	{
+	  cx2=(((double)(h+1))-(((double)genus)-1.0)/2.0)*spacing;
+	  a=cx+major;
+	  b=cx2-major;
+	  seg=distance_to_segment(x,y,z,a,0.0,0.0,b,0.0,0.0)-minor;
+	  d=smooth_min(d,seg,blend);
+	}
+    }
+  return d;
+}
+
+void interp_zero(double a[3], double b[3], double va, double vb, double out[3])
+{
+  double t;
+  if (abs(va-vb)<1e-12) t=0.5;
+  else t=va/(va-vb);
+  if (t<0.0) t=0.0;
+  if (t>1.0) t=1.0;
+  out[0]=a[0]+t*(b[0]-a[0]);
+  out[1]=a[1]+t*(b[1]-a[1]);
+  out[2]=a[2]+t*(b[2]-a[2]);
+}
+
+void handle_uv(double p[3], double minx, double maxx, double miny, double maxy, double *u, double *v)
+{
+  projected_uv(p[0],p[1],minx,maxx,miny,maxy,u,v);
+}
+
+void normalize3(double v[3])
+{
+  double len;
+  len=sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+  if (len<1e-12) { v[0]=0.0; v[1]=0.0; v[2]=1.0; return; }
+  v[0]/=len; v[1]/=len; v[2]/=len;
+}
+
+void handle_chain_gradient(double p[3], int genus, double grad[3])
+{
+  double eps;
+  eps=0.0001;
+  grad[0]=handle_chain_sdf(p[0]+eps,p[1],p[2],genus)-handle_chain_sdf(p[0]-eps,p[1],p[2],genus);
+  grad[1]=handle_chain_sdf(p[0],p[1]+eps,p[2],genus)-handle_chain_sdf(p[0],p[1]-eps,p[2],genus);
+  grad[2]=handle_chain_sdf(p[0],p[1],p[2]+eps,genus)-handle_chain_sdf(p[0],p[1],p[2]-eps,genus);
+  normalize3(grad);
+}
+
+void obj_emit_oriented_handle_triangle(FILE *obj, OBJVERTEXCACHE *cache, int genus, double a[3], double b[3], double c[3], double au, double av, double bu, double bv, double cu, double cv, int *vcount, int *faces)
+{
+  double ab[3], ac[3], n[3], mid[3], grad[3], dot;
+  ab[0]=b[0]-a[0]; ab[1]=b[1]-a[1]; ab[2]=b[2]-a[2];
+  ac[0]=c[0]-a[0]; ac[1]=c[1]-a[1]; ac[2]=c[2]-a[2];
+  n[0]=ab[1]*ac[2]-ab[2]*ac[1];
+  n[1]=ab[2]*ac[0]-ab[0]*ac[2];
+  n[2]=ab[0]*ac[1]-ab[1]*ac[0];
+  mid[0]=(a[0]+b[0]+c[0])/3.0;
+  mid[1]=(a[1]+b[1]+c[1])/3.0;
+  mid[2]=(a[2]+b[2]+c[2])/3.0;
+  handle_chain_gradient(mid,genus,grad);
+  dot=n[0]*grad[0]+n[1]*grad[1]+n[2]*grad[2];
+  if (dot<0.0) obj_emit_triangle(obj,cache,a,c,b,au,av,cu,cv,bu,bv,vcount,faces);
+  else obj_emit_triangle(obj,cache,a,b,c,au,av,bu,bv,cu,cv,vcount,faces);
+}
+
+void emit_tetra_surface(FILE *obj, OBJVERTEXCACHE *cache, int genus, double p[4][3], double val[4], double minx, double maxx, double miny, double maxy, int *vcount, int *faces)
+{
+  int inside[4], outside[4], ni, no, i;
+  double q0[3], q1[3], q2[3], q3[3], u0,v0,u1,v1,u2,v2,u3,v3;
+
+  ni=0; no=0;
+  for (i=0;i<4;i++)
+    if (val[i]<0.0) { inside[ni]=i; ni++; }
+    else { outside[no]=i; no++; }
+
+  if ((ni==0) || (ni==4)) return;
+
+  if (ni==1)
+    {
+      interp_zero(p[inside[0]],p[outside[0]],val[inside[0]],val[outside[0]],q0);
+      interp_zero(p[inside[0]],p[outside[1]],val[inside[0]],val[outside[1]],q1);
+      interp_zero(p[inside[0]],p[outside[2]],val[inside[0]],val[outside[2]],q2);
+      handle_uv(q0,minx,maxx,miny,maxy,&u0,&v0);
+      handle_uv(q1,minx,maxx,miny,maxy,&u1,&v1);
+      handle_uv(q2,minx,maxx,miny,maxy,&u2,&v2);
+      obj_emit_oriented_handle_triangle(obj,cache,genus,q0,q1,q2,u0,v0,u1,v1,u2,v2,vcount,faces);
+    }
+  else if (ni==3)
+    {
+      interp_zero(p[outside[0]],p[inside[0]],val[outside[0]],val[inside[0]],q0);
+      interp_zero(p[outside[0]],p[inside[1]],val[outside[0]],val[inside[1]],q1);
+      interp_zero(p[outside[0]],p[inside[2]],val[outside[0]],val[inside[2]],q2);
+      handle_uv(q0,minx,maxx,miny,maxy,&u0,&v0);
+      handle_uv(q1,minx,maxx,miny,maxy,&u1,&v1);
+      handle_uv(q2,minx,maxx,miny,maxy,&u2,&v2);
+      obj_emit_oriented_handle_triangle(obj,cache,genus,q0,q2,q1,u0,v0,u2,v2,u1,v1,vcount,faces);
+    }
+  else
+    {
+      interp_zero(p[inside[0]],p[outside[0]],val[inside[0]],val[outside[0]],q0);
+      interp_zero(p[inside[1]],p[outside[0]],val[inside[1]],val[outside[0]],q1);
+      interp_zero(p[inside[1]],p[outside[1]],val[inside[1]],val[outside[1]],q2);
+      interp_zero(p[inside[0]],p[outside[1]],val[inside[0]],val[outside[1]],q3);
+      handle_uv(q0,minx,maxx,miny,maxy,&u0,&v0);
+      handle_uv(q1,minx,maxx,miny,maxy,&u1,&v1);
+      handle_uv(q2,minx,maxx,miny,maxy,&u2,&v2);
+      handle_uv(q3,minx,maxx,miny,maxy,&u3,&v3);
+      obj_emit_oriented_handle_triangle(obj,cache,genus,q0,q1,q2,u0,v0,u1,v1,u2,v2,vcount,faces);
+      obj_emit_oriented_handle_triangle(obj,cache,genus,q0,q2,q3,u0,v0,u2,v2,u3,v3,vcount,faces);
+    }
+}
+
+void write_handle_chain_mesh(FILE *obj, int genus, OBJVERTEXCACHE *cache, int *vcount, int *faces)
+{
+  int nx, ny, nz, i, j, k, c, t, m;
+  int tet[6][4]={{0,5,1,6},{0,1,2,6},{0,2,3,6},{0,3,7,6},{0,7,4,6},{0,4,5,6}};
+  int ox[8]={0,1,1,0,0,1,1,0};
+  int oy[8]={0,0,1,1,0,0,1,1};
+  int oz[8]={0,0,0,0,1,1,1,1};
+  double major, minor, spacing, margin, minx, maxx, miny, maxy, minz, maxz, dx, dy, dz;
+  double cube_p[8][3], cube_val[8], tp[4][3], tv[4];
+
+  major=1.18;
+  minor=0.34;
+  spacing=2.55;
+  margin=0.22;
+  minx=-(((double)genus)-1.0)*spacing/2.0 - major - minor - margin;
+  maxx= (((double)genus)-1.0)*spacing/2.0 + major + minor + margin;
+  miny=-(major+minor+margin);
+  maxy= (major+minor+margin);
+  minz=-(minor+margin);
+  maxz= (minor+margin);
+
+  nx=56+18*genus;
+  if (nx>176) nx=176;
+  ny=44;
+  nz=28;
+  dx=(maxx-minx)/((double)nx);
+  dy=(maxy-miny)/((double)ny);
+  dz=(maxz-minz)/((double)nz);
+
+  for (i=0;i<nx;i++)
+    for (j=0;j<ny;j++)
+      for (k=0;k<nz;k++)
+	{
+	  for (c=0;c<8;c++)
+	    {
+	      cube_p[c][0]=minx+dx*((double)(i+ox[c]));
+	      cube_p[c][1]=miny+dy*((double)(j+oy[c]));
+	      cube_p[c][2]=minz+dz*((double)(k+oz[c]));
+	      cube_val[c]=handle_chain_sdf(cube_p[c][0],cube_p[c][1],cube_p[c][2],genus);
+	    }
+	  for (t=0;t<6;t++)
+	    {
+	      for (m=0;m<4;m++)
+		{
+		  tp[m][0]=cube_p[tet[t][m]][0];
+		  tp[m][1]=cube_p[tet[t][m]][1];
+		  tp[m][2]=cube_p[tet[t][m]][2];
+		  tv[m]=cube_val[tet[t][m]];
+		}
+	      emit_tetra_surface(obj,cache,genus,tp,tv,minx,maxx,miny,maxy,vcount,faces);
+	    }
+	}
+}
+
+void graph_chain_point(double x, double y, int genus, double out[3])
+{
+  double theta, rho, t, local, u, v, major, minor, spacing, center;
+  int handle;
+
+  theta=atan2(y,x);
+  if (theta<0.0) theta += 2.0*M_PI;
+  rho=sqrt(x*x+y*y)/RADIUS;
+  if (rho>1.0) rho=1.0;
+  t=theta/(2.0*M_PI);
+  handle=(int)floor(t*((double)genus));
+  if (handle<0) handle=0;
+  if (handle>=genus) handle=genus-1;
+  local=(t*((double)genus))-((double)handle);
+  u=2.0*M_PI*local;
+  v=2.0*M_PI*rho;
+  major=1.18;
+  minor=0.34;
+  spacing=2.55;
+  center=(((double)handle)-(((double)genus)-1.0)/2.0)*spacing;
+  torus_point(center,major,minor,u,v,out);
+}
+
+void project_handle_chain_point(double start[3], int genus, double lift, double out[3]);
+
+void graph_chain_surface_point(double x, double y, int genus, double lift, double out[3])
+{
+  double theta, rho, major, minor, spacing, bridge, half, s, seg, corner, q, alpha, center;
+  double spx, spy, nx, ny, v, tube, angle;
+  int h, placed;
+
+  theta=atan2(y,x);
+  if (theta<0.0) theta += 2.0*M_PI;
+  rho=sqrt(x*x+y*y)/RADIUS;
+  if (rho<0.0) rho=0.0;
+  if (rho>1.0) rho=1.0;
+  if (rho>0.985) rho=0.985;
+
+  major=1.18;
+  minor=0.34;
+  spacing=2.55;
+  bridge=spacing-2.0*major;
+  if (bridge<0.05) bridge=0.05;
+  seg=M_PI*major;
+  corner=0.5*M_PI*minor;
+  half=((double)genus)*seg + ((double)(genus-1))*(bridge+2.0*corner);
+  s=(theta/(2.0*M_PI))*(2.0*half);
+  placed=0;
+
+  if (s<=half)
+    {
+      for (h=0;h<genus;h++)
+	{
+	  center=(((double)h)-(((double)genus)-1.0)/2.0)*spacing;
+	  if ((s<=seg) || (h==genus-1))
+	    {
+	      q=s/seg;
+	      if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+	      alpha=M_PI*(1.0-q);
+	      spx=center+major*cos(alpha);
+	      spy=major*sin(alpha);
+	      nx=cos(alpha);
+	      ny=sin(alpha);
+	      placed=1;
+	      break;
+	    }
+	  s-=seg;
+	  if (h<genus-1)
+	    {
+	      if (s<=corner)
+		{
+		  q=s/corner;
+		  if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+		  angle=0.5*M_PI*q;
+		  spx=center+major;
+		  spy=0.0;
+		  nx=cos(angle);
+		  ny=sin(angle);
+		  placed=1;
+		  break;
+		}
+	      s-=corner;
+	      if (s<=bridge)
+		{
+		  q=s/bridge;
+		  if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+		  spx=center+major+q*bridge;
+		  spy=0.0;
+		  nx=0.0;
+		  ny=1.0;
+		  placed=1;
+		  break;
+		}
+	      s-=bridge;
+	      if (s<=corner)
+		{
+		  q=s/corner;
+		  if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+		  angle=0.5*M_PI+0.5*M_PI*q;
+		  spx=center+major+bridge;
+		  spy=0.0;
+		  nx=cos(angle);
+		  ny=sin(angle);
+		  placed=1;
+		  break;
+		}
+	      s-=corner;
+	    }
+	}
+    }
+  else
+    {
+      s-=half;
+      for (h=genus-1;h>=0;h--)
+	{
+	  center=(((double)h)-(((double)genus)-1.0)/2.0)*spacing;
+	  if ((s<=seg) || (h==0))
+	    {
+	      q=s/seg;
+	      if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+	      alpha=(-M_PI)*q;
+	      spx=center+major*cos(alpha);
+	      spy=major*sin(alpha);
+	      nx=cos(alpha);
+	      ny=sin(alpha);
+	      placed=1;
+	      break;
+	    }
+	  s-=seg;
+	  if (h>0)
+	    {
+	      if (s<=corner)
+		{
+		  q=s/corner;
+		  if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+		  angle=M_PI+0.5*M_PI*q;
+		  spx=center-major;
+		  spy=0.0;
+		  nx=cos(angle);
+		  ny=sin(angle);
+		  placed=1;
+		  break;
+		}
+	      s-=corner;
+	      if (s<=bridge)
+		{
+		  q=s/bridge;
+		  if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+		  spx=center-major-q*bridge;
+		  spy=0.0;
+		  nx=0.0;
+		  ny=-1.0;
+		  placed=1;
+		  break;
+		}
+	      s-=bridge;
+	      if (s<=corner)
+		{
+		  q=s/corner;
+		  if (q<0.0) q=0.0; if (q>1.0) q=1.0;
+		  angle=1.5*M_PI+0.5*M_PI*q;
+		  spx=center-major-bridge;
+		  spy=0.0;
+		  nx=cos(angle);
+		  ny=sin(angle);
+		  placed=1;
+		  break;
+		}
+	      s-=corner;
+	    }
+	}
+    }
+
+  if (!placed)
+    {
+      center=-(((double)genus)-1.0)*spacing/2.0;
+      spx=center-major;
+      spy=0.0;
+      nx=-1.0;
+      ny=0.0;
+    }
+
+  v=2.0*M_PI*rho;
+  tube=minor+lift;
+  out[0]=spx+tube*cos(v)*nx;
+  out[1]=spy+tube*cos(v)*ny;
+  out[2]=tube*sin(v);
+}
+
+double positive_angle(double angle)
+{
+  while (angle<0.0) angle += 2.0*M_PI;
+  while (angle>=2.0*M_PI) angle -= 2.0*M_PI;
+  return angle;
+}
+
+double smoothstep01(double edge0, double edge1, double x)
+{
+  double t;
+  if (edge0==edge1) return (x>=edge1) ? 1.0 : 0.0;
+  t=(x-edge0)/(edge1-edge0);
+  if (t<0.0) t=0.0;
+  if (t>1.0) t=1.0;
+  return t*t*(3.0-2.0*t);
+}
+
+void polygon_side_uv(int side, double local, int genus, int *handle, double *u, double *vv)
+{
+  int q;
+
+  if (genus<1) genus=1;
+  if (side<0) side=0;
+  if (side>=4*genus) side=(4*genus)-1;
+  if (local<0.0) local=0.0;
+  if (local>1.0) local=1.0;
+
+  *handle=side/4;
+  q=side%4;
+  if (q==0) { *u=local; *vv=0.0; }
+  else if (q==1) { *u=1.0; *vv=local; }
+  else if (q==2) { *u=1.0-local; *vv=1.0; }
+  else { *u=0.0; *vv=1.0-local; }
+}
+
+void polygon_params_from_coord(double x, double y, int genus, int *side, double *local, double *rho)
+{
+  int sides;
+  double alpha, shifted, angle, rawside;
+
+  sides=numberpaths;
+  if (sides<=0) sides=4*genus;
+  if (sides<=0) sides=4;
+
+  alpha=positive_angle(-atan2(y,x)-(M_PI/2.0));
+  angle=(2.0*M_PI)/((double)sides);
+  shifted=positive_angle(alpha-(angle/2.0));
+  rawside=shifted/angle;
+  *side=(int)floor(rawside);
+  if (*side>=sides) *side=sides-1;
+  if (*side<0) *side=0;
+  *local=rawside-((double)(*side));
+  if (*local<0.0) *local=0.0;
+  if (*local>1.0) *local=1.0;
+  *rho=sqrt(x*x+y*y)/RADIUS;
+  if (*rho<0.0) *rho=0.0;
+  if (*rho>1.0) *rho=1.0;
+}
+
+void polygon_params_for_vertex(int vertex, double x, double y, int genus, int *side, double *local, double *rho)
+{
+  if ((genus>0) && (vertex>0) && (vertex<=N) && (boundary_side[vertex]>=0))
+    {
+      *side=boundary_side[vertex];
+      *local=boundary_t[vertex];
+      if (*local<0.0) *local=0.0;
+      if (*local>1.0) *local=1.0;
+      *rho=1.0;
+      return;
+    }
+  polygon_params_from_coord(x,y,genus,side,local,rho);
+}
+
+void polygon_surface_point(int side, double local, double rho, int genus, double lift, double out[3])
+{
+  double ub, vb, u, vv, major, minor, spacing, center, start[3], grad[3];
+  double chain[3], centerpoint[3], paired[3], blend[3], alpha, angle, corner, weight, center_weight, radial_weight, corner_weight, x, y;
+  int sides;
+  int handle;
+
+  if (rho<0.0) rho=0.0;
+  if (rho>1.0) rho=1.0;
+  polygon_side_uv(side,local,genus,&handle,&ub,&vb);
+  u=0.5*(1.0-rho)+rho*ub;
+  vv=0.5*(1.0-rho)+rho*vb;
+
+  if (genus<=1)
+    {
+      major=1.25;
+      minor=0.38;
+      center=0.0;
+      torus_point(center,major,minor,2.0*M_PI*u,2.0*M_PI*vv,out);
+      grad[0]=cos(2.0*M_PI*vv)*cos(2.0*M_PI*u);
+      grad[1]=cos(2.0*M_PI*vv)*sin(2.0*M_PI*u);
+      grad[2]=sin(2.0*M_PI*vv);
+      normalize3(grad);
+      out[0]+=lift*grad[0]; out[1]+=lift*grad[1]; out[2]+=lift*grad[2];
+      return;
+    }
+
+  if (handle<0) handle=0;
+  if (handle>=genus) handle=genus-1;
+  major=1.18;
+  minor=0.34;
+  spacing=2.55;
+  center=(((double)handle)-(((double)genus)-1.0)/2.0)*spacing;
+  torus_point(center,major,minor,2.0*M_PI*u,2.0*M_PI*vv,start);
+  project_handle_chain_point(start,genus,lift,paired);
+
+  sides=numberpaths;
+  if (sides<=0) sides=4*genus;
+  if (sides<=0) sides=4;
+  angle=(2.0*M_PI)/((double)sides);
+  alpha=angle/2.0 + (((double)side)+local)*angle;
+  x=(-RADIUS*rho*sin(alpha));
+  y=(-RADIUS*rho*cos(alpha));
+  graph_chain_surface_point(x,y,genus,lift,chain);
+  graph_chain_surface_point(RADIUS*0.001,0.0,genus,lift,centerpoint);
+  center_weight=1.0-smoothstep01(0.05,0.22,rho);
+  chain[0]=centerpoint[0]*center_weight+chain[0]*(1.0-center_weight);
+  chain[1]=centerpoint[1]*center_weight+chain[1]*(1.0-center_weight);
+  chain[2]=centerpoint[2]*center_weight+chain[2]*(1.0-center_weight);
+
+  corner=local;
+  if ((1.0-local)<corner) corner=1.0-local;
+  radial_weight=smoothstep01(0.82,0.985,rho);
+  corner_weight=smoothstep01(0.04,0.18,corner);
+  weight=radial_weight*corner_weight;
+  blend[0]=chain[0]*(1.0-weight)+paired[0]*weight;
+  blend[1]=chain[1]*(1.0-weight)+paired[1]*weight;
+  blend[2]=chain[2]*(1.0-weight)+paired[2]*weight;
+  out[0]=blend[0]; out[1]=blend[1]; out[2]=blend[2];
+}
+
+void graph_surface_vertex_point(int vertex, double x, double y, int genus, double lift, double out[3])
+{
+  double scale, r2, rho, local;
+  double grad[3];
+  int side;
+
+  if (genus<=0)
+    {
+      scale=RADIUS;
+      x/=scale; y/=scale;
+      r2=x*x+y*y;
+      out[0]=1.45*(2.0*x/(1.0+r2));
+      out[1]=1.45*(2.0*y/(1.0+r2));
+      out[2]=1.45*((1.0-r2)/(1.0+r2));
+      grad[0]=out[0]; grad[1]=out[1]; grad[2]=out[2];
+      normalize3(grad);
+      out[0]+=lift*grad[0]; out[1]+=lift*grad[1]; out[2]+=lift*grad[2];
+      return;
+    }
+
+  polygon_params_for_vertex(vertex,x,y,genus,&side,&local,&rho);
+  polygon_surface_point(side,local,rho,genus,lift,out);
+}
+
+void project_handle_chain_point(double start[3], int genus, double lift, double out[3])
+{
+  double grad[3], d;
+  int iter;
+
+  out[0]=start[0]; out[1]=start[1]; out[2]=start[2];
+  for (iter=0;iter<10;iter++)
+    {
+      handle_chain_gradient(out,genus,grad);
+      d=handle_chain_sdf(out[0],out[1],out[2],genus);
+      out[0]-=d*grad[0];
+      out[1]-=d*grad[1];
+      out[2]-=d*grad[2];
+    }
+  handle_chain_gradient(out,genus,grad);
+  out[0]+=lift*grad[0]; out[1]+=lift*grad[1]; out[2]+=lift*grad[2];
+}
+
+void graph_surface_point(double x, double y, int genus, double lift, double out[3])
+{
+  double scale, r2, rho, local;
+  double grad[3];
+  int side;
+
+  if (genus<=0)
+    {
+      scale=RADIUS;
+      x/=scale; y/=scale;
+      r2=x*x+y*y;
+      out[0]=1.45*(2.0*x/(1.0+r2));
+      out[1]=1.45*(2.0*y/(1.0+r2));
+      out[2]=1.45*((1.0-r2)/(1.0+r2));
+      grad[0]=out[0]; grad[1]=out[1]; grad[2]=out[2];
+      normalize3(grad);
+      out[0]+=lift*grad[0]; out[1]+=lift*grad[1]; out[2]+=lift*grad[2];
+      return;
+    }
+
+  polygon_params_from_coord(x,y,genus,&side,&local,&rho);
+  polygon_surface_point(side,local,rho,genus,lift,out);
+}
+
+int obj_emit_line_vertex(FILE *obj, double p[3], int *vcount)
+{
+  (*vcount)++;
+  fprintf(obj,"v %.8f %.8f %.8f\n",p[0],p[1],p[2]);
+  return *vcount;
+}
+
+double normalized_delta(double a, double b)
+{
+  double d;
+  d=b-a;
+  while (d<0.0) d+=2.0*M_PI;
+  while (d>=2.0*M_PI) d-=2.0*M_PI;
+  return d;
+}
+
+int circle_through_points(double ax, double ay, double bx, double by, double cx, double cy, double *ox, double *oy)
+{
+  double d, aa, bb, cc;
+  d=2.0*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+  if (fabs(d)<1e-9) return 0;
+  aa=ax*ax+ay*ay;
+  bb=bx*bx+by*by;
+  cc=cx*cx+cy*cy;
+  *ox=(aa*(by-cy)+bb*(cy-ay)+cc*(ay-by))/d;
+  *oy=(aa*(cx-bx)+bb*(ax-cx)+cc*(bx-ax))/d;
+  return 1;
+}
+
+void emit_graph_segment(FILE *obj, double coord[][2], int v, int w, int genus, double lift, int *vcount, int *linecount)
+{
+  int s, samples, idx, emit_count, lineindices[20000], use_arc;
+  double x0,y0,x1,y1,dx,dy,length,t,p[3],px,py,mx,my,ox,oy,r,a0,am,a1,delta,dm;
+
+  x0=coord[v][0]; y0=coord[v][1];
+  x1=coord[w][0]; y1=coord[w][1];
+  dx=x1-x0; dy=y1-y0;
+  length=sqrt(dx*dx+dy*dy);
+  samples=(int)(length/1.25)+24;
+  if (genus>=2) samples*=8;
+  if (samples<48) samples=48;
+  if (samples>16384) samples=16384;
+
+  use_arc=0;
+  if ((type[v]==1) && (type[w]==1) && (length<=(RADIUS/1.5)))
+    {
+      mx=(x0+x1)*0.47;
+      my=(y0+y1)*0.47;
+      if (circle_through_points(x0,y0,mx,my,x1,y1,&ox,&oy))
+	{
+	  r=sqrt((x0-ox)*(x0-ox)+(y0-oy)*(y0-oy));
+	  a0=atan2(y0-oy,x0-ox);
+	  am=atan2(my-oy,mx-ox);
+	  a1=atan2(y1-oy,x1-ox);
+	  delta=normalized_delta(a0,a1);
+	  dm=normalized_delta(a0,am);
+	  if (dm>delta) delta-=2.0*M_PI;
+	  use_arc=1;
+	}
+    }
+
+  emit_count=0;
+  for (s=0;s<=samples;s++)
+    {
+      t=((double)s)/((double)samples);
+      if (use_arc)
+	{
+	  px=ox+r*cos(a0+t*delta);
+	  py=oy+r*sin(a0+t*delta);
+	}
+      else
+	{
+	  px=x0+t*dx;
+	  py=y0+t*dy;
+	}
+      if (s==0) graph_surface_vertex_point(v,px,py,genus,lift,p);
+      else if (s==samples) graph_surface_vertex_point(w,px,py,genus,lift,p);
+      else graph_surface_point(px,py,genus,lift,p);
+      idx=obj_emit_line_vertex(obj,p,vcount);
+      if (emit_count>=20000) { fprintf(stderr,"OBJ graph line too long -- exit.\n"); exit(1); }
+      lineindices[emit_count++]=idx;
+    }
+
+  fprintf(obj,"l");
+  for (s=0;s<emit_count;s++) fprintf(obj," %d",lineindices[s]);
+  fprintf(obj,"\n");
+  (*linecount)++;
+}
+
+void write_graph_overlay(FILE *obj, double coord[][2], int genus, int *vcount, int *linecount, int *pointcount)
+{
+  int i,j,idx,v,w;
+  double p[3],labelp[3],lift,label_lift;
+  KANTE *run;
+
+  *linecount=0;
+  *pointcount=0;
+  lift=0.002;
+  label_lift=0.055;
+
+  fprintf(obj,"g embedded_graph_edges\n");
+  for (i=1;i<=nv;i++)
+    if (type[i]!=3)
+      {
+	run=map[i];
+	for (j=0;j<adj[i];j++, run=run->next)
+	  if ((run->ursprung<run->name) && (run->cyclenumber==0) &&
+	      (type[run->ursprung]!=3) && (type[run->name]!=3))
+	    {
+	      v=run->ursprung;
+	      w=run->name;
+	      fprintf(obj,"# graph_edge %d %d segment %d %d type %d %d coord %.8f %.8f %.8f %.8f\n",
+		      (run->ends)[0],(run->ends)[1],v,w,type[v],type[w],coord[v][0],coord[v][1],coord[w][0],coord[w][1]);
+	      emit_graph_segment(obj,coord,v,w,genus,lift,vcount,linecount);
+	    }
+      }
+
+  fprintf(obj,"g embedded_graph_vertices\n");
+  for (i=1;i<=nv;i++)
+    if ((i<=nullvertices) && (type[i]!=3))
+      {
+	graph_surface_vertex_point(i,coord[i][0],coord[i][1],genus,lift,p);
+	graph_surface_vertex_point(i,coord[i][0],coord[i][1],genus,label_lift,labelp);
+	idx=obj_emit_line_vertex(obj,p,vcount);
+	fprintf(obj,"# graph_vertex_label %d %d %.8f %.8f %.8f\n",idx,i,labelp[0],labelp[1],labelp[2]);
+	fprintf(obj,"p %d\n",idx);
+	(*pointcount)++;
+      }
+}
+
+void write_obj(double coord[][2])
+{
+  FILE *obj, *mtl;
+  char basename[1024], objname[1100], mtlname[1100], mtlbase[1100];
+  char *leaf;
+  int genus, faces, vcount, linecount, pointcount;
+  double minx,maxx,miny,maxy;
+  OBJVERTEXCACHE cache;
+
+  genus=globalgenus;
+  texture_bounds(coord,&minx,&maxx,&miny,&maxy);
+
+  objdrawings++;
+  if (objdrawings==1) snprintf(basename,sizeof(basename),"%s",objprefix);
+  else snprintf(basename,sizeof(basename),"%s_%d",objprefix,objdrawings);
+  snprintf(objname,sizeof(objname),"%s.obj",basename);
+  snprintf(mtlname,sizeof(mtlname),"%s.mtl",basename);
+  leaf=strrchr(basename,'/');
+  if (leaf) leaf++;
+  else leaf=basename;
+  snprintf(mtlbase,sizeof(mtlbase),"%s.mtl",leaf);
+
+  mtl=fopen(mtlname,"w");
+  if (mtl==NULL) { fprintf(stderr,"Can't open material file %s -- exit.\n",mtlname); exit(1); }
+  fprintf(mtl,"newmtl graph_surface\nKd 0.780 0.790 0.780\nKa 0.180 0.180 0.180\nKs 0.080 0.080 0.080\nNs 20\n");
+  fclose(mtl);
+
+  obj=fopen(objname,"w");
+  if (obj==NULL) { fprintf(stderr,"Can't open OBJ file %s -- exit.\n",objname); exit(1); }
+  fprintf(obj,"# canonical handle surface generated by planar_cutthroughedges_draw\n");
+  fprintf(obj,"# genus %d; genus 0 is a sphere, genus 1 is a torus, genus >=2 is a thickened canonical loop chain\n",genus);
+  fprintf(obj,"mtllib %s\n",mtlbase);
+  fprintf(obj,"o canonical_handles_%d\n",objdrawings);
+  vcount=0;
+  faces=0;
+  obj_cache_init(&cache,(genus>=2) ? 524288U : 131072U);
+  fprintf(obj,"usemtl graph_surface\ns 1\n");
+  if (genus<=0) write_sphere_mesh(obj,&cache,&vcount,&faces);
+  else if (genus==1) write_torus_mesh(obj,genus,&cache,&vcount,&faces);
+  else write_handle_chain_mesh(obj,genus,&cache,&vcount,&faces);
+  write_graph_overlay(obj,coord,genus,&vcount,&linecount,&pointcount);
+
+  fclose(obj);
+  obj_cache_free(&cache);
+  fprintf(stderr,"Wrote OBJ surface %s with %d vertices, %d triangular faces, %d graph polylines, and %d graph points.\n",objname,vcount,faces,linecount,pointcount);
+}
+
 void output_pl(double coord[][2], KANTE *outer, int writeouterface)
 // starttop_t0>0 means that a vertex of the original graph is the common point of all cutting cycles
 {
@@ -1472,6 +2700,8 @@ void output_pl(double coord[][2], KANTE *outer, int writeouterface)
   KANTE *run;
   double scale0, mindistance, length, ve[2];
   int realvertices[N], numberrealvertices;
+
+  if (objprefix) { write_obj(coord); return; }
 
   if (!writeouterface) for (i=1; i<=nv; i++) if (type[i]==2) type[i]=3;
 
@@ -1559,6 +2789,8 @@ void output(double coord[][2])
   int realvertices[N], numberrealvertices;
   char *centercolour;
   double labelmove=1.05, hoekmove=1.0;
+
+  if (objprefix) { write_obj(coord); return; }
 
   if (straight)
     { if (globalgenus==1) { if (starttop_t0) hoekmove=0.95; else hoekmove=0.97; }
@@ -1727,11 +2959,11 @@ void output(double coord[][2])
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){A}\n",c[0]*hoekmove, c[1]*hoekmove );
 	      rotate_clockwise_to(c,coord[run2->name],-rot_angle);
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){B}\n",c[0]*hoekmove, c[1]*hoekmove);
-	      if (straight) fprintf(stdout,"\\draw[->,line width=0.9mm, gray](A) to (B);\n");
+	      if (straight) fprintf(stdout,"\\draw[->,line width=0.9mm, %s](A) to (B);\n",cyclecolour(run->cyclenumber));
 	      else
 		{
 		  fprintf(stdout,"\\tkzDefPoint(0.0,0.0){C}\n");
-		  fprintf(stdout,"\\tkzDrawArc[->,line width=0.9mm, gray](C,B)(A)\n");
+		  fprintf(stdout,"\\tkzDrawArc[->,line width=0.9mm, %s](C,B)(A)\n",cyclecolour(run->cyclenumber));
 		}
 	    }
 	  else
@@ -1741,26 +2973,26 @@ void output(double coord[][2])
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){A}\n",c[0]*hoekmove, c[1]*hoekmove );
 	      rotate_clockwise_to(c,coord[run2->name],-rot_angle);
 	      fprintf(stdout,"\\tkzDefPoint(%3.5lf,%3.5lf){B}\n",c[0]*hoekmove, c[1]*hoekmove);
-	      if (straight) fprintf(stdout,"\\draw[<-,line width=0.9mm, gray](A) to (B);\n");
+	      if (straight) fprintf(stdout,"\\draw[<-,line width=0.9mm, %s](A) to (B);\n",cyclecolour(run->cyclenumber));
 	      else
 		{
 		  fprintf(stdout,"\\tkzDefPoint(0.0,0.0){C}\n");
-		  fprintf(stdout,"\\tkzDrawArc[<-,line width=0.9mm, gray](C,B)(A)\n");
+		  fprintf(stdout,"\\tkzDrawArc[<-,line width=0.9mm, %s](C,B)(A)\n",cyclecolour(run->cyclenumber));
 		}
 	    }
 	  if (straight)
 	    {
 	      rotate_clockwise_to(c,coord[run->ursprung],(M_PI)/((double)(numcycles)));
-	      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",
-				  scale3,(c[0]+coord[run->ursprung][0])*0.6,(c[1]+coord[run->ursprung][1])*0.59,'A'-1+abs(run->cyclenumber));
-	      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",
-			   scale3,(c[0]+coord[run->ursprung][0])*0.56,(c[1]+coord[run->ursprung][1])*0.55,'A'-1+abs(run->cyclenumber));
+		      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",
+					  scale3,(c[0]+coord[run->ursprung][0])*0.6,(c[1]+coord[run->ursprung][1])*0.59,cyclelabel(run->cyclenumber));
+		      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",
+				   scale3,(c[0]+coord[run->ursprung][0])*0.56,(c[1]+coord[run->ursprung][1])*0.55,cyclelabel(run->cyclenumber));
 	    }
 	  else
 	    {
 	      rotate_clockwise_to(c,coord[run->ursprung],(M_PI)/((double)(2*numcycles)));
-	      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",scale3,c[0]*1.15,c[1]*1.15,'A'-1+abs(run->cyclenumber));
-	      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%c};\n",scale3,c[0]*1.06,c[1]*1.06,'A'-1+abs(run->cyclenumber));
+		      if (labels) fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",scale3,c[0]*1.15,c[1]*1.15,cyclelabel(run->cyclenumber));
+		      else fprintf(stdout,"\\node [draw=none,fill=none,scale=%1.2lf] () at (%3.5lf,%3.5lf) {%s};\n",scale3,c[0]*1.06,c[1]*1.06,cyclelabel(run->cyclenumber));
 	    }
 	  run=run2->invers->next;
 	}
@@ -2300,11 +3532,18 @@ void embed()
 {
 
   KANTE *run, *nextstart;
-  int i, j, numberpaths, cycn, top, newtop;
+  int i, j, cycn, top, newtop;
   int lengthpath[4*MAXGENUS];
   KANTE *startsegment[4*MAXGENUS];
   double coordinates[N+1][2]={{0.0}}, angle; // angle between two corners
   double secondcoordinates[2]={0.0}, diff[2];
+
+  for (i=0;i<=N;i++)
+    {
+      boundary_side[i]=(-1);
+      boundary_cyc[i]=0;
+      boundary_t[i]=0.0;
+    }
 
   //first look for the boundary
   if (starttop_t0==0)
@@ -2355,6 +3594,9 @@ void embed()
     {
       run=startsegment[i];
       top=(run->ursprung);
+      boundary_side[top]=i;
+      boundary_cyc[top]=run->cyclenumber;
+      boundary_t[top]=0.0;
       rotate_clockwise_to(coordinates[top],coordinates[0],((double)i)*angle+(angle/2.0));
       rotate_clockwise_to(secondcoordinates,coordinates[0],((double)(i+1))*angle+(angle/2.0));
       diff[0]=secondcoordinates[0]-coordinates[top][0];
@@ -2362,12 +3604,18 @@ void embed()
       if (straight)
 	  for (j=1; j<lengthpath[i]; j++, run=run->invers->next)
 	    { newtop=run->name;
+	      boundary_side[newtop]=i;
+	      boundary_cyc[newtop]=run->cyclenumber;
+	      boundary_t[newtop]=((double)j)/((double)lengthpath[i]);
 	      coordinates[newtop][0]=coordinates[top][0]+((double)j/lengthpath[i])*diff[0];
 	      coordinates[newtop][1]=coordinates[top][1]+((double)j/lengthpath[i])*diff[1];
 	    }
       else
 	  for (j=1; j<lengthpath[i]; j++, run=run->invers->next)
 	    { newtop=run->name;
+	      boundary_side[newtop]=i;
+	      boundary_cyc[newtop]=run->cyclenumber;
+	      boundary_t[newtop]=((double)j)/((double)lengthpath[i]);
 	      coordinates[newtop][0]=coordinates[top][0]+((double)j/lengthpath[i])*diff[0];
 	      coordinates[newtop][1]=coordinates[top][1]+((double)j/lengthpath[i])*diff[1];
 	      rotate_clockwise_to(coordinates[newtop],coordinates[top],((double)j)*(angle/((double)lengthpath[i])));
@@ -2479,7 +3727,7 @@ void embed_planar()
 
 void usage(char str[])
 {
-  fprintf(stderr,"\nusage %s (v,f) [b] [mx] [n] [l] [mx] [cv x] [cf x y] [d x col] [N x y] [s] [t]\n",str);
+  fprintf(stderr,"\nusage %s (v,f) [b] [mx] [n] [l] [mx] [cv x] [cf x y] [d x col] [N x y] [s] [t] [o prefix]\n",str);
   fprintf(stderr,"Only for connected embedded graphs numbered from 1...|V|.\n");
   fprintf(stderr,"The embedded input graph is cut (if genus>0) to form a plane representation and a drawing as tikz in a latex file is written to stdout.\n\n");
   fprintf(stderr,"In case of genus>0 at least one of the options v and f must be present. \n");
@@ -2487,7 +3735,7 @@ void usage(char str[])
   fprintf(stderr,"Option f: take a point inside a face as the common point of the cutting cycles.\n");
   fprintf(stderr,"In case both options are given, two drawings of each input graph are produced -- one with face center, one with vertex center.\n\n");
   fprintf(stderr,"Option b: for black and white -- use labels A, B, C for the edges to be identified instead of colours (default).\n");
-  fprintf(stderr," \t For genus 6 or larger this is done automatically as colours would be hard to distinguish.\n\n");
+  fprintf(stderr," \t For genus 6 or larger labels are added automatically, but colours are still used.\n\n");
   fprintf(stderr,"Option n: Do not give vertex numbers, but just draw black dots.\n\n");
   fprintf(stderr,"Option l: Write small labels at the boundary -- indicating where edges crossing the boundary will finally go to.\n\n");
   fprintf(stderr,"Option: mx: (with x a number) first look only for cuts that never cut the same edge twice -- in the drawing no edge of the graph crosses the boundary twice.\n");
@@ -2500,10 +3748,11 @@ void usage(char str[])
   fprintf(stderr,"\t In case of genus 0 the face described is taken as the outer face.\n");
   fprintf(stderr,"\t Without this option or if there is no such edge in the graph, the program chooses itself.\n");
     fprintf(stderr,"Option d x col: with x a number and col a colour known to tikz, so e.g. blue, red, green. In the output, vertices with degree x get colour col.\n");
-    fprintf(stderr,"Option N x y: with x,y numbers. Do not cut through edge {x,y} if present. This option can be used for several edges. If all edges of a face are chosen, it must be made sure\n");
-    fprintf(stderr,"\t that this face is not chosen as the outer face by cf or v. Note that even then it is possible that a solution is hard to find or doesn't exist.\n");
-    fprintf(stderr,"Option s makes the program use straight line segments for the boundary, so the outer face will be a polygon instead of a circle.\n");
-    fprintf(stderr,"Option t makes the program interpret the input not as binary input of planarcode type, but as the ASCII version of it.\n");
+  fprintf(stderr,"Option N x y: with x,y numbers. Do not cut through edge {x,y} if present. This option can be used for several edges. If all edges of a face are chosen, it must be made sure\n");
+  fprintf(stderr,"\t that this face is not chosen as the outer face by cf or v. Note that even then it is possible that a solution is hard to find or doesn't exist.\n");
+  fprintf(stderr,"Option s makes the program use straight line segments for the boundary, so the outer face will be a polygon instead of a circle.\n");
+  fprintf(stderr,"Option t makes the program interpret the input not as binary input of planarcode type, but as the ASCII version of it.\n");
+  fprintf(stderr,"Option o prefix writes prefix.obj, prefix.mtl, and prefix.ppm as a textured canonical-handle OBJ export instead of writing LaTeX to stdout.\n");
   exit(1);
 }
 
@@ -2554,13 +3803,14 @@ int main(int argc, char *argv[])
     {
       if (argv[i][0]=='m') { maxcross=atoi(argv[i]+1); }
       else if (argv[i][0]=='n') { drawvertexnumbers=0;}
-      else if (argv[i][0]=='b') { lblackwhite=1; }
+      else if (argv[i][0]=='b') { lblackwhite=1; forceblackwhite=1; }
       else if (argv[i][0]=='f') facestart=1;
       else if (argv[i][0]=='v') vertexstart=1;
       else if (argv[i][0]=='p') progress=1;
       else if (argv[i][0]=='s') straight=1;
       else if (argv[i][0]=='l') labels=1;
       else if (argv[i][0]=='t') text=1;
+      else if (argv[i][0]=='o') { i++; if (i>=argc) usage(argv[0]); objprefix=argv[i]; }
       else if (argv[i][0]=='c')
 	{ if (argv[i][1]=='v') {i++; chosenvertex=atoi(argv[i]); }
 	  else if (argv[i][1]=='f') {i++; chosenedge[0]=atoi(argv[i]); i++; chosenedge[1]=atoi(argv[i]); }
@@ -2648,12 +3898,10 @@ for (;lesecode(code,&lauf,stdin);)
 	  }
       }
   }
- fprintf(stdout,"\\end{document}\n");
+ if (!objprefix) fprintf(stdout,"\\end{document}\n");
 
- fprintf(stderr,"%s: Wrote %d tikz-drawing(s) of %d graph(s) to stdout.\n",argv[0],drawings,zaehlen);
+ if (objprefix) fprintf(stderr,"%s: Wrote %d OBJ drawing(s) of %d graph(s).\n",argv[0],drawings,zaehlen);
+ else fprintf(stderr,"%s: Wrote %d tikz-drawing(s) of %d graph(s) to stdout.\n",argv[0],drawings,zaehlen);
 return(0);
 
 }
-
-
-

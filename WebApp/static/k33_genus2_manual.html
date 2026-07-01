@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K3,3 Genus 2 Manual Routing</title>
+    <link rel="stylesheet" href="k33_genus2_manual.css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+</head>
+<body>
+    <main class="manual-shell">
+        <section class="manual-stage">
+            <div id="viewer" class="viewer"></div>
+            <aside class="tool-panel">
+                <div class="panel-header">
+                    <h1>K3,3 Genus 2 Routing</h1>
+                    <p id="orbit_summary"></p>
+                </div>
+
+                <label class="field">
+                    <span>Symmetry Representative</span>
+                    <select id="representative_select"></select>
+                </label>
+
+                <section class="tool-section">
+                    <h2>Rotation System</h2>
+                    <div id="rotation_system" class="rotation-system"></div>
+                    <button id="verify_orientation" type="button">Verify Orientations</button>
+                    <div id="verify_result" class="verify-result"></div>
+                </section>
+
+                <div class="button-row">
+                    <button id="load_surface" class="primary" type="button">Load Surface</button>
+                    <button id="toggle_original" type="button">Original Overlay</button>
+                </div>
+
+                <div id="status" class="status"></div>
+
+                <section class="tool-section">
+                    <h2>Place Vertices</h2>
+                    <p>Select a vertex, then click the surface.</p>
+                    <div id="vertex_buttons" class="vertex-grid"></div>
+                </section>
+
+                <section class="tool-section">
+                    <h2>Route Edges</h2>
+                    <p>Select an edge, then click the surface to add route points.</p>
+                    <label class="field">
+                        <span>Edge</span>
+                        <select id="edge_select"></select>
+                    </label>
+                    <div class="button-row">
+                        <button id="undo_point" type="button">Undo Point</button>
+                        <button id="clear_edge" type="button">Clear Edge</button>
+                    </div>
+                    <button id="smooth_edge" type="button">Smooth + Project Current Edge</button>
+                </section>
+
+                <section class="tool-section">
+                    <h2>Data</h2>
+                    <div class="button-row">
+                        <button id="save_layout" type="button">Save Local</button>
+                        <button id="copy_layout" type="button">Copy JSON</button>
+                    </div>
+                    <textarea id="layout_json" spellcheck="false" placeholder="Saved/exported layout JSON"></textarea>
+                    <button id="apply_layout" type="button">Apply JSON</button>
+                </section>
+            </aside>
+        </section>
+    </main>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "/vendor/three.js"
+            }
+        }
+    </script>
+    <script type="module" src="k33_genus2_manual.js"></script>
+</body>
+</html>

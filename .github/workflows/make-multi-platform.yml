@@ -13,17 +13,17 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         build_type: [Release]
         c_compiler: [gcc]
-        output_name: [CalcGenus, CalcGenus.exe]
+        output_name: [page, page.exe]
         include:
           - os: ubuntu-latest
-            output_name: CalcGenus
+            output_name: page
           - os: windows-latest
-            output_name: CalcGenus.exe
+            output_name: page.exe
         exclude:
           - os: windows-latest
-            output_name: CalcGenus
+            output_name: page
           - os: ubuntu-latest
-            output_name: CalcGenus.exe
+            output_name: page.exe
 
     steps:
     - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
         compiler: ${{ matrix.c_compiler }}
 
     - name: Build
-      working-directory: ./CalcGenus
+      working-directory: ./PAGE
       run: make all CC=${{ matrix.c_compiler }} CPPC=${{ matrix.cpp_compiler }} BTYPE=${{ matrix.build_type }} BDIR=${{ steps.strings.outputs.build-output-dir }}
 
     - name: release
@@ -69,5 +69,5 @@ jobs:
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.output_name }}
-        asset_name: CalcGenus-${{ matrix.os }}-${{ matrix.build_type }}
+        asset_name: page-${{ matrix.os }}-${{ matrix.build_type }}
         asset_content_type: application/octet-stream

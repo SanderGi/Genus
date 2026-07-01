@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software or cite this paper, please use the metadata below."
+authors:
+  - family-names: "Metzger"
+    given-names: "Alexander"
+  - family-names: "Ulrigg"
+    given-names: "Austin"
+title: "An efficient genus algorithm based on graph rotations"
+type: article
+doi: "10.1016/j.disc.2026.115308"
+journal: "Discrete Mathematics"
+volume: 349
+issue: 12
+start: 115308
+year: 2026
+month: 12
+date-released: "2026-12-01"
+publisher:
+  name: "Elsevier BV"
