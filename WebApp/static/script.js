@@ -513,3 +513,50 @@ function renderModel(model, container) {
     },
   };
 }
+
+function setBibtex(algorithm, output_format) {
+  const page_bibtex = `@article{Metzger_2026,
+    title={An efficient genus algorithm based on graph rotations},
+    number={12}, volume={349}, ISSN={0012-365X},
+    url={http://doi.org/10.1016/j.disc.2026.115308},
+    DOI={10.1016/j.disc.2026.115308},
+    journal={Discrete Mathematics},
+    publisher={Elsevier BV},
+    author={Metzger, Alexander and Ulrigg, Austin},
+    year={2026}, month=Dec, pages={115308}
+}`;
+  const multi_genus_bibtex = `@article{article,
+    title = {A practical algorithm for the computation of the genus},
+    author = {Brinkmann, Gunnar},
+    year = {2022}, month = {07},
+    pages = {#P4.01}, volume = {22},
+    journal = {Ars Mathematica Contemporanea},
+    doi = {10.26493/1855-3974.2320.c2d}
+}`;
+  const planar_draw_bibtex = `@misc{brinkmann2025drawingmapsorientedsurfaces,
+    title={Drawing maps on oriented surfaces}, 
+    author={Gunnar Brinkmann},
+    year={2025},
+    eprint={2505.01480},
+    archivePrefix={arXiv},
+    primaryClass={cs.CG},
+    url={https://arxiv.org/abs/2505.01480}, 
+}`;
+  let bibtex = "";
+  if (algorithm === "multi_genus") {
+    bibtex += multi_genus_bibtex + "\n";
+  }
+  bibtex += page_bibtex;
+  if (["drawing", "3d"].includes(output_format)) {
+    bibtex += "\n" + planar_draw_bibtex;
+  }
+  document.getElementById("bibtex-content").innerText = bibtex;
+}
+
+algorithm.addEventListener("change", () => {
+  setBibtex(algorithm.value, outputFormat.value);
+});
+
+outputFormat.addEventListener("change", () => {
+  setBibtex(algorithm.value, outputFormat.value);
+});

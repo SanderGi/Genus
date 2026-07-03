@@ -360,3 +360,85 @@ textarea {
         height: 58vh;
     }
 }
+
+/* Card Container */
+.bibtex-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    font-family: system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+}
+
+/* Header Section */
+.bibtex-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+    background-color: #ffffff;
+}
+
+.bibtex-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+/* Copy Button */
+.copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #64748b;
+    background-color: #f1f5f9;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.copy-btn:hover {
+    background-color: #e2e8f0;
+    color: #1e293b;
+}
+
+.copy-btn:active {
+    background-color: #d1d5db;
+}
+
+/* Success State for Button */
+.copy-btn.copied {
+    background-color: #10b981;
+    color: #ffffff;
+}
+
+.copy-btn.copied .copy-icon {
+    display: none; /* Hide standard icon when copied */
+}
+
+/* Code Block Area */
+.bibtex-body {
+    padding: 1.25rem;
+    background-color: #f8fafc;
+    overflow-x: auto;
+}
+
+.bibtex-body pre {
+    margin: 0;
+}
+
+.bibtex-body code {
+    display: block;
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    font-size: 0.875rem;
+    color: #1e293b;
+    line-height: 1.5;
+    height: 10lh;
+}

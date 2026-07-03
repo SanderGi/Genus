@@ -61,6 +61,47 @@
                     <p class="hint">One vertex per line. Use space-separated vertex numbers for each vertex's neighbors.</p>
                     <button id="calculate" class="primary-action" type="button">Calculate Genus</button>
                 </div>
+
+                <div class="bibtex-card">
+                    <div class="bibtex-header">
+                        <h3 class="bibtex-title">Citation (BibTeX)</h3>
+                        <button class="copy-btn" id="copyBtn" onclick="copyBibtex()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="copy-icon"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            <span id="btnText">Copy</span>
+                        </button>
+                    </div>
+                    <div class="bibtex-body">
+                        <pre><code id="bibtex-content">@article{Metzger_2026,
+    title={An efficient genus algorithm based on graph rotations},
+    number={12}, volume={349}, ISSN={0012-365X},
+    url={http://doi.org/10.1016/j.disc.2026.115308},
+    DOI={10.1016/j.disc.2026.115308},
+    journal={Discrete Mathematics},
+    publisher={Elsevier BV},
+    author={Metzger, Alexander and Ulrigg, Austin},
+    year={2026}, month=Dec, pages={115308}
+}</code></pre>
+                    </div>
+                </div>
+                <script>
+                    function copyBibtex() {
+                        const bibtexText = document.getElementById('bibtex-content').innerText;
+                        navigator.clipboard.writeText(bibtexText).then(() => {
+                            const btn = document.getElementById('copyBtn');
+                            const btnText = document.getElementById('btnText');
+                            btn.classList.add('copied');
+                            btnText.innerText = 'Copied!';
+                            setTimeout(() => {
+                                btn.classList.remove('copied');
+                                btnText.innerText = 'Copy';
+                            }, 2000);
+                        }).catch(err => {
+                            console.error('Failed to copy text: ', err);
+                            alert('Failed to copy to clipboard.');
+                        });
+                    }
+                </script>
+                <p class="hint">License: <a href="https://github.com/SanderGi/Genus/blob/main/LICENSE" target="_blank">GPLv2</a>. For publications, please include the citation(s).</p>
             </section>
 
             <section class="result-panel">
