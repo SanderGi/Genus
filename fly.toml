@@ -5,7 +5,7 @@ app = 'genus'
 primary_region = 'sea'
 
 [build]
-dockerfile = "WebApp/Dockerfile"
+dockerfile = "app/Dockerfile"
 
 [http_service]
   internal_port = 8080

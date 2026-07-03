@@ -33,7 +33,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
-COPY WebApp/requirements.txt requirements.txt
+COPY app/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy compiled C binaries
@@ -41,8 +41,8 @@ COPY --from=builder /app/page /app/pageSC /app/multi_genus /app/planar_draw /app
     
 # Copy the rest of the files
 COPY PAGE/adjacency_lists/* adjacency_lists/
-COPY WebApp/main.py main.py
-COPY WebApp/static/ static/
+COPY app/main.py main.py
+COPY app/static/ static/
 
 EXPOSE 8080
 

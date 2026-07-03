@@ -31,7 +31,7 @@ This repo contains a fast algorithm for calculating the genus of arbitrary graph
 
 ## Usage
 
-The easiest way is to use the [hosted version](https://genus.sandergi.com/). This won't be as fast as running it locally and I can't guarantee it will always be up, but it should allow you to explore the algorithm. You can also self-host the web application by [installing docker](https://docs.docker.com/get-docker/) and running `cd WebApp` followed by `. ./run-dev.sh`. This will start the web application on `localhost:8080`.
+The easiest way is to use the [hosted version](https://genus.sandergi.com/). This won't be as fast as running it locally and I can't guarantee it will always be up, but it should allow you to explore the algorithm. You can also self-host the web application by [installing docker](https://docs.docker.com/get-docker/) and running `cd app` followed by `. ./run-dev.sh`. This will start the web application on `localhost:8080`.
 
 To run the python scripts you must have [SageMath installed](https://doc.sagemath.org/html/en/installation/index.html) and select the SageMath kernel in Jupyter/VS Code/whatever you use.
 
