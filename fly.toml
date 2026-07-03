@@ -1,7 +1,5 @@
-# fly.toml app configuration file generated for genus on 2024-12-19T02:40:03-08:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
 
 app = 'genus'
 primary_region = 'sea'

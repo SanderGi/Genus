@@ -1,3 +1,8 @@
+<!--
+    SPDX-FileCopyrightText: 2026 Alexander Metzger
+    SPDX-License-Identifier: GPL-2.0-only
+-->
+
 # Time Complexity
 Let `n` be the size of the vertex set `V` and `m` the size of the edge set `E`. Let `G` be the girth of the graph.
 

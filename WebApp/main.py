@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
+"""Spins up a flask server that serves a useful webapp for graph embedding."""
+
 import os
 import subprocess
 import threading
@@ -278,9 +283,8 @@ def calc_genus(algorithm, adj_list: list[list[int]]):
             env, adj_file, inp_type = setup_multi_genus(adj_list)
             cmd = [
                 find_executable(
-                    "./multi_genus_128",
-                    "./multi_genus_longtype_128",
-                    "../MultiGenus/multi_genus_longtype_128",
+                    "./multi_genus",
+                    "../MultiGenus/multi_genus",
                 )
             ]
         elif algorithm == "none":
@@ -351,9 +355,8 @@ def run_algorithm_capture(algorithm, adj_list, status_callback=None):
             env, adj_file, inp_type = setup_multi_genus(adj_list)
             cmd = [
                 find_executable(
-                    "./multi_genus_128",
-                    "./multi_genus_longtype_128",
-                    "../MultiGenus/multi_genus_longtype_128",
+                    "./multi_genus",
+                    "../MultiGenus/multi_genus",
                 )
             ]
             cmd.append("w")
@@ -476,8 +479,8 @@ def run_algorithm_capture(algorithm, adj_list, status_callback=None):
 
 def render_multicode_png(multicode):
     draw_cmd = find_executable(
-        "./planar_cutthroughedges_draw",
-        "../MultiGenus/planar_cutthroughedges_draw",
+        "./planar_draw",
+        "../MultiGenus/planar_draw",
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -531,8 +534,8 @@ def render_multicode_png(multicode):
 
 def render_multicode_obj(multicode):
     draw_cmd = find_executable(
-        "./planar_cutthroughedges_draw",
-        "../MultiGenus/planar_cutthroughedges_draw",
+        "./planar_draw",
+        "../MultiGenus/planar_draw",
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -834,7 +837,7 @@ def stream(ws):
             multicode = None
         if multicode is None:
             ws.send("JSON:" + json.dumps(result, sort_keys=True))
-        elif output_format == "3d" and result.get("genus", 0) > 1:
+        elif output_format == "3d" and result.get("genus", 0) > 1:  # type: ignore
             ws.send(
                 "JSON:"
                 + json.dumps(

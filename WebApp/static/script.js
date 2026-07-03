@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Alexander Metzger
+// SPDX-License-Identifier: GPL-2.0-only
+
 import * as THREE from "three";
 import { OrbitControls } from "/vendor/OrbitControls.js";
 
@@ -311,7 +314,8 @@ function makeGraphOverlay(graphLines, graphPoints, center, radius) {
   const capPoints = [];
   for (const line of graphLines) {
     const points = line.map(
-      ([x, y, z]) => new THREE.Vector3(x - center.x, y - center.y, z - center.z),
+      ([x, y, z]) =>
+        new THREE.Vector3(x - center.x, y - center.y, z - center.z),
     );
     if (points.length > 0) {
       capPoints.push(points[0], points[points.length - 1]);
@@ -373,9 +377,10 @@ function makeGraphOverlay(graphLines, graphPoints, center, radius) {
       if (labelPosition) {
         sprite.position.copy(position);
       } else {
-        const normal = position.lengthSq() > 1e-10
-          ? position.clone().normalize()
-          : new THREE.Vector3(0, 0, 1);
+        const normal =
+          position.lengthSq() > 1e-10
+            ? position.clone().normalize()
+            : new THREE.Vector3(0, 0, 1);
         sprite.position.copy(position.addScaledVector(normal, labelOffset));
       }
       group.add(sprite);
@@ -435,7 +440,9 @@ function renderModel(model, container) {
   if (model.genus === 0 && graphPoints.length > 0) {
     const graphCenter = new THREE.Vector3();
     graphPoints.forEach(({ position: [x, y, z] }) => {
-      graphCenter.add(new THREE.Vector3(x - center.x, y - center.y, z - center.z));
+      graphCenter.add(
+        new THREE.Vector3(x - center.x, y - center.y, z - center.z),
+      );
     });
     graphCenter.multiplyScalar(1 / graphPoints.length);
     if (graphCenter.lengthSq() > 1e-10) {
@@ -461,7 +468,12 @@ function renderModel(model, container) {
   });
   const mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
-  const graphOverlay = makeGraphOverlay(graphLines, graphPoints, center, radius);
+  const graphOverlay = makeGraphOverlay(
+    graphLines,
+    graphPoints,
+    center,
+    radius,
+  );
   scene.add(graphOverlay);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.2));

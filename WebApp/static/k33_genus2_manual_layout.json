@@ -1,4 +1,8 @@
 {
+  "_metadata": {
+    "copyright:": "SPDX-FileCopyrightText: 2026 Alexander Metzger",
+    "license": "SPDX-License-Identifier: GPL-2.0-only"
+  },
   "representative": 0,
   "mask": 1,
   "vertices": {

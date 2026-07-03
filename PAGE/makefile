@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
+
 CC=gcc
 BTYPE=Development
 BDIR=.
@@ -17,7 +20,6 @@ run_wine: page.exe
 page.exe: page.c
 #   brew install mingw-w64
 	x86_64-w64-mingw32-gcc -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o "$(BDIR)/page.exe" page.c 
-
 
 clean:
 	rm -f $(BDIR)/page $(BDIR)/*.o

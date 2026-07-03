@@ -1,10 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Alexander Metzger
+// SPDX-License-Identifier: GPL-2.0-only
+
 import * as THREE from "three";
 import { OrbitControls } from "/vendor/OrbitControls.js";
 
 const BLUE = 0x0867d8;
 const BLACK = 0x151719;
 const SURFACE = 0xc7cbc6;
-const FACE_COLORS = [0x0a67c5, 0xb46a00, 0x237052, 0x7d4ac7, 0xbb3f4a, 0x47606f];
+const FACE_COLORS = [
+  0x0a67c5, 0xb46a00, 0x237052, 0x7d4ac7, 0xbb3f4a, 0x47606f,
+];
 const TRACED_FACES_CAMERA_POSITION = new THREE.Vector3(0, -5.85, 3.15);
 const TRACED_FACES_CAMERA_TARGET = new THREE.Vector3(0, 0, 0.2);
 const SURFACE_CAMERA_POSITION = new THREE.Vector3(0, -6.15, 2.95);
@@ -25,11 +30,15 @@ const EDGES = [];
 for (let left = 0; left < 3; left++) {
   for (let right = 3; right < 6; right++) EDGES.push([left, right]);
 }
-const INTRO_EXPLANATION = "A rotation system defines a cyclic ordering of the incident edges (darts) for each vertex. Click each line to view.";
+const INTRO_EXPLANATION =
+  "A rotation system defines a cyclic ordering of the incident edges (darts) for each vertex. Click each line to view.";
 const START_TRACE_EXPLANATION = "We start by choosing an arbitrary dart.";
-const FINISHED_FACE_EXPLANATION = "We have finished a face, so we choose an arbitrary unused dart.";
-const ALL_DARTS_EXPLANATION = "We have used all the darts. Now we have the faces of a 3D surface which is formed by gluing the faces at matching edges.";
-const FINAL_EXPLANATION = "In the final embedding, the cyclic ordering of the rotation system is oriented following the right-hand rule (counter-clockwise). Click each line to see.";
+const FINISHED_FACE_EXPLANATION =
+  "We have finished a face, so we choose an arbitrary unused dart.";
+const ALL_DARTS_EXPLANATION =
+  "We have used all the darts. Now we have the faces of a 3D surface which is formed by gluing the faces at matching edges.";
+const FINAL_EXPLANATION =
+  "In the final embedding, the cyclic ordering of the rotation system is oriented following the right-hand rule (counter-clockwise). Click each line to see.";
 
 const el = {
   viewer: document.getElementById("viewer"),
@@ -129,15 +138,24 @@ el.playbackStart.addEventListener("click", () => usePlayback("start"));
 el.playbackBack.addEventListener("click", () => usePlayback("back"));
 el.playbackForward.addEventListener("click", () => usePlayback("forward"));
 el.playbackEnd.addEventListener("click", () => usePlayback("end"));
-el.nextRotation.addEventListener("click", () => setRotation((state.index + 1) % systems.length));
-mobileQuery.addEventListener("change", () => setShowEmbeddingLabel(currentSystem()));
+el.nextRotation.addEventListener("click", () =>
+  setRotation((state.index + 1) % systems.length),
+);
+mobileQuery.addEventListener("change", () =>
+  setShowEmbeddingLabel(currentSystem()),
+);
 
 function makeRotationSystems() {
   const all = [];
   for (let mask = 0; mask < 64; mask++) {
     const rotation = rotationFromMask(mask);
     const faces = computeFaces(rotation);
-    all.push({ index: mask, rotation, faces, genus: genusFromFaces(rotation, faces) });
+    all.push({
+      index: mask,
+      rotation,
+      faces,
+      genus: genusFromFaces(rotation, faces),
+    });
   }
   return all;
 }
@@ -179,7 +197,8 @@ function computeFaces(rotation) {
 
 function genusFromFaces(rotation, faces) {
   const vertices = rotation.length;
-  const edges = rotation.reduce((sum, neighbors) => sum + neighbors.length, 0) / 2;
+  const edges =
+    rotation.reduce((sum, neighbors) => sum + neighbors.length, 0) / 2;
   return (2 - (vertices - edges + faces.length)) / 2;
 }
 
@@ -213,7 +232,9 @@ function setExplanation(text) {
 }
 
 function setShowEmbeddingLabel(system) {
-  el.showEmbedding.textContent = mobileQuery.matches ? "Embed" : `Show Genus ${system.genus} Embedding`;
+  el.showEmbedding.textContent = mobileQuery.matches
+    ? "Embed"
+    : `Show Genus ${system.genus} Embedding`;
 }
 
 function rotationOrderText(order) {
@@ -292,16 +313,24 @@ function buildFlatGraph() {
 
   for (let vertex = 0; vertex < 6; vertex++) {
     const p = flatPosition(vertex);
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.075, 24, 16), pointMaterial);
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.075, 24, 16),
+      pointMaterial,
+    );
     dot.position.copy(p);
     group.add(dot);
-    const ring = new THREE.Mesh(new THREE.SphereGeometry(0.082, 24, 12), pointRingMaterial);
+    const ring = new THREE.Mesh(
+      new THREE.SphereGeometry(0.082, 24, 12),
+      pointRingMaterial,
+    );
     ring.position.copy(p);
     ring.scale.setScalar(1.02);
     ring.material.side = THREE.BackSide;
     group.add(ring);
     const label = makeTextSprite(String(vertex), 0.22, { depthTest: false });
-    label.position.copy(p).add(new THREE.Vector3(vertex < 3 ? -0.2 : 0.2, 0.12, 0.04));
+    label.position
+      .copy(p)
+      .add(new THREE.Vector3(vertex < 3 ? -0.2 : 0.2, 0.12, 0.04));
     group.add(label);
   }
 
@@ -382,7 +411,11 @@ async function showEmbedding() {
   setExplanation(ALL_DARTS_EXPLANATION);
   el.status.textContent = "Showing traced faces";
   await Promise.all([
-    animateCamera(TRACED_FACES_CAMERA_POSITION, TRACED_FACES_CAMERA_TARGET, 980),
+    animateCamera(
+      TRACED_FACES_CAMERA_POSITION,
+      TRACED_FACES_CAMERA_TARGET,
+      980,
+    ),
     morphTraceDartsToFaceCycles(system, token),
   ]);
   if (token !== state.animationToken) return;
@@ -406,7 +439,11 @@ async function showEmbedding() {
   controls.enableRotate = true;
   controls.enablePan = true;
   await Promise.all([
-    animateCamera(SURFACE_CAMERA_POSITION, SURFACE_CAMERA_TARGET, TORUS_GLUE_DURATION),
+    animateCamera(
+      SURFACE_CAMERA_POSITION,
+      SURFACE_CAMERA_TARGET,
+      TORUS_GLUE_DURATION,
+    ),
     morphFaceCyclesToSurface(system, modelGroup, token),
   ]);
   if (token !== state.animationToken) return;
@@ -445,7 +482,9 @@ async function usePlayback(action) {
   else if (action === "forward") next = Math.min(finalStep, current + 1);
   else if (action === "end") next = finalStep;
 
-  await renderManualStep(system, next, token, { animateBoundary: action === "forward" });
+  await renderManualStep(system, next, token, {
+    animateBoundary: action === "forward",
+  });
 }
 
 async function renderManualStep(system, step, token, options = {}) {
@@ -479,11 +518,17 @@ async function renderManualStep(system, step, token, options = {}) {
   if (state.manualStep === facesStep) {
     resetManualTraceScene();
     if (animateBoundary && previousStep === facesStep - 1) {
-      renderTracePrefix(system, timeline.length - 1, { highlightCurrent: false });
+      renderTracePrefix(system, timeline.length - 1, {
+        highlightCurrent: false,
+      });
       setExplanation(ALL_DARTS_EXPLANATION);
       el.status.textContent = "Showing traced faces";
       await Promise.all([
-        animateCamera(TRACED_FACES_CAMERA_POSITION, TRACED_FACES_CAMERA_TARGET, 980),
+        animateCamera(
+          TRACED_FACES_CAMERA_POSITION,
+          TRACED_FACES_CAMERA_TARGET,
+          980,
+        ),
         morphTraceDartsToFaceCycles(system, token),
       ]);
       return;
@@ -517,7 +562,11 @@ async function renderManualStep(system, step, token, options = {}) {
     controls.enableRotate = true;
     controls.enablePan = true;
     await Promise.all([
-      animateCamera(SURFACE_CAMERA_POSITION, SURFACE_CAMERA_TARGET, TORUS_GLUE_DURATION),
+      animateCamera(
+        SURFACE_CAMERA_POSITION,
+        SURFACE_CAMERA_TARGET,
+        TORUS_GLUE_DURATION,
+      ),
       morphFaceCyclesToSurface(system, modelGroup, token),
     ]);
     if (token !== state.animationToken || !state.manualMode) return;
@@ -602,7 +651,10 @@ function renderTracePrefix(system, step, options = {}) {
   }
   const current = timeline[step];
   if (highlightCurrent && current) {
-    highlightDart(current.dart, FACE_COLORS[current.faceIndex % FACE_COLORS.length]);
+    highlightDart(
+      current.dart,
+      FACE_COLORS[current.faceIndex % FACE_COLORS.length],
+    );
   }
 }
 
@@ -671,23 +723,39 @@ function addFaceCycle(face, faceIndex, totalFaces) {
   group.add(tube);
 
   for (let i = 0; i < face.length; i++) {
-    const arrowFrom = new THREE.Vector3().lerpVectors(points[i], points[i + 1], 0.80);
-    const arrowTo = new THREE.Vector3().lerpVectors(points[i], points[i + 1], 0.96);
-    group.add(makeArrowHead(arrowFrom, arrowTo, color, 0.03, 0.074, {
-      depthTest: true,
-      renderOrder: 22,
-      opacity: 0,
-      tipAtTarget: true,
-    }));
+    const arrowFrom = new THREE.Vector3().lerpVectors(
+      points[i],
+      points[i + 1],
+      0.8,
+    );
+    const arrowTo = new THREE.Vector3().lerpVectors(
+      points[i],
+      points[i + 1],
+      0.96,
+    );
+    group.add(
+      makeArrowHead(arrowFrom, arrowTo, color, 0.03, 0.074, {
+        depthTest: true,
+        renderOrder: 22,
+        opacity: 0,
+        tipAtTarget: true,
+      }),
+    );
   }
 
   for (let i = 0; i < face.length; i++) {
     const pos = points[i].clone();
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 10), pointMaterial);
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.035, 16, 10),
+      pointMaterial,
+    );
     dot.position.copy(pos);
     dot.renderOrder = 30;
     group.add(dot);
-    const label = makeTextSprite(`${face[i].from}`, 0.13, { depthTest: false, opacity: 0 });
+    const label = makeTextSprite(`${face[i].from}`, 0.13, {
+      depthTest: false,
+      opacity: 0,
+    });
     label.position.copy(pos).add(new THREE.Vector3(0.06, -0.05, 0.05));
     group.add(label);
   }
@@ -695,7 +763,9 @@ function addFaceCycle(face, faceIndex, totalFaces) {
   group.userData.setOpacity = (opacity) => {
     group.traverse((child) => {
       if (child.material) {
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        const materials = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
         materials.forEach((mat) => {
           mat.opacity = opacity;
           mat.transparent = true;
@@ -713,18 +783,23 @@ function addFaceCycle(face, faceIndex, totalFaces) {
 
 function faceCycleLayout(face, faceIndex, totalFaces) {
   const radius = Math.max(0.42, Math.min(0.82, 0.28 + face.length * 0.035));
-  const slotWidth = Math.max(1.18, Math.min(2.15, 5.4 / Math.max(1, totalFaces)));
+  const slotWidth = Math.max(
+    1.18,
+    Math.min(2.15, 5.4 / Math.max(1, totalFaces)),
+  );
   const slotX = (faceIndex - (totalFaces - 1) / 2) * slotWidth;
   const zLift = 1.42 + (faceIndex % 2) * 0.16;
   const center = new THREE.Vector3(slotX, -0.22, zLift);
   const points = [];
   for (let i = 0; i <= face.length; i++) {
     const angle = Math.PI / 2 - (i / face.length) * Math.PI * 2;
-    points.push(new THREE.Vector3(
-      center.x + Math.cos(angle) * radius,
-      center.y,
-      center.z + Math.sin(angle) * radius,
-    ));
+    points.push(
+      new THREE.Vector3(
+        center.x + Math.cos(angle) * radius,
+        center.y,
+        center.z + Math.sin(angle) * radius,
+      ),
+    );
   }
   return { points };
 }
@@ -805,14 +880,26 @@ async function morphTraceDartsToFaceCycles(system, token) {
 function drawMorphDarts(morphs, amount) {
   clearGroup(state.traceGroup);
   for (const morph of morphs) {
-    const from = new THREE.Vector3().lerpVectors(morph.fromStart, morph.fromEnd, amount);
-    const to = new THREE.Vector3().lerpVectors(morph.toStart, morph.toEnd, amount);
+    const from = new THREE.Vector3().lerpVectors(
+      morph.fromStart,
+      morph.fromEnd,
+      amount,
+    );
+    const to = new THREE.Vector3().lerpVectors(
+      morph.toStart,
+      morph.toEnd,
+      amount,
+    );
     addDartVisualBetween(from, to, morph.color, state.traceGroup, 0.018, true);
   }
 }
 
 async function morphFaceCyclesToSurface(system, modelGroup, token) {
-  const morph = surfaceGlueMorphData(system, modelGroup.pathsByEdge, modelGroup.vertexPositions);
+  const morph = surfaceGlueMorphData(
+    system,
+    modelGroup.pathsByEdge,
+    modelGroup.vertexPositions,
+  );
   const start = performance.now();
   while (performance.now() - start < TORUS_GLUE_DURATION) {
     if (token !== state.animationToken) return;
@@ -839,7 +926,11 @@ function surfaceGlueMorphData(system, pathsByEdge, vertexPositions) {
       const color = FACE_COLORS[faceIndex % FACE_COLORS.length];
       const startFrom = layout.points[dartIndex].clone().applyMatrix4(matrix);
       const startTo = layout.points[dartIndex + 1].clone().applyMatrix4(matrix);
-      const targetPath = directedSurfacePath(dart, pathsByEdge, vertexPositions);
+      const targetPath = directedSurfacePath(
+        dart,
+        pathsByEdge,
+        vertexPositions,
+      );
       const samples = Math.max(24, Math.min(96, targetPath.length || 2));
       darts.push({
         color,
@@ -856,7 +947,7 @@ function surfaceGlueMorphData(system, pathsByEdge, vertexPositions) {
     darts,
     vertices,
     edgeRadiusStart: 0.018,
-    edgeRadiusEnd: Math.max(state.surfaceStrokeRadius * 1.75, 0.010),
+    edgeRadiusEnd: Math.max(state.surfaceStrokeRadius * 1.75, 0.01),
     pointRadiusStart: 0.035,
     pointRadiusEnd: Math.max(state.surfaceStrokeRadius * 2.05, 0.018),
   };
@@ -877,7 +968,9 @@ function directedSurfacePath(dart, pathsByEdge, vertexPositions) {
 }
 
 function stitchSurfacePieces(pieces, start, end) {
-  const remaining = pieces.map((points) => points.map((point) => point.clone()));
+  const remaining = pieces.map((points) =>
+    points.map((point) => point.clone()),
+  );
   const path = [];
   let current = start ? start.clone() : null;
   while (remaining.length) {
@@ -904,7 +997,8 @@ function stitchSurfacePieces(pieces, start, end) {
     const piece = remaining.splice(bestIndex, 1)[0];
     if (bestReverse) piece.reverse();
     if (path.length === 0) {
-      if (current && current.distanceToSquared(piece[0]) > 1e-8) path.push(current.clone());
+      if (current && current.distanceToSquared(piece[0]) > 1e-8)
+        path.push(current.clone());
       path.push(...piece);
     } else {
       const last = path[path.length - 1];
@@ -913,20 +1007,24 @@ function stitchSurfacePieces(pieces, start, end) {
     }
     current = path[path.length - 1].clone();
   }
-  if (end && path[path.length - 1]?.distanceToSquared(end) > 1e-8) path.push(end.clone());
+  if (end && path[path.length - 1]?.distanceToSquared(end) > 1e-8)
+    path.push(end.clone());
   return path;
 }
 
 function resamplePolyline(points, count) {
   const clean = points.filter(Boolean).map((point) => point.clone());
-  if (clean.length === 0) return Array.from({ length: count }, () => new THREE.Vector3());
-  if (clean.length === 1) return Array.from({ length: count }, () => clean[0].clone());
+  if (clean.length === 0)
+    return Array.from({ length: count }, () => new THREE.Vector3());
+  if (clean.length === 1)
+    return Array.from({ length: count }, () => clean[0].clone());
   const lengths = [0];
   for (let i = 1; i < clean.length; i++) {
     lengths.push(lengths[i - 1] + clean[i - 1].distanceTo(clean[i]));
   }
   const total = lengths[lengths.length - 1];
-  if (total < 1e-8) return Array.from({ length: count }, () => clean[0].clone());
+  if (total < 1e-8)
+    return Array.from({ length: count }, () => clean[0].clone());
   const samples = [];
   let segment = 1;
   for (let i = 0; i < count; i++) {
@@ -943,16 +1041,28 @@ function resamplePolyline(points, count) {
 
 function drawSurfaceGlueMorph(morph, amount) {
   clearGroup(state.traceGroup);
-  const edgeRadius = lerpScalar(morph.edgeRadiusStart, morph.edgeRadiusEnd, amount);
-  const pointRadius = lerpScalar(morph.pointRadiusStart, morph.pointRadiusEnd, amount);
+  const edgeRadius = lerpScalar(
+    morph.edgeRadiusStart,
+    morph.edgeRadiusEnd,
+    amount,
+  );
+  const pointRadius = lerpScalar(
+    morph.pointRadiusStart,
+    morph.pointRadiusEnd,
+    amount,
+  );
   for (const dart of morph.darts) {
-    const points = dart.startPath.map((point, index) => (
-      new THREE.Vector3().lerpVectors(point, dart.targetPath[index], amount)
-    ));
+    const points = dart.startPath.map((point, index) =>
+      new THREE.Vector3().lerpVectors(point, dart.targetPath[index], amount),
+    );
     addCurveDartVisual(points, dart.color, state.traceGroup, edgeRadius);
   }
   for (const vertex of morph.vertices) {
-    const position = new THREE.Vector3().lerpVectors(vertex.start, vertex.target, amount);
+    const position = new THREE.Vector3().lerpVectors(
+      vertex.start,
+      vertex.target,
+      amount,
+    );
     addMorphVertexVisual(position, pointRadius, state.traceGroup);
   }
 }
@@ -960,11 +1070,24 @@ function drawSurfaceGlueMorph(morph, amount) {
 function addCurveDartVisual(points, color, group, radius) {
   if (points.length < 2) return;
   const material = makeBasicMaterial(color, 1, { depthTest: false });
-  const tube = makeTube(points, radius, material, Math.max(8, points.length - 1));
+  const tube = makeTube(
+    points,
+    radius,
+    material,
+    Math.max(8, points.length - 1),
+  );
   tube.renderOrder = 24;
   group.add(tube);
   const headIndex = Math.max(0, points.length - 8);
-  group.add(makeArrowHead(points[headIndex], points[points.length - 1], color, radius * 3.8, radius * 8.0));
+  group.add(
+    makeArrowHead(
+      points[headIndex],
+      points[points.length - 1],
+      color,
+      radius * 3.8,
+      radius * 8.0,
+    ),
+  );
 }
 
 function addMorphVertexVisual(position, radius, group) {
@@ -1025,8 +1148,14 @@ async function getGenusTwoManualModel(system) {
   const key = `manual-genus2:${system.index}`;
   if (modelCache.has(key)) return modelCache.get(key);
   const baseRenderData = await loadGenusTwoBaseRenderData();
-  const automorphism = findAutomorphism(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), system.rotation);
-  if (!automorphism) throw new Error("Could not map the genus-2 representative to this rotation system.");
+  const automorphism = findAutomorphism(
+    rotationFromMask(GENUS2_REPRESENTATIVE_MASK),
+    system.rotation,
+  );
+  if (!automorphism)
+    throw new Error(
+      "Could not map the genus-2 representative to this rotation system.",
+    );
   const model = {
     genus: 2,
     manualSurfaceData: baseRenderData,
@@ -1041,7 +1170,10 @@ function prefetchGenusTwo() {
     .then((baseRenderData) => {
       for (const system of systems) {
         if (system.genus !== 2) continue;
-        const automorphism = findAutomorphism(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), system.rotation);
+        const automorphism = findAutomorphism(
+          rotationFromMask(GENUS2_REPRESENTATIVE_MASK),
+          system.rotation,
+        );
         if (!automorphism) continue;
         const key = `manual-genus2:${system.index}`;
         if (!modelCache.has(key)) {
@@ -1058,21 +1190,26 @@ function prefetchGenusTwo() {
 
 function loadGenusTwoManualLayout() {
   if (!genusTwoManualLayoutPromise) {
-    genusTwoManualLayoutPromise = fetch(GENUS2_MANUAL_LAYOUT_URL).then((response) => {
-      if (!response.ok) throw new Error("Could not load the saved genus-2 manual layout.");
-      return response.json();
-    });
+    genusTwoManualLayoutPromise = fetch(GENUS2_MANUAL_LAYOUT_URL).then(
+      (response) => {
+        if (!response.ok)
+          throw new Error("Could not load the saved genus-2 manual layout.");
+        return response.json();
+      },
+    );
   }
   return genusTwoManualLayoutPromise;
 }
 
 function requestGenusTwoRawModel() {
   if (!genusTwoRawModelPromise) {
-    genusTwoRawModelPromise = requestModel(rotationFromMask(GENUS2_REPRESENTATIVE_MASK), "3d_raw")
-      .catch((error) => {
-        genusTwoRawModelPromise = null;
-        throw error;
-      });
+    genusTwoRawModelPromise = requestModel(
+      rotationFromMask(GENUS2_REPRESENTATIVE_MASK),
+      "3d_raw",
+    ).catch((error) => {
+      genusTwoRawModelPromise = null;
+      throw error;
+    });
   }
   return genusTwoRawModelPromise;
 }
@@ -1083,7 +1220,9 @@ function loadGenusTwoBaseRenderData() {
       loadGenusTwoManualLayout(),
       requestGenusTwoRawModel(),
     ])
-      .then(([layout, rawModel]) => prepareGenusTwoBaseRenderData(layout, rawModel))
+      .then(([layout, rawModel]) =>
+        prepareGenusTwoBaseRenderData(layout, rawModel),
+      )
       .catch((error) => {
         genusTwoBaseRenderDataPromise = null;
         throw error;
@@ -1103,10 +1242,20 @@ function prepareGenusTwoBaseRenderData(layout, rawModel) {
   const radius = parsed.geometry.boundingSphere?.radius || 1;
   const strokeRadius = Math.max(radius * 0.0032, 0.0048);
   const graphLift = strokeRadius * 0.18;
-  const normalAt = (point) => orientedProjectToSurface(point, surfaceTriangles).normal;
+  const normalAt = (point) =>
+    orientedProjectToSurface(point, surfaceTriangles).normal;
   const vertices = new Map();
   Object.entries(layout.vertices || {}).forEach(([vertex, point]) => {
-    vertices.set(Number(vertex), liftPointToSurface(arrayToVector(point), surfaceTriangles, graphLift, null, strokeRadius * 3.0));
+    vertices.set(
+      Number(vertex),
+      liftPointToSurface(
+        arrayToVector(point),
+        surfaceTriangles,
+        graphLift,
+        null,
+        strokeRadius * 3.0,
+      ),
+    );
   });
   const edges = [];
   Object.entries(layout.edges || {}).forEach(([key, route]) => {
@@ -1116,11 +1265,18 @@ function prepareGenusTwoBaseRenderData(layout, rawModel) {
       ...route.map(arrayToVector),
       arrayToVector(layout.vertices[String(to)]),
     ];
-    const displayPoints = refineManualSurfacePath(points, surfaceTriangles, graphLift, radius, strokeRadius);
+    const displayPoints = refineManualSurfacePath(
+      points,
+      surfaceTriangles,
+      graphLift,
+      radius,
+      strokeRadius,
+    );
     const start = vertices.get(from);
     const end = vertices.get(to);
     if (start && displayPoints.length) displayPoints[0] = start.clone();
-    if (end && displayPoints.length) displayPoints[displayPoints.length - 1] = end.clone();
+    if (end && displayPoints.length)
+      displayPoints[displayPoints.length - 1] = end.clone();
     edges.push({
       key,
       ends: [from, to],
@@ -1160,7 +1316,13 @@ function mapPreparedManualLayout(baseRenderData, automorphism) {
 
 function findAutomorphism(sourceRotation, targetRotation) {
   for (const permutation of k33Automorphisms) {
-    if (rotationsMatch(applyAutomorphism(sourceRotation, permutation), targetRotation)) return permutation;
+    if (
+      rotationsMatch(
+        applyAutomorphism(sourceRotation, permutation),
+        targetRotation,
+      )
+    )
+      return permutation;
   }
   return null;
 }
@@ -1168,18 +1330,26 @@ function findAutomorphism(sourceRotation, targetRotation) {
 function applyAutomorphism(rotation, permutation) {
   const mapped = Array.from({ length: rotation.length }, () => []);
   rotation.forEach((neighbors, vertex) => {
-    mapped[permutation[vertex]] = neighbors.map((neighbor) => permutation[neighbor]);
+    mapped[permutation[vertex]] = neighbors.map(
+      (neighbor) => permutation[neighbor],
+    );
   });
   return mapped;
 }
 
 function rotationsMatch(actual, expected) {
-  return actual.every((neighbors, vertex) => cyclicOrderEqual(neighbors, expected[vertex]));
+  return actual.every((neighbors, vertex) =>
+    cyclicOrderEqual(neighbors, expected[vertex]),
+  );
 }
 
 function cyclicOrderEqual(actual, expected) {
   if (actual.length !== expected.length) return false;
-  return expected.some((_, shift) => actual.every((value, index) => value === expected[(index + shift) % expected.length]));
+  return expected.some((_, shift) =>
+    actual.every(
+      (value, index) => value === expected[(index + shift) % expected.length],
+    ),
+  );
 }
 
 function makeK33Automorphisms() {
@@ -1194,8 +1364,22 @@ function makeK33Automorphisms() {
   const automorphisms = [];
   for (const left of permutations) {
     for (const right of permutations) {
-      automorphisms.push([left[0], left[1], left[2], 3 + right[0], 3 + right[1], 3 + right[2]]);
-      automorphisms.push([3 + left[0], 3 + left[1], 3 + left[2], right[0], right[1], right[2]]);
+      automorphisms.push([
+        left[0],
+        left[1],
+        left[2],
+        3 + right[0],
+        3 + right[1],
+        3 + right[2],
+      ]);
+      automorphisms.push([
+        3 + left[0],
+        3 + left[1],
+        3 + left[2],
+        right[0],
+        right[1],
+        right[2],
+      ]);
     }
   }
   return automorphisms;
@@ -1203,14 +1387,17 @@ function makeK33Automorphisms() {
 
 function requestModel(rotation, outputFormat = "3d") {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/stream_calc_genus`);
+    const socket = new WebSocket(
+      `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/stream_calc_genus`,
+    );
     let done = false;
     socket.onopen = () => {
       socket.send(JSON.stringify({ alg: "none", outputFormat, adj: rotation }));
     };
     socket.onmessage = (event) => {
       const separator = event.data.indexOf(":");
-      const type = separator === -1 ? event.data : event.data.slice(0, separator);
+      const type =
+        separator === -1 ? event.data : event.data.slice(0, separator);
       const data = separator === -1 ? "" : event.data.slice(separator + 1);
       if (type === "MODEL") {
         done = true;
@@ -1229,7 +1416,10 @@ function requestModel(rotation, outputFormat = "3d") {
       if (!done) reject(new Error("Could not load the 3D model"));
     };
     socket.onclose = () => {
-      if (!done) reject(new Error("3D model request closed before a model was returned"));
+      if (!done)
+        reject(
+          new Error("3D model request closed before a model was returned"),
+        );
     };
   });
 }
@@ -1299,7 +1489,12 @@ function buildModelGroup(model) {
   for (const line of parsed.graphLines) {
     const centered = line.points.map((p) => p.clone().sub(center));
     const displayPoints = centered;
-    const tube = makeTube(displayPoints, strokeRadius, graphMaterial, Math.max(8, displayPoints.length - 1));
+    const tube = makeTube(
+      displayPoints,
+      strokeRadius,
+      graphMaterial,
+      Math.max(8, displayPoints.length - 1),
+    );
     tube.userData.edge = edgeKey(line.ends[0], line.ends[1]);
     group.add(tube);
     addTubeCaps(displayPoints, strokeRadius, graphMaterial, group);
@@ -1319,8 +1514,14 @@ function buildModelGroup(model) {
     const dot = new THREE.Mesh(pointGeometry, pointMaterial);
     dot.position.copy(pos);
     group.add(dot);
-    const label = makeTextSprite(String(point.label), Math.max(radius * 0.085, 0.13), { depthTest: true });
-    const labelPos = point.labelPosition ? point.labelPosition.clone().sub(center) : pos.clone().multiplyScalar(1.035);
+    const label = makeTextSprite(
+      String(point.label),
+      Math.max(radius * 0.085, 0.13),
+      { depthTest: true },
+    );
+    const labelPos = point.labelPosition
+      ? point.labelPosition.clone().sub(center)
+      : pos.clone().multiplyScalar(1.035);
     label.position.copy(labelPos);
     group.add(label);
   }
@@ -1352,7 +1553,13 @@ function buildModelGroup(model) {
     pointGeometry.dispose();
     disposeGroupChildren(group);
   };
-  return { group, pathsByEdge, vertexPositions, setOpacity, normalAt: torusNormal };
+  return {
+    group,
+    pathsByEdge,
+    vertexPositions,
+    setOpacity,
+    normalAt: torusNormal,
+  };
 }
 
 function buildManualLayoutModelGroup(model) {
@@ -1394,7 +1601,12 @@ function buildManualLayoutModelGroup(model) {
 
   for (const edge of model.manualLayout.edges) {
     const displayPoints = edge.points.map((point) => point.clone());
-    const tube = makeTube(displayPoints, strokeRadius, graphMaterial, Math.max(16, displayPoints.length - 1));
+    const tube = makeTube(
+      displayPoints,
+      strokeRadius,
+      graphMaterial,
+      Math.max(16, displayPoints.length - 1),
+    );
     tube.userData.edge = edge.key;
     group.add(tube);
     addTubeCaps(displayPoints, strokeRadius, graphMaterial, group);
@@ -1411,8 +1623,14 @@ function buildManualLayoutModelGroup(model) {
     const dot = new THREE.Mesh(pointGeometry, pointMaterial);
     dot.position.copy(pos);
     group.add(dot);
-    const labelSprite = makeTextSprite(String(vertexLabel), Math.max(radius * 0.085, 0.13), { depthTest: true });
-    labelSprite.position.copy(pos).addScaledVector(normalAt(pos), strokeRadius * 8.0);
+    const labelSprite = makeTextSprite(
+      String(vertexLabel),
+      Math.max(radius * 0.085, 0.13),
+      { depthTest: true },
+    );
+    labelSprite.position
+      .copy(pos)
+      .addScaledVector(normalAt(pos), strokeRadius * 8.0);
     group.add(labelSprite);
   }
 
@@ -1487,24 +1705,36 @@ function parseObj(objText) {
       const parts = line.split(/\s+/);
       const vertexIndex = Number(parts[2]);
       const label = Number(parts[3]) - 1;
-      const labelPosition = parts.length >= 7
-        ? new THREE.Vector3(Number(parts[4]), Number(parts[5]), Number(parts[6]))
-        : null;
+      const labelPosition =
+        parts.length >= 7
+          ? new THREE.Vector3(
+              Number(parts[4]),
+              Number(parts[5]),
+              Number(parts[6]),
+            )
+          : null;
       graphPointLabels.set(vertexIndex, { label, labelPosition });
       continue;
     }
     if (line === "" || line.startsWith("#")) continue;
     const parts = line.split(/\s+/);
     if (parts[0] === "v") {
-      vertices.push(new THREE.Vector3(Number(parts[1]), Number(parts[2]), Number(parts[3])));
+      vertices.push(
+        new THREE.Vector3(Number(parts[1]), Number(parts[2]), Number(parts[3])),
+      );
     } else if (parts[0] === "vt") {
       uvs.push([Number(parts[1]), Number(parts[2])]);
     } else if (parts[0] === "f") {
       const face = parts.slice(1).map(addCorner);
-      for (let i = 1; i < face.length - 1; i++) indices.push(face[0], face[i], face[i + 1]);
+      for (let i = 1; i < face.length - 1; i++)
+        indices.push(face[0], face[i], face[i + 1]);
     } else if (parts[0] === "l") {
-      const points = parts.slice(1).map((token) => vertices[Number(token.split("/")[0])]).filter(Boolean);
-      if (points.length >= 2) graphLines.push({ ...(pendingEdge || {}), points });
+      const points = parts
+        .slice(1)
+        .map((token) => vertices[Number(token.split("/")[0])])
+        .filter(Boolean);
+      if (points.length >= 2)
+        graphLines.push({ ...(pendingEdge || {}), points });
       pendingEdge = null;
     } else if (parts[0] === "p") {
       for (const token of parts.slice(1)) {
@@ -1523,7 +1753,10 @@ function parseObj(objText) {
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(texcoords, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
@@ -1569,7 +1802,13 @@ function projectToSurface(point, triangles) {
   let bestDistanceSq = Infinity;
   let bestNormal = new THREE.Vector3(0, 0, 1);
   for (const triangle of triangles) {
-    closestPointOnTriangle(point, triangle.a, triangle.b, triangle.c, candidate);
+    closestPointOnTriangle(
+      point,
+      triangle.a,
+      triangle.b,
+      triangle.c,
+      candidate,
+    );
     const distanceSq = point.distanceToSquared(candidate);
     if (distanceSq < bestDistanceSq) {
       bestDistanceSq = distanceSq;
@@ -1577,14 +1816,23 @@ function projectToSurface(point, triangles) {
       bestNormal = triangle.normal;
     }
   }
-  if (!Number.isFinite(bestDistanceSq)) return { point: point.clone(), normal: bestNormal.clone() };
+  if (!Number.isFinite(bestDistanceSq))
+    return { point: point.clone(), normal: bestNormal.clone() };
   return { point: closest, normal: bestNormal.clone() };
 }
 
-function orientedProjectToSurface(point, triangles, previousNormal = null, maxSnap = Infinity) {
+function orientedProjectToSurface(
+  point,
+  triangles,
+  previousNormal = null,
+  maxSnap = Infinity,
+) {
   const projection = projectToSurface(point, triangles);
   const normal = projection.normal.clone();
-  if (Number.isFinite(maxSnap) && point.distanceToSquared(projection.point) > maxSnap * maxSnap) {
+  if (
+    Number.isFinite(maxSnap) &&
+    point.distanceToSquared(projection.point) > maxSnap * maxSnap
+  ) {
     return {
       point: point.clone(),
       normal: previousNormal ? previousNormal.clone() : normal,
@@ -1600,14 +1848,32 @@ function orientedProjectToSurface(point, triangles, previousNormal = null, maxSn
   return { point: projection.point, normal };
 }
 
-function liftPointToSurface(point, triangles, lift, previousNormal = null, maxSnap = Infinity) {
-  const projection = orientedProjectToSurface(point, triangles, previousNormal, maxSnap);
+function liftPointToSurface(
+  point,
+  triangles,
+  lift,
+  previousNormal = null,
+  maxSnap = Infinity,
+) {
+  const projection = orientedProjectToSurface(
+    point,
+    triangles,
+    previousNormal,
+    maxSnap,
+  );
   return projection.point.clone().addScaledVector(projection.normal, lift);
 }
 
-function refineManualSurfacePath(points, triangles, lift, surfaceRadius, strokeRadius) {
+function refineManualSurfacePath(
+  points,
+  triangles,
+  lift,
+  surfaceRadius,
+  strokeRadius,
+) {
   const clean = points.filter(Boolean).map((point) => point.clone());
-  if (clean.length < 2) return clean.map((point) => liftPointToSurface(point, triangles, lift));
+  if (clean.length < 2)
+    return clean.map((point) => liftPointToSurface(point, triangles, lift));
 
   const length = polylineLength(clean);
   const spacing = Math.max(strokeRadius * 3.5, surfaceRadius * 0.0065, 0.012);
@@ -1618,9 +1884,16 @@ function refineManualSurfacePath(points, triangles, lift, surfaceRadius, strokeR
   for (let i = 0; i <= sampleCount; i++) {
     const t = i / sampleCount;
     const sample = samplePolyline(clean, t);
-    const projection = orientedProjectToSurface(sample, triangles, previousNormal, maxSnap);
+    const projection = orientedProjectToSurface(
+      sample,
+      triangles,
+      previousNormal,
+      maxSnap,
+    );
     previousNormal = projection.normal.clone();
-    refined.push(projection.point.clone().addScaledVector(projection.normal, lift));
+    refined.push(
+      projection.point.clone().addScaledVector(projection.normal, lift),
+    );
   }
   return removeNearDuplicatePoints(refined, strokeRadius * 0.16);
 }
@@ -1647,15 +1920,18 @@ function removeNearDuplicatePoints(points, epsilon) {
   const kept = [points[0]];
   const thresholdSq = epsilon * epsilon;
   for (let i = 1; i < points.length; i++) {
-    if (points[i].distanceToSquared(kept[kept.length - 1]) > thresholdSq) kept.push(points[i]);
+    if (points[i].distanceToSquared(kept[kept.length - 1]) > thresholdSq)
+      kept.push(points[i]);
   }
-  if (kept.length === 1 && points.length > 1) kept.push(points[points.length - 1]);
+  if (kept.length === 1 && points.length > 1)
+    kept.push(points[points.length - 1]);
   return kept;
 }
 
 function polylineLength(points) {
   let total = 0;
-  for (let i = 0; i < points.length - 1; i++) total += points[i].distanceTo(points[i + 1]);
+  for (let i = 0; i < points.length - 1; i++)
+    total += points[i].distanceTo(points[i + 1]);
   return total;
 }
 
@@ -1704,7 +1980,9 @@ function closestPointOnTriangle(point, a, b, c, target) {
 function highlightDart(dart, color = BLUE) {
   clearGroup(state.highlightGroup);
   clearActiveList();
-  const chip = el.rotationList.querySelector(`[data-dart="${dart.from}-${dart.to}"]`);
+  const chip = el.rotationList.querySelector(
+    `[data-dart="${dart.from}-${dart.to}"]`,
+  );
   chip?.classList.add("active");
   chip?.closest(".rotation-row")?.classList.add("active");
   highlightVertex(dart.from, color);
@@ -1731,7 +2009,8 @@ function addDartVisualBetween(from, to, color, group, radius, arrow) {
   const tube = makeTube([from, to], radius, material, 40);
   tube.renderOrder = 20;
   group.add(tube);
-  if (arrow) group.add(makeArrowHead(from, to, color, radius * 4.0, radius * 8.2));
+  if (arrow)
+    group.add(makeArrowHead(from, to, color, radius * 4.0, radius * 8.2));
 }
 
 function highlightSurfaceDart(dart, color) {
@@ -1743,7 +2022,12 @@ function highlightSurfaceDart(dart, color) {
   for (const segment of segments) {
     const points = segment.points.map((point) => point.clone());
     if (points.length < 2) continue;
-    const tube = makeTube(points, state.surfaceStrokeRadius * 1.8, material, Math.max(8, points.length - 1));
+    const tube = makeTube(
+      points,
+      state.surfaceStrokeRadius * 1.8,
+      material,
+      Math.max(8, points.length - 1),
+    );
     tube.renderOrder = 30;
     state.highlightGroup.add(tube);
 
@@ -1757,7 +2041,15 @@ function highlightSurfaceDart(dart, color) {
   if (arrowPoints && arrowPoints.length >= 2) {
     const headFrom = arrowPoints[Math.max(0, arrowPoints.length - 8)];
     const headTo = arrowPoints[arrowPoints.length - 1];
-    state.highlightGroup.add(makeArrowHead(headFrom, headTo, color, state.surfaceStrokeRadius * 5.4, state.surfaceStrokeRadius * 11.0));
+    state.highlightGroup.add(
+      makeArrowHead(
+        headFrom,
+        headTo,
+        color,
+        state.surfaceStrokeRadius * 5.4,
+        state.surfaceStrokeRadius * 11.0,
+      ),
+    );
   }
 }
 
@@ -1777,7 +2069,9 @@ function drawCounterclockwiseArrow(vertex, progress) {
   clearGroup(state.arrowGroup);
   const center = state.surfaceVertices.get(vertex);
   if (!center) return;
-  const normal = (state.surfaceNormalAt || torusNormal)(center).clone().normalize();
+  const normal = (state.surfaceNormalAt || torusNormal)(center)
+    .clone()
+    .normalize();
   if (normal.lengthSq() < 1e-8) normal.set(0, 0, 1);
   const basisA = new THREE.Vector3(0, 0, 1).cross(normal);
   if (basisA.lengthSq() < 1e-5) basisA.set(1, 0, 0);
@@ -1789,7 +2083,8 @@ function drawCounterclockwiseArrow(vertex, progress) {
   const steps = Math.max(5, Math.round(42 * progress));
   for (let i = 0; i <= steps; i++) {
     const theta = Math.PI * 0.72 + (i / steps) * total;
-    const p = center.clone()
+    const p = center
+      .clone()
       .addScaledVector(normal, state.surfaceStrokeRadius * 9.5)
       .addScaledVector(basisA, Math.cos(theta) * radius)
       .addScaledVector(basisB, Math.sin(theta) * radius);
@@ -1798,19 +2093,32 @@ function drawCounterclockwiseArrow(vertex, progress) {
   const material = makeBasicMaterial(BLUE, 0.95, { depthTest: false });
   state.arrowGroup.add(makeTube(points, 0.009, material, Math.max(8, steps)));
   if (points.length >= 2) {
-    state.arrowGroup.add(makeArrowHead(points[points.length - 2], points[points.length - 1], BLUE, 0.045, 0.095));
+    state.arrowGroup.add(
+      makeArrowHead(
+        points[points.length - 2],
+        points[points.length - 1],
+        BLUE,
+        0.045,
+        0.095,
+      ),
+    );
   }
 }
 
 function highlightVertex(vertex, color = BLUE) {
   clearGroup(state.vertexHighlightGroup);
-  const position = state.phase === "surface"
-    ? state.surfaceVertices.get(vertex)
-    : flatPosition(vertex);
+  const position =
+    state.phase === "surface"
+      ? state.surfaceVertices.get(vertex)
+      : flatPosition(vertex);
   if (!position) return;
-  const radius = state.phase === "surface" ? state.surfaceStrokeRadius * 4.0 : 0.115;
+  const radius =
+    state.phase === "surface" ? state.surfaceStrokeRadius * 4.0 : 0.115;
   const material = makeBasicMaterial(color, 1, { depthTest: false });
-  const dot = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 16), material);
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 24, 16),
+    material,
+  );
   dot.position.copy(position);
   dot.renderOrder = 40;
   state.vertexHighlightGroup.add(dot);
@@ -1832,12 +2140,18 @@ function addTubeCaps(points, radius, material, group) {
 function torusNormal(point) {
   const major = 1.25;
   const u = Math.atan2(point.y, point.x);
-  const tubeCenter = new THREE.Vector3(major * Math.cos(u), major * Math.sin(u), 0);
+  const tubeCenter = new THREE.Vector3(
+    major * Math.cos(u),
+    major * Math.sin(u),
+    0,
+  );
   return point.clone().sub(tubeCenter).normalize();
 }
 
 function clearActiveList() {
-  el.rotationList.querySelectorAll(".active").forEach((node) => node.classList.remove("active"));
+  el.rotationList
+    .querySelectorAll(".active")
+    .forEach((node) => node.classList.remove("active"));
 }
 
 function makeTextSprite(text, size, options = {}) {
@@ -1880,7 +2194,10 @@ function makeTextSprite(text, size, options = {}) {
 function makeTube(points, radius, material, segments = 32) {
   const clean = points.filter(Boolean).map((point) => point.clone());
   if (clean.length < 2) {
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 6), material);
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 8, 6),
+      material,
+    );
     if (clean[0]) mesh.position.copy(clean[0]);
     return mesh;
   }
@@ -1891,11 +2208,20 @@ function makeTube(points, radius, material, segments = 32) {
     }
   }
   if (path.curves.length === 0) {
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 6), material);
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 8, 6),
+      material,
+    );
     mesh.position.copy(clean[0]);
     return mesh;
   }
-  const geometry = new THREE.TubeGeometry(path, Math.max(1, segments), radius, 6, false);
+  const geometry = new THREE.TubeGeometry(
+    path,
+    Math.max(1, segments),
+    radius,
+    6,
+    false,
+  );
   return new THREE.Mesh(geometry, material);
 }
 
@@ -1905,7 +2231,9 @@ function makeArrowHead(from, to, color, radius, height, options = {}) {
   direction.normalize();
   const cone = new THREE.Mesh(
     new THREE.ConeGeometry(radius, height, 24),
-    makeBasicMaterial(color, options.opacity ?? 1, { depthTest: options.depthTest ?? false }),
+    makeBasicMaterial(color, options.opacity ?? 1, {
+      depthTest: options.depthTest ?? false,
+    }),
   );
   const backoff = options.tipAtTarget ? 0.5 : 0.18;
   cone.position.copy(to.clone().addScaledVector(direction, -height * backoff));
@@ -2011,7 +2339,9 @@ function disposeObject(object) {
   object.traverse?.((child) => {
     if (child.geometry) child.geometry.dispose();
     if (child.material) {
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      const materials = Array.isArray(child.material)
+        ? child.material
+        : [child.material];
       materials.forEach((material) => {
         if (material.map) material.map.dispose();
         material.dispose();
@@ -2025,7 +2355,9 @@ function setGroupOpacity(group, opacity) {
   if (!group) return;
   group.traverse((child) => {
     if (!child.material) return;
-    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    const materials = Array.isArray(child.material)
+      ? child.material
+      : [child.material];
     materials.forEach((material) => {
       material.opacity = opacity;
       material.transparent = true;
@@ -2069,7 +2401,11 @@ function lerpScalar(a, b, t) {
 }
 
 function arrayToVector(value) {
-  return new THREE.Vector3(Number(value[0]), Number(value[1]), Number(value[2]));
+  return new THREE.Vector3(
+    Number(value[0]),
+    Number(value[1]),
+    Number(value[2]),
+  );
 }
 
 function easeOut(t) {

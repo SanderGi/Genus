@@ -1,4 +1,6 @@
 #!/usr/bin/env sage
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
 """Check whether the faces output by PAGE are a valid embedding."""
 
 import os

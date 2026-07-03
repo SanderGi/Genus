@@ -1,3 +1,8 @@
+<!--
+    SPDX-FileCopyrightText: 2026 Alexander Metzger
+    SPDX-License-Identifier: GPL-2.0-only
+-->
+
 # References
 - Adjacency Lists
     - [Win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html)

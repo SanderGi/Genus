@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
 """Run PAGE against the GitHub issue regression fixtures."""
 
 from __future__ import annotations

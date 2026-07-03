@@ -1,3 +1,8 @@
+<!--
+    SPDX-FileCopyrightText: 2026 Alexander Metzger
+    SPDX-License-Identifier: GPL-2.0-only
+-->
+
 # Practical Performance
 The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), computation time for the genus using SageMath (SM time), and computation time using multi_genus.c (MG time).
 \#                                              | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s)

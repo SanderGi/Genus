@@ -1,58 +1,77 @@
-/* Call: cat Codes | multi_genus_128
+// Calculate the minimum genus of an arbitrary connected undirected graph.
+// Copyright (C) 2026 Gunnar Brinkmann
+
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write to the Free Software Foundation, Inc.,
+// 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
+
+/* Aufruf: cat Codes | multi_genus
                               or
                cat Codes | multi_genus_64
 compile
 
-gcc -O4 -DLONG -march=native -o multi_genus_128 multi_genus_longtype.c -lm
+gcc -O3 -DLONG -march=native -o multi_genus multi_genus.c -lm
 
 or
 
-gcc -O4 -march=native -o multi_genus_64 multi_genus_longtype.c -lm
+gcc -O3 -march=native -o multi_genus_64 multi_genus.c -lm
 
 depending on the definition of longtype
 
-9.9. LONGTYPE introduced to be able to work with unsigned_int__128.
+9.9. LONGTYPE eingefuehrt um auch mit unsigned_int__128 arbeiten zu koennen.
+Auch Makros veraendert.
 
-Macros also changed.
+24.7.2019: Makro bit(i)  von ((1UL)<<(i)) zu  ((1UL)<<((i)-1)) veraendert um 64
+knoten Graphen zu testen. Nicht alle Tests wiederholt, aber einige und geschaut
+ob bits auch anders als mit dem bit() Makro benutzt werden.
 
-7/24/2019: Macro bit(i) changed from ((1UL)<<(i)) to ((1UL)<<((i)-1)) to test
-64-node graphs. Not all tests repeated, but some and checked whether bits are
-used in a different way than with the bit() macro.
+Default: Berechnet eine Einbettung mit minimalem Geschlecht und gibt am Ende
+eine Statistik der Geschlechter der gefundenen Einbettungen.
 
-Default: Calculates an embedding with minimal genus and at the end gives
-statistics of the genus of the embeddings found.
+Die Einbettungen werden nur geschrieben, wenn das durch eine Option gewaehlt
+wird.
 
-The embeddings are only written if this is selected by an option.
+Der Graph muss einfach (keine Multikanten oder loops)
+und zusammenhaengend sein und mindestens 2 Knoten haben -- das wird nicht
+getestet (ausser wenn Option b benutzt wird!
 
-The graph must be simple (no multi-edges or loops)
-and connected and have at least 2 nodes -- this is not
-tested (unless option b is used!
+Fuer die Optionen und Funktionalitaet starten mit Option "h" oder "?"
 
-For the options and functionality start with option "h" or "?"
+Bei output von Einbettungen wird nicht auf Isomorphie ueberprueft, es koennen
+also mehrere isomorphe Einbettungen ausgegeben werden. Aus jeder
+Isomorphieklasse ist aber mindestens eine Einbettung dabei. Spiegelbilder werden
+durch Festlegung von 3 Kanten an einem Knoten mit Grad mindestens 3 (falls
+vorhanden) vermieden.
 
-When outputting embeddings, isomorphism is not checked, so several isomorphic
-embeddings can be output. However, there is at least one embedding from each
-isomorphism class. Mirror images are avoided by specifying 3 edges on a node
-with degree at least 3 (if available).
 
-Tests -- all of them, of course, without finding any difference:
+Tests -- allesamt natuerlich ohne einen Unterschied festzustellen:
 
-The genus calculation was compared with an independent Java program (author:
-Jasper Souffriau). In doing so, statistics of sets of graphs were not compared,
-but the result for each individual graph in the following sets of connected
-graphs:
+Die Genusberechnung wurde mit einem unabhaengigen Javaprogramm (Autor: Jasper
+Souffriau) verglichen. Dabei wurden nicht Statistiken von Mengen von Grafen
+verglichen, sondern das Ergebnis fuer jeden einzelnen Graphen in den volgenden
+Mengen von zusammenhaengenden Graphen:
 
-All Graphs with up to 11 vertices.
-All 3-regular graphs with up to 24 vertices.
-All 4-regular graphs with up to 16 vertices.
-All 5-regular graphs with up to 14 vertices.
-All 3-regular graphs with waist size at least 5 and up to 26 vertices.
-All 3-regular graphs with waist size at least 6 and up to 28 vertices.
-All 3-regular graphs with waist size at least 7 and up to 34 vertices.
-All 3-regular graphs with waist size at least 8 and up to 44 vertices.
-All 3-regular graphs with waist size 9 and 58 vertices.
-All 4-regular graphs with waist size at least 5 and up to 24 vertices.
-All graphs with degree sequence 2_2_3_3_3
+Alle Graphen mit bis zu 11 Knoten.
+Alle 3-regulaeren Graphen mit bis zu 24 Knoten.
+Alle 4-regulaeren Graphen mit bis zu 16 Knoten.
+Alle 5-regulaeren Graphen mit bis zu 14 Knoten.
+Alle 3-regulaeren Graphen mit Taillenweite mindestens 5 und bis zu 26 Knoten.
+Alle 3-regulaeren Graphen mit Taillenweite mindestens 6 und bis zu 28 Knoten.
+Alle 3-regulaeren Graphen mit Taillenweite mindestens 7 und bis zu 34 Knoten.
+Alle 3-regulaeren Graphen mit Taillenweite mindestens 8 und bis zu 44 Knoten.
+Alle 3-regulaeren Graphen mit Taillenweite 9 und 58 Knoten.
+Alle 4-regulaeren Graphen mit Taillenweite mindestens 5 und bis zu 24 Knoten.
+Alle Graphen mit Gradsequenz 2_2_3_3_3
 
 The function "all embeddings" was tested by writing a stupid program producing
 all permutations of orders around the vertices and filtering them for the proper
@@ -1933,6 +1952,7 @@ int get_genus(GRAPH graph, ADJAZENZ adj) {
 
   if ((filter2 >= 0) && (min_genus > filter2)) return -1;
   if ((filterl >= 0) && (min_genus > filterl)) return -1;
+  if ((filter >= 0) && (min_genus > filter)) return -1;
 
   if (compute_lower_bound) {
     if (do_reduce2) {
@@ -1979,13 +1999,15 @@ void usage(char name[]) {
   fprintf(stderr,
           "Input is read from stdin and must be be a connected graph with at "
           "least two vertices in multicode.\n");
-  fprintf(stderr, "Usage: \t %s [lx] [b] [w]  [wa] [fx] [fax] [o] [L]\n", name);
+  fprintf(stderr,
+          "Usage: \t %s [lx] [nb] [ni] [b] [w]  [wa] [fx] [fax] [F] [o] [L]\n",
+          name);
   fprintf(stderr, "\t with x a number (e.g. l2) the meaning is:\n");
   fprintf(stderr,
           "lx: \t use x as an upper limit for the genus -- don't compute a "
           "genus larger than x.\n");
   fprintf(stderr,
-          "n: \t Do not compute a nontrivial lower bound for any graph\n");
+          "nb: \t Do not compute a nontrivial lower bound for any graph\n");
   fprintf(stderr,
           " \t  -- just use the trivial bound assuming that all faces are "
           "triangles.\n");
@@ -1999,7 +2021,9 @@ void usage(char name[]) {
   fprintf(stderr,
           "F: \t  only together with lx: Write all graphs with a genus larger "
           "than x  \n");
-  fprintf(stderr, "\t as multicode to stdout.\n");
+  fprintf(stderr,
+          "\t as multicode to stdout. Do not combine with options also writing "
+          "embeddings to stdout.\n");
   fprintf(stderr, "\t No two options for writing can be used together!\n");
   fprintf(stderr,
           "o: \t use the original labelling in the computation. The default is "
@@ -2014,6 +2038,7 @@ void usage(char name[]) {
           "\t In combination with the output of codes this can be used to "
           "decide when codes\n");
   fprintf(stderr, "\t for a new graph are output.\n");
+  fprintf(stderr, "No two of lx, fx, fax, fmx can be used simultaneously.\n");
   exit(0);
 }
 
@@ -2139,7 +2164,10 @@ char *argv[];
       else
         usage(argv[0]);
     } else if (argv[i][0] == 'n') {
-      compute_lower_bound = 0;
+      if (argv[i][1] == 'b')
+        compute_lower_bound = 0;
+      else
+        usage(argv[0]);
     } else if (argv[i][0] == 'o') {
       do_bfs = 0;
     } else if (argv[i][0] == 'L') {

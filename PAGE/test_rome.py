@@ -1,4 +1,6 @@
 #!/usr/bin/env sage
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
 """Run PAGE against the ROME dataset (https://visdunneright.github.io/gd_benchmark_sets/#moveToRome-Lib)."""
 
 import tarfile

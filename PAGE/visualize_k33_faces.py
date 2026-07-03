@@ -1,4 +1,6 @@
 #!/usr/bin/env sage
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
 """Visualize K3,3's faces."""
 
 from sage.all import graphics_array, graphs  # type: ignore

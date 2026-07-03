@@ -1,4 +1,6 @@
 #!/usr/bin/env sage
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
 """Visualize the faces output by PAGE."""
 
 import os

@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
+"""Run the benchmarks and tests from docs/practical_performance.md."""
+
 import os, re, subprocess, sys, time
 from pathlib import Path
 

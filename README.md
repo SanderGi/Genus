@@ -1,3 +1,8 @@
+<!--
+    SPDX-FileCopyrightText: 2026 Alexander Metzger
+    SPDX-License-Identifier: GPL-2.0-only
+-->
+
 # A Practical Algorithm for Graph Embedding (PAGE)
 [![DOI](https://img.shields.io/badge/DOI-10.1016/j.disc.2026.115308-blue)](http://doi.org/10.1016/j.disc.2026.115308)
 [![arXiv](https://img.shields.io/badge/arXiv-2411.07347-b31b1b.svg)](https://arxiv.org/abs/2411.07347)
@@ -5,7 +10,7 @@
 
 A famous problem at the intersection of topology and combinatorial graph theory is the [Utility Problem](https://www.youtube.com/watch?v=VvCytJvd4H0). Say you have three houses and three utilities and you need to connect each house to each utility via a wire. Is there a way to do this without the wires crossing? In terms of graph theory, this is asking whether K3,3 is _planar_. It is known that it is not. In fact K3,3 is _toroidal_ meaning while it cannot be embedded on a plane without edges crossing, it can be embedded on a torus:
 
-[![K3,3 Torus Embedding](images/k3-3torus.png)](images/k3-3torus.png)
+[![K3,3 Torus Embedding](assets/k3-3torus.png)](assets/k3-3torus.png)
 
 The characterizing property of a torus that allows us to embed K3,3 is that it has a hole (unlike surfaces such as a plane or a sphere). This motivates classifying surfaces by their number of holes, that is, their genus g. The genus of a graph G is then simply the genus of the minimum genus surface on which G can be embedded without edges crossing. For genus zero we use the special name _planar_ and for genus one we use _toroidal_. Calculating the genus of a graph has a number of applications, particularly in the design of integrated circuits, study of graph minors, VLSI design, infrastructure planning, and more. For an interactive visualization of graph embedding [check here](https://genus.sandergi.com/k33_rotation_animation.html).
 
@@ -14,7 +19,7 @@ The characterizing property of a torus that allows us to embed K3,3 is that it h
 This repo contains a fast algorithm for calculating the genus of arbitrary graphs. It has a number of properties that make it practical for real-world use:
 
 1) **Verification**: The algorithm outputs not only the genus but also the corresponding rotation system that defines the surface embedding that achieves this minimum genus. This allows for easy verification of the result both via a [Python script](PAGE/verify_faces.py) and [visually](PAGE/visualize_faces.py):
-[![19 cycles](images/19Cycles.png)](images/19Cycles.png)
+[![19 cycles](assets/19Cycles.png)](assets/19Cycles.png)
 
 1) **Speed**: The algorithm can handle graphs with high genus much better than existing algorithms. It also takes effective advantage of the girth and cycle distribution of a graph to work very well in practice. PAGE, for instance, completes the (3, 10) Cages in a few seconds whereas SageMath doesn't finish in weeks and `multi_genus` takes hours. See [more benchmarks here](docs/practical_performance.md) and [theoretical worst case performance here](docs/time_complexity.md).
 
@@ -37,6 +42,10 @@ To run the C program for any graph, `cd PAGE` and run `S="0" DEG="3" ADJ="adjace
 [Austin](https://austinulrigg.github.io/) did the main work in deciphering the math and checking the solutions manually. He also contributed intellectually to the ideas behind the algorithm.
 
 Thanks to [Professor Steinerberger](https://faculty.washington.edu/steinerb/) for guidance on the project, and thanks to [Professor Brinkmann](https://scholar.google.be/citations?user=yaEBOB4AAAAJ&hl=nl) for providing a fast SoTA algorithm `multi_genus` to compare against and recommendations for visualizing results.
+
+## License
+This project is licensed under the terms of the **GNU General Public License v2.0** (GPLv2). 
+See the [LICENSE](LICENSE) file for the full text.
 
 ## Citation
 If you use the PAGE algorithm or other code/visualizations from this repository, please cite:

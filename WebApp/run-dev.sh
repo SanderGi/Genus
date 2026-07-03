@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
 
 DOCKER_BUILDKIT=1 docker build --tag 'genus' -f ./Dockerfile ..
 

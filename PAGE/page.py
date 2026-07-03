@@ -2,7 +2,7 @@
 """A compact pure-Python implementation of PAGE.
 
 The C implementation in page.c is tuned for large searches, parallel start
-branches, and several specialized bounds.  This file keeps the same central
+branches, and several specialized bounds. This file keeps the same central
 algorithm but aims to be readable:
 
 1. Generate candidate facial walks, length by length.
@@ -12,6 +12,22 @@ algorithm but aims to be readable:
 
 Input defaults match page.c's environment variables:
     S=0 DEG=3 ADJ=adjacency_lists/k3-3.txt python3 page.py
+
+Copyright (C) 2026 Alexander Metzger
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc.,
+59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
 """
 
 from __future__ import annotations

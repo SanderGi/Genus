@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Alexander Metzger
+// SPDX-License-Identifier: GPL-2.0-only
+
 import * as THREE from "three";
 import { OrbitControls } from "/vendor/OrbitControls.js";
 
@@ -17,8 +20,8 @@ const REPRESENTATIVES = [
   {
     mask: 1,
     orbit: [
-      1, 2, 3, 4, 5, 6, 8, 15, 16, 23, 24, 31,
-      32, 39, 40, 47, 48, 55, 57, 58, 59, 60, 61, 62,
+      1, 2, 3, 4, 5, 6, 8, 15, 16, 23, 24, 31, 32, 39, 40, 47, 48, 55, 57, 58,
+      59, 60, 61, 62,
     ],
   },
 ];
@@ -95,7 +98,8 @@ animate();
 loadSurface();
 
 function initControls() {
-  el.orbitSummary.textContent = "Verified: all 24 genus-2 systems are one symmetry class.";
+  el.orbitSummary.textContent =
+    "Verified: all 24 genus-2 systems are one symmetry class.";
   REPRESENTATIVES.forEach((rep, index) => {
     const option = document.createElement("option");
     option.value = String(index);
@@ -155,7 +159,10 @@ function selectVertex(vertex) {
 
 function updateActiveControls() {
   [...el.vertexButtons.children].forEach((button, index) => {
-    button.classList.toggle("active", state.mode === "vertex" && index === state.selectedVertex);
+    button.classList.toggle(
+      "active",
+      state.mode === "vertex" && index === state.selectedVertex,
+    );
   });
 }
 
@@ -187,7 +194,9 @@ async function loadSurface() {
     buildSceneFromObj(model.obj);
     loadSavedLayout();
     drawManualOverlay();
-    setStatus("Loaded the genus-2 representative. Click a vertex or route point onto the surface.");
+    setStatus(
+      "Loaded the genus-2 representative. Click a vertex or route point onto the surface.",
+    );
   } catch (error) {
     setStatus(error.message);
   }
@@ -195,14 +204,19 @@ async function loadSurface() {
 
 function requestModel(rotation) {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/stream_calc_genus`);
+    const socket = new WebSocket(
+      `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/stream_calc_genus`,
+    );
     let done = false;
     socket.onopen = () => {
-      socket.send(JSON.stringify({ alg: "none", outputFormat: "3d_raw", adj: rotation }));
+      socket.send(
+        JSON.stringify({ alg: "none", outputFormat: "3d_raw", adj: rotation }),
+      );
     };
     socket.onmessage = (event) => {
       const separator = event.data.indexOf(":");
-      const type = separator === -1 ? event.data : event.data.slice(0, separator);
+      const type =
+        separator === -1 ? event.data : event.data.slice(0, separator);
       const data = separator === -1 ? "" : event.data.slice(separator + 1);
       if (type === "MODEL") {
         done = true;
@@ -223,7 +237,10 @@ function requestModel(rotation) {
       if (!done) reject(new Error("Could not load the genus-2 model"));
     };
     socket.onclose = () => {
-      if (!done) reject(new Error("3D model request closed before a model was returned"));
+      if (!done)
+        reject(
+          new Error("3D model request closed before a model was returned"),
+        );
     };
   });
 }
@@ -259,7 +276,14 @@ function buildSceneFromObj(objText) {
   const originalRadius = Math.max(state.radius * 0.0016, 0.0025);
   for (const line of parsed.graphLines) {
     const points = line.points.map((point) => point.clone().sub(state.center));
-    state.originalGroup.add(makeTube(points, originalRadius, originalMaterial, Math.max(6, points.length - 1)));
+    state.originalGroup.add(
+      makeTube(
+        points,
+        originalRadius,
+        originalMaterial,
+        Math.max(6, points.length - 1),
+      ),
+    );
   }
   state.originalGroup.visible = state.showOriginal;
 
@@ -287,7 +311,9 @@ function onPointerDown(event) {
     const route = state.edgeRoutes.get(state.selectedEdge) || [];
     route.push(point);
     state.edgeRoutes.set(state.selectedEdge, route);
-    setStatus(`Added route point ${route.length} for edge ${state.selectedEdge}.`);
+    setStatus(
+      `Added route point ${route.length} for edge ${state.selectedEdge}.`,
+    );
   }
   drawManualOverlay();
 }
@@ -313,15 +339,23 @@ function drawManualOverlay() {
   const routeRadius = Math.max(state.radius * 0.006, 0.01);
 
   for (const [vertex, position] of state.vertexPositions.entries()) {
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(vertexRadius, 18, 12), vertexMaterial);
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(vertexRadius, 18, 12),
+      vertexMaterial,
+    );
     dot.position.copy(position);
     state.manualGroup.add(dot);
-    const ring = new THREE.Mesh(new THREE.SphereGeometry(vertexRadius * 1.08, 18, 12), vertexRingMaterial);
+    const ring = new THREE.Mesh(
+      new THREE.SphereGeometry(vertexRadius * 1.08, 18, 12),
+      vertexRingMaterial,
+    );
     ring.material.side = THREE.BackSide;
     ring.position.copy(position);
     state.manualGroup.add(ring);
     const label = makeTextSprite(String(vertex), vertexRadius * 4.2);
-    label.position.copy(position).addScaledVector(normalAtPoint(position), vertexRadius * 2.4);
+    label.position
+      .copy(position)
+      .addScaledVector(normalAtPoint(position), vertexRadius * 2.4);
     state.manualGroup.add(label);
   }
 
@@ -331,7 +365,14 @@ function drawManualOverlay() {
     const controls = state.edgeRoutes.get(edgeKey(a, b)) || [];
     if (!start || !end) continue;
     const points = [start, ...controls, end].map((point) => point.clone());
-    state.manualGroup.add(makeTube(points, routeRadius, routeMaterial, Math.max(8, points.length * 16)));
+    state.manualGroup.add(
+      makeTube(
+        points,
+        routeRadius,
+        routeMaterial,
+        Math.max(8, points.length * 16),
+      ),
+    );
   }
 
   state.manualGroup.userData.dispose = () => {
@@ -346,7 +387,9 @@ function smoothSelectedEdge() {
   const start = state.vertexPositions.get(a);
   const end = state.vertexPositions.get(b);
   if (!start || !end) {
-    setStatus(`Place both endpoints for edge ${state.selectedEdge} before smoothing.`);
+    setStatus(
+      `Place both endpoints for edge ${state.selectedEdge} before smoothing.`,
+    );
     return;
   }
   if (state.surfaceTriangles.length === 0) {
@@ -362,8 +405,19 @@ function smoothSelectedEdge() {
     return;
   }
 
-  const curve = new THREE.CatmullRomCurve3(basePoints, false, "centripetal", 0.35);
-  const sampleCount = Math.min(80, Math.max(18, Math.ceil(controlLength / Math.max(state.radius * 0.08, 0.04))));
+  const curve = new THREE.CatmullRomCurve3(
+    basePoints,
+    false,
+    "centripetal",
+    0.35,
+  );
+  const sampleCount = Math.min(
+    80,
+    Math.max(
+      18,
+      Math.ceil(controlLength / Math.max(state.radius * 0.08, 0.04)),
+    ),
+  );
   const projected = [];
   for (let i = 1; i < sampleCount; i++) {
     const sample = curve.getPoint(i / sampleCount);
@@ -371,7 +425,9 @@ function smoothSelectedEdge() {
   }
   state.edgeRoutes.set(state.selectedEdge, projected);
   drawManualOverlay();
-  setStatus(`Smoothed and projected ${state.selectedEdge} into ${projected.length + 2} surface samples.`);
+  setStatus(
+    `Smoothed and projected ${state.selectedEdge} into ${projected.length + 2} surface samples.`,
+  );
 }
 
 function verifyOrientations() {
@@ -404,7 +460,10 @@ function verifyOrientations() {
         tangentVector.addScaledVector(normal, -tangentVector.dot(normal));
         return {
           neighbor,
-          angle: Math.atan2(tangentVector.dot(frame.bitangent), tangentVector.dot(frame.tangent)),
+          angle: Math.atan2(
+            tangentVector.dot(frame.bitangent),
+            tangentVector.dot(frame.tangent),
+          ),
           lengthSq: tangentVector.lengthSq(),
         };
       })
@@ -419,16 +478,21 @@ function verifyOrientations() {
     } else if (cyclicOrderEqual([...actual].reverse(), rotation[vertex])) {
       reversed.push(`${vertex}: (${actual.join(", ")})`);
     } else {
-      mismatches.push(`${vertex}: got (${actual.join(", ")}), expected (${rotation[vertex].join(", ")})`);
+      mismatches.push(
+        `${vertex}: got (${actual.join(", ")}), expected (${rotation[vertex].join(", ")})`,
+      );
     }
   }
 
   const problems = [];
   if (missing.length) problems.push(`Missing: ${missing.join("; ")}.`);
-  if (reversed.length) problems.push(`Reversed orientation: ${reversed.join("; ")}.`);
-  if (mismatches.length) problems.push(`Mismatched order: ${mismatches.join("; ")}.`);
+  if (reversed.length)
+    problems.push(`Reversed orientation: ${reversed.join("; ")}.`);
+  if (mismatches.length)
+    problems.push(`Mismatched order: ${mismatches.join("; ")}.`);
   if (problems.length === 0) {
-    el.verifyResult.textContent = "All placed edge exits match the representative cyclic order.";
+    el.verifyResult.textContent =
+      "All placed edge exits match the representative cyclic order.";
     el.verifyResult.className = "verify-result ok";
   } else {
     el.verifyResult.textContent = problems.join(" ");
@@ -442,7 +506,8 @@ function exitPointFor(vertex, neighbor) {
   if (!start || !end) return null;
   const key = edgeKey(vertex, neighbor);
   const controls = state.edgeRoutes.get(key) || [];
-  const path = vertex < neighbor ? [start, ...controls, end] : [end, ...controls, start];
+  const path =
+    vertex < neighbor ? [start, ...controls, end] : [end, ...controls, start];
   const oriented = vertex < neighbor ? path : [...path].reverse();
   for (let i = 1; i < oriented.length; i++) {
     if (oriented[i].distanceToSquared(start) > 1e-10) return oriented[i];
@@ -452,11 +517,18 @@ function exitPointFor(vertex, neighbor) {
 
 function cyclicOrderEqual(actual, expected) {
   if (actual.length !== expected.length) return false;
-  return expected.some((_, shift) => actual.every((value, index) => value === expected[(index + shift) % expected.length]));
+  return expected.some((_, shift) =>
+    actual.every(
+      (value, index) => value === expected[(index + shift) % expected.length],
+    ),
+  );
 }
 
 function tangentFrame(normal) {
-  const reference = Math.abs(normal.z) < 0.85 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+  const reference =
+    Math.abs(normal.z) < 0.85
+      ? new THREE.Vector3(0, 0, 1)
+      : new THREE.Vector3(1, 0, 0);
   const tangent = reference.cross(normal).normalize();
   const bitangent = normal.clone().cross(tangent).normalize();
   return { tangent, bitangent };
@@ -510,8 +582,18 @@ function exportLayout() {
   return {
     representative: Number(el.representative.value || 0),
     mask: REPRESENTATIVES[Number(el.representative.value || 0)].mask,
-    vertices: Object.fromEntries([...state.vertexPositions.entries()].map(([vertex, point]) => [vertex, vectorToArray(point)])),
-    edges: Object.fromEntries([...state.edgeRoutes.entries()].map(([edge, points]) => [edge, points.map(vectorToArray)])),
+    vertices: Object.fromEntries(
+      [...state.vertexPositions.entries()].map(([vertex, point]) => [
+        vertex,
+        vectorToArray(point),
+      ]),
+    ),
+    edges: Object.fromEntries(
+      [...state.edgeRoutes.entries()].map(([edge, points]) => [
+        edge,
+        points.map(vectorToArray),
+      ]),
+    ),
   };
 }
 
@@ -531,13 +613,17 @@ function storageKey() {
 }
 
 function currentRotation() {
-  return rotationFromMask(REPRESENTATIVES[Number(el.representative.value || 0)].mask);
+  return rotationFromMask(
+    REPRESENTATIVES[Number(el.representative.value || 0)].mask,
+  );
 }
 
 function rotationFromMask(mask) {
   return K33_BASE.map((neighbors, vertex) => {
     const ordered = [neighbors[0], neighbors[1], neighbors[2]];
-    return ((mask >> vertex) & 1) ? [ordered[0], ordered[2], ordered[1]] : ordered;
+    return (mask >> vertex) & 1
+      ? [ordered[0], ordered[2], ordered[1]]
+      : ordered;
   });
 }
 
@@ -570,20 +656,29 @@ function parseObj(objText) {
     if (line === "" || line.startsWith("#")) continue;
     const parts = line.split(/\s+/);
     if (parts[0] === "v") {
-      vertices.push(new THREE.Vector3(Number(parts[1]), Number(parts[2]), Number(parts[3])));
+      vertices.push(
+        new THREE.Vector3(Number(parts[1]), Number(parts[2]), Number(parts[3])),
+      );
     } else if (parts[0] === "vt") {
       uvs.push([Number(parts[1]), Number(parts[2])]);
     } else if (parts[0] === "f") {
       const face = parts.slice(1).map(addCorner);
-      for (let i = 1; i < face.length - 1; i++) indices.push(face[0], face[i], face[i + 1]);
+      for (let i = 1; i < face.length - 1; i++)
+        indices.push(face[0], face[i], face[i + 1]);
     } else if (parts[0] === "l") {
-      const points = parts.slice(1).map((token) => vertices[Number(token.split("/")[0])]).filter(Boolean);
+      const points = parts
+        .slice(1)
+        .map((token) => vertices[Number(token.split("/")[0])])
+        .filter(Boolean);
       if (points.length >= 2) graphLines.push({ points });
     }
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(texcoords, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
@@ -630,7 +725,13 @@ function projectToSurface(point) {
   let bestDistanceSq = Infinity;
   let bestNormal = new THREE.Vector3(0, 0, 1);
   for (const triangle of state.surfaceTriangles) {
-    closestPointOnTriangle(point, triangle.a, triangle.b, triangle.c, candidate);
+    closestPointOnTriangle(
+      point,
+      triangle.a,
+      triangle.b,
+      triangle.c,
+      candidate,
+    );
     const distanceSq = point.distanceToSquared(candidate);
     if (distanceSq < bestDistanceSq) {
       bestDistanceSq = distanceSq;
@@ -638,8 +739,17 @@ function projectToSurface(point) {
       bestNormal = triangle.normal;
     }
   }
-  if (!Number.isFinite(bestDistanceSq)) return { point: point.clone(), normal: bestNormal.clone(), distanceSq: Infinity };
-  return { point: closest, normal: bestNormal.clone(), distanceSq: bestDistanceSq };
+  if (!Number.isFinite(bestDistanceSq))
+    return {
+      point: point.clone(),
+      normal: bestNormal.clone(),
+      distanceSq: Infinity,
+    };
+  return {
+    point: closest,
+    normal: bestNormal.clone(),
+    distanceSq: bestDistanceSq,
+  };
 }
 
 function closestPointOnTriangle(point, a, b, c, target) {
@@ -688,18 +798,25 @@ function closestPointOnTriangle(point, a, b, c, target) {
 
 function makeTube(points, radius, material, segments = 32) {
   const clean = points.filter(Boolean).map((point) => point.clone());
-  if (clean.length < 2) return new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 6), material);
+  if (clean.length < 2)
+    return new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 6), material);
   const path = new THREE.CurvePath();
   for (let i = 0; i < clean.length - 1; i++) {
-    if (clean[i].distanceToSquared(clean[i + 1]) > 1e-10) path.add(new THREE.LineCurve3(clean[i], clean[i + 1]));
+    if (clean[i].distanceToSquared(clean[i + 1]) > 1e-10)
+      path.add(new THREE.LineCurve3(clean[i], clean[i + 1]));
   }
-  if (path.curves.length === 0) return new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 6), material);
-  return new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(1, segments), radius, 6, false), material);
+  if (path.curves.length === 0)
+    return new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 6), material);
+  return new THREE.Mesh(
+    new THREE.TubeGeometry(path, Math.max(1, segments), radius, 6, false),
+    material,
+  );
 }
 
 function polylineLength(points) {
   let total = 0;
-  for (let i = 0; i < points.length - 1; i++) total += points[i].distanceTo(points[i + 1]);
+  for (let i = 0; i < points.length - 1; i++)
+    total += points[i].distanceTo(points[i + 1]);
   return total;
 }
 
@@ -721,7 +838,12 @@ function makeTextSprite(text, size) {
   context.fillText(text, padding, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false });
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+  });
   const sprite = new THREE.Sprite(material);
   sprite.scale.set(size * (canvas.width / canvas.height), size, 1);
   sprite.userData.dispose = () => {
@@ -741,7 +863,9 @@ function disposeObject(object) {
   object.traverse?.((child) => {
     if (child.geometry) child.geometry.dispose();
     if (child.material) {
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      const materials = Array.isArray(child.material)
+        ? child.material
+        : [child.material];
       materials.forEach((material) => {
         if (material.map) material.map.dispose();
         material.dispose();
@@ -770,8 +894,13 @@ function vectorToArray(vector) {
 }
 
 function arrayToVector(value) {
-  if (!Array.isArray(value) || value.length < 3) throw new Error("Expected [x, y, z]");
-  return new THREE.Vector3(Number(value[0]), Number(value[1]), Number(value[2]));
+  if (!Array.isArray(value) || value.length < 3)
+    throw new Error("Expected [x, y, z]");
+  return new THREE.Vector3(
+    Number(value[0]),
+    Number(value[1]),
+    Number(value[2]),
+  );
 }
 
 function round(value) {

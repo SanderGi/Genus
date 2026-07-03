@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Alexander Metzger
+# SPDX-License-Identifier: GPL-2.0-only
+"""Convert graph6 format to the PAGE adjacency list input format."""
+
 # Usage: python parse_graph6.py 'H?`e`qS'
 
 import sys
