@@ -2766,7 +2766,7 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
     for (vertex_t i = 0; i < *num_vertices; i++) {
         vertex_degrees[i] = 0;
     }
-    for (vertex_t i = 0; i < *num_vertices * VERTEX_DEGREE; i++) {
+    for (cycle_index_t i = 0; i < *num_vertices * VERTEX_DEGREE; i++) {
         assert(fscanf(fp, "%" SCNvertex_t, &adjacency_list[i]) == 1,
                "Error reading the adjacency list from %s\n", filename);
         if (adjacency_list[i] != MAX_VERTICES) {
@@ -2778,7 +2778,7 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
         (adj_t)malloc(*num_vertices * VERTEX_DEGREE * sizeof(vertex_t));
     assert(full_adjacency_list != NULL,
            "Error allocating memory for the full adjacency list\n");
-    for (vertex_t i = 0; i < *num_vertices * VERTEX_DEGREE; i++) {
+    for (cycle_index_t i = 0; i < *num_vertices * VERTEX_DEGREE; i++) {
         full_adjacency_list[i] = adjacency_list[i];
     }
 

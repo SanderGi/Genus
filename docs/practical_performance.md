@@ -126,23 +126,23 @@ The genus for various DifferenceSetIncidence graphs generated using Mathematica 
 [40,13,4](../PAGE/adjacency_lists/DifferenceSetIncidence40-13-4.txt)           | 80   | 520   | [91,214] | hours    | too big for bit operations
 
 The genus for various Bipartite Kneser graphs generated using Mathematica follows.
-\#                                                                             | v    | e     | genus     | time (s)                         | MG time (s)
------------------------------------------------------------------------------- | ---- | ----- | --------- | -------------------------------- | -----------
-[Bipartite Kneser (6, 2)](../PAGE/adjacency_lists/bipartite-kneser6-2.txt)     | 30   | 90    | [9,28]    | days                             | days
-[Bipartite Kneser (7, 2)](../PAGE/adjacency_lists/bipartite-kneser7-2.txt)     | 42   | 210   | [33,80]   | days                             | days
-[Bipartite Kneser (8, 2)](../PAGE/adjacency_lists/bipartite-kneser8-2.txt)     | 56   | 420   | [78,175]  | days                             | days
-[Bipartite Kneser (8, 3)](../PAGE/adjacency_lists/bipartite-kneser8-3.txt)     | 112  | 560   | [85,143]  | days                             | too big for bit operations
-[Bipartite Kneser (9, 2)](../PAGE/adjacency_lists/bipartite-kneser9-2.txt)     | 72   | 756   | [154,332] | days                             | too big for bit operations
-[Bipartite Kneser (9, 3)](../PAGE/adjacency_lists/bipartite-kneser9-3.txt)     | 168  | 1680  | [337,338] | days                             | too big for bit operations
-[Bipartite Kneser (10, 2)](../PAGE/adjacency_lists/bipartite-kneser10-2.txt)   | 90   | 1260  | [271,572] | days                             | too big for bit operations
-[Bipartite Kneser (10, 3)](../PAGE/adjacency_lists/bipartite-kneser10-3.txt)   | 240  | 4200  | [931,1963]| days                             | too big for bit operations
-[Bipartite Kneser (10, 4)](../PAGE/adjacency_lists/bipartite-kneser10-4.txt)   | 420  | 3150  | [579,1358]| days                             | too big for bit operations
-[Bipartite Kneser (11, 2)](../PAGE/adjacency_lists/bipartite-kneser11-2.txt)   | 110  | 1980  | [441,918] | days                             | too big for bit operations
-[Bipartite Kneser (11, 3)](../PAGE/adjacency_lists/bipartite-kneser11-3.txt)   | 330  | 9240  |[2146,4428]| days                             | too big for bit operations
-[Bipartite Kneser (11, 4)](../PAGE/adjacency_lists/bipartite-kneser11-4.txt)   | 660  | 11550 |[2558,5428]| days                             | too big for bit operations
-[Bipartite Kneser (12, 2)](../PAGE/adjacency_lists/bipartite-kneser12-2.txt)   | 132  | 2970  | [677,1397]| days                             | too big for bit operations
-[Bipartite Kneser (12, 3)](../PAGE/adjacency_lists/bipartite-kneser12-3.txt)   | 440  | 18480 |[4401,8979]| days                             | too big for bit operations
-[Bipartite Kneser (12, 4)](../PAGE/adjacency_lists/bipartite-kneser12-4.txt)   | 990  | 34650 | ?         | adjacency list too large to load | too big for bit operations
+\#                                                                             | v    | e     | genus      | time (s) | MG time (s)
+------------------------------------------------------------------------------ | ---- | ----- | ---------- | -------- | -----------
+[Bipartite Kneser (6, 2)](../PAGE/adjacency_lists/bipartite-kneser6-2.txt)     | 30   | 90    | [10,28]    | days     | days
+[Bipartite Kneser (7, 2)](../PAGE/adjacency_lists/bipartite-kneser7-2.txt)     | 42   | 210   | 33         | 1.700    | days
+[Bipartite Kneser (8, 2)](../PAGE/adjacency_lists/bipartite-kneser8-2.txt)     | 56   | 420   | 78         | 1.004    | days
+[Bipartite Kneser (8, 3)](../PAGE/adjacency_lists/bipartite-kneser8-3.txt)     | 112  | 560   | [85,143]   | days     | too big for bit operations
+[Bipartite Kneser (9, 2)](../PAGE/adjacency_lists/bipartite-kneser9-2.txt)     | 72   | 756   | 154        | 2.830    | too big for bit operations
+[Bipartite Kneser (9, 3)](../PAGE/adjacency_lists/bipartite-kneser9-3.txt)     | 168  | 1680  | [337,338]  | days     | too big for bit operations
+[Bipartite Kneser (10, 2)](../PAGE/adjacency_lists/bipartite-kneser10-2.txt)   | 90   | 1260  | 271        | 10.115   | too big for bit operations
+[Bipartite Kneser (10, 3)](../PAGE/adjacency_lists/bipartite-kneser10-3.txt)   | 240  | 4200  | [931,1963] | OOM      | too big for bit operations
+[Bipartite Kneser (10, 4)](../PAGE/adjacency_lists/bipartite-kneser10-4.txt)   | 420  | 3150  | [579,1358] | OOM      | too big for bit operations
+[Bipartite Kneser (11, 2)](../PAGE/adjacency_lists/bipartite-kneser11-2.txt)   | 110  | 1980  | 441        | 36.468   | too big for bit operations
+[Bipartite Kneser (11, 3)](../PAGE/adjacency_lists/bipartite-kneser11-3.txt)   | 330  | 9240  |[2146,4428] | OOM      | too big for bit operations
+[Bipartite Kneser (11, 4)](../PAGE/adjacency_lists/bipartite-kneser11-4.txt)   | 660  | 11550 |[2558,5428] | OOM      | too big for bit operations
+[Bipartite Kneser (12, 2)](../PAGE/adjacency_lists/bipartite-kneser12-2.txt)   | 132  | 2970  | [677,1397] | OOM      | too big for bit operations
+[Bipartite Kneser (12, 3)](../PAGE/adjacency_lists/bipartite-kneser12-3.txt)   | 440  | 18480 |[4401,8979] | OOM      | too big for bit operations
+[Bipartite Kneser (12, 4)](../PAGE/adjacency_lists/bipartite-kneser12-4.txt)   | 990  | 34650 |[5281,16796]| OOM      | too big for bit operations
 
 The genus for various miscellaneous graphs generated using Mathematica follows.
 \#                                                                             | v    | e     | genus    | time (s) | MG time (s)
