@@ -4,7 +4,7 @@
 -->
 
 <p align="center">
-  <img src="https://github.com/SanderGi/Genus/blob/main/app/static/apple-touch-icon.png" alt="EmbeddedArena logo" width="120">
+  <img src="https://github.com/SanderGi/Genus/blob/main/app/static/apple-touch-icon.png?raw=true" alt="K3,3 embedding: logo for graph genus repo" width="120">
 </p>
 
 # Graph Genus
@@ -18,7 +18,7 @@ State of the art practical algorithms for computing the minimum genus of graphs 
 ## Motivation
 A famous problem at the intersection of topology and combinatorial graph theory is the [Utility Problem](https://www.youtube.com/watch?v=VvCytJvd4H0). Say you have three houses and three utilities and you need to connect each house to each utility via a wire. Is there a way to do this without the wires crossing? In terms of graph theory, this is asking whether K3,3 is _planar_. It is known that it is not. In fact K3,3 is _toroidal_ meaning while it cannot be embedded on a plane without edges crossing, it can be embedded on a torus:
 
-[![K3,3 Torus Embedding](https://github.com/SanderGi/Genus/blob/main/assets/k3-3torus.png)](https://github.com/SanderGi/Genus/blob/main/assets/k3-3torus.png)
+[![K3,3 Torus Embedding](https://github.com/SanderGi/Genus/blob/main/assets/k3-3torus.png?raw=true)](https://github.com/SanderGi/Genus/blob/main/assets/k3-3torus.png)
 
 The characterizing property of a torus that allows us to embed K3,3 is that it has a hole (unlike surfaces such as a plane or a sphere). This motivates classifying surfaces by their number of holes, that is, their genus g. The genus of a graph G is then simply the genus of the minimum genus surface on which G can be embedded without edges crossing. For genus zero we use the special name _planar_ and for genus one we use _toroidal_. Calculating the genus of a graph has a number of applications, particularly in the design of integrated circuits, study of graph minors, VLSI design, infrastructure planning, and more. For an interactive visualization of graph embedding [check here](https://genus.sandergi.com/k33_rotation_animation.html).
 
