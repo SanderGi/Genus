@@ -1,0 +1,4 @@
+CompileFlags:
+  Add:
+    - -Iflint/src
+    - -I/opt/homebrew/include
