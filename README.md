@@ -10,7 +10,7 @@
 # Graph Genus
 [![DOI](https://img.shields.io/badge/DOI-10.1016/j.disc.2026.115308-blue)](http://doi.org/10.1016/j.disc.2026.115308)
 [![arXiv](https://img.shields.io/badge/arXiv-2411.07347-b31b1b.svg)](https://arxiv.org/abs/2411.07347)
-![PyPI Version](https://img.shields.io/pypi/v/graph-genus)
+[![PyPI Version](https://img.shields.io/pypi/v/graph-genus)](https://pypi.org/project/graph-genus)
 [![maintenance-status](https://img.shields.io/badge/maintenance-actively--developed-brightgreen.svg)](https://gist.github.com/taiki-e/ad73eaea17e2e0372efb76ef6b38f17b)
 
 State of the art practical algorithms for computing the minimum genus of graphs and the corresponding embeddings. Contains standalone C programs, python bindings, and a [web version](https://genus.sandergi.com) with 2D and 3D visualizations.
