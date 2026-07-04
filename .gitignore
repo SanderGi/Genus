@@ -4,6 +4,8 @@
 __pycache__
 .venv
 .matplotlib-cache
+*.egg-info
+dist
 
 PAGE/page
 PAGE/page.exe
@@ -13,5 +15,7 @@ PAGE/adjacency_lists/rome-graphml.tgz
 
 MultiGenus/multi_genus
 MultiGenus/planar_draw
+MultiGenus/multi_genus.exe
+MultiGenus/planar_draw.exe
 
-genus_properties
+python-3.8.6-embed-amd64

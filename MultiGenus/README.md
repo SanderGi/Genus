@@ -1,5 +1,9 @@
-# Multi Genus
+<!--
+    SPDX-FileCopyrightText: 2026 Alexander Metzger
+    SPDX-License-Identifier: GPL-2.0-only
+-->
 
+# Multi Genus
 The original code in this subfolder has been written by [Gunnar Brinkmann](https://research.ugent.be/web/person/gunnar-brinkmann-0/en)
 and is included under a GPLv2 license with permission.
 
@@ -50,14 +54,7 @@ The code has been modified for bundling as a python package and to support extra
 You can find Brinkmann's original code [here](https://caagt.ugent.be/cubic-bip-nonham/).
 
 ## Usage
-
-To use the version included in this repository, first compile:
-```bash
-gcc -O3 -DLONG -march=native -o multi_genus multi_genus.c -lm
-gcc -std=gnu89 -O3 -o planar_draw planar_draw.c -lm
-```
-
-Then use `cat graphs/austin_test.mc | ./multi_genus w | ./planar_draw f l > test.tex` to run the algorithm and generate a LaTeX visualization of the embedding. You can read more about the multi code binary graph format on [House of Graphs](https://houseofgraphs.org/help) under supported graph formats.
+To use the version included in this repository, use `make run ADJ=graphs/k3-3.mc` to run the algorithm and `make draw ADJ=graphs/k3-3.mc` to also generate a LaTeX visualization of the embedding. You can read more about the multi code binary graph format on [House of Graphs](https://houseofgraphs.org/help) under supported graph formats.
 
 ## License
 This project is licensed under the terms of the **GNU General Public License v2.0** (GPLv2). 

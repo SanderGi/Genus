@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graph-genus"
+version = "0.1.1"
+description = "Python bindings for various graph genus and embedding tools"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "GPL-2.0-only"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Alexander Metzger"},
+    {name = "Austin Ulrigg"},
+    {name = "Gunnar Brinkmann"},
+]
+keywords = ["graph theory", "genus", "embedding", "rotation system", "topological graph theory"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: C",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+Homepage = "https://genus.sandergi.com"
+Repository = "https://github.com/SanderGi/Genus"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+graph_genus = ["bin/*"]

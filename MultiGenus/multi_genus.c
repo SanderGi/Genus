@@ -114,7 +114,7 @@ genus again.
 #define LONGTYPE unsigned __int128
 #else
 #define knoten 64
-#define LONGTYPE unsigned long int
+#define LONGTYPE unsigned long long
 #define d_kanten 512  // maximum number of directed edges
 #endif
 
@@ -162,7 +162,7 @@ LONGTYPE rememberfaces[d_kanten];
 int globalnv, globalne, write = 0, filter = -1, filter2 = -1, filterl = -1,
                         all = 0, edgelimit = 0;
 int filterlarge = 0, compute_lower_bound = 1, do_bfs = 1;
-unsigned long int written = 0UL;
+unsigned long long written = 0UL;
 
 int reduce2 = 1;  // May vertices of degree 1 and 2 be reduced ?
 int reconstruct[knoten + 1][4], number_reconstruct;
@@ -2063,7 +2063,7 @@ void sort(unsigned char list[], int length)
 // FFSL should be a processor instruction and fast
 {
   int i;
-  unsigned long int small = 0UL, large = 0UL;
+  unsigned long long small = 0UL, large = 0UL;
 
   for (i = 0; i < length; i++) {
     if (list[i] <= 64)
@@ -2152,8 +2152,8 @@ char *argv[];
   int genus, larger = 0;
   int list[100] = {0};
 
-  if (sizeof(unsigned long int) != 8) {
-    fprintf(stderr, "Expected 64 bit for unsigned long int -- exit!\n");
+  if (sizeof(unsigned long long) != 8) {
+    fprintf(stderr, "Expected 64 bit for unsigned long long -- exit!\n");
     exit(1);
   }
 

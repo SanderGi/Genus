@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 CC=gcc
-BTYPE=Development
+MCC=x86_64-w64-mingw32-gcc
+WINE=wine
 BDIR=.
 
 all: page
@@ -15,12 +16,12 @@ page: page.c
 
 run_wine: page.exe
 # 	brew install --cask wine@staging
-	wine $(BDIR)/page.exe
+	WINEDEBUG=-all $(WINE) $(BDIR)/page.exe
 
 page.exe: page.c
 #   brew install mingw-w64
-	x86_64-w64-mingw32-gcc -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o "$(BDIR)/page.exe" page.c 
+	$(MCC) -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o "$(BDIR)/page.exe" page.c 
 
 clean:
-	rm -f $(BDIR)/page $(BDIR)/*.o
+	rm -f $(BDIR)/page $(BDIR)/*.o $(BDIR)/*.exe $(BDIR)/*.out
 	rm -rf $(BDIR)/*.dSYM

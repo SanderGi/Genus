@@ -25,7 +25,6 @@
 #include<limits.h>
 #include <time.h>
 #include <string.h>
-#include <sys/times.h>
 #include <math.h>
 
 #define N 2048
@@ -3854,7 +3853,11 @@ int main(int argc, char *argv[])
       usage(argv[0]);
     }
 
+#ifdef _WIN32
+ srand((unsigned int)time(0));
+#else
  srand48(time(0));
+#endif
  
  edgebuffer=malloc(sizeof(KANTE)*MAXEDGES);
  if (edgebuffer==NULL) { fprintf(stderr,"can't get edges -- exit!\n"); exit(1); }

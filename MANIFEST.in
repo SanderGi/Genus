@@ -1,0 +1,5 @@
+include LICENSE
+include README.md
+include PAGE/page.c
+include MultiGenus/multi_genus.c
+include MultiGenus/planar_draw.c
