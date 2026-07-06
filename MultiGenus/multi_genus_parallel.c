@@ -240,6 +240,7 @@ static MULTI_THREAD_LOCAL int multi_split_counter = 0;
 static MULTI_THREAD_LOCAL int multi_count_split_nodes = 0;
 static MULTI_THREAD_LOCAL unsigned long long multi_split_node_count = 0;
 static MULTI_THREAD_LOCAL unsigned long long multi_split_node_limit = 0;
+static atomic_int multi_output_claimed = 0;
 
 int multi_thread_create(multi_thread_t *thread, multi_thread_start_t start,
                         void *arg) {
@@ -319,6 +320,15 @@ int multi_parallel_take_node(int depth) {
   }
   multi_split_counter--;
   return 0;
+}
+
+int multi_should_write_code(int genus) {
+  int expected = 0;
+  if (!((write_embedding) || (genus == filter) || (genus == filter2))) return 0;
+  if (multi_count_split_nodes) return 0;
+  if (multi_worker_count <= 1) return 1;
+  if (!write_embedding) return 0;
+  return atomic_compare_exchange_strong(&multi_output_claimed, &expected, 1);
 }
 
 #define bit(i) (((LONGTYPE)1) << ((i) - 1))
@@ -1523,7 +1533,7 @@ void rec_genus_max(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell,
   if (ell == 0) {
     *found = 1;
     atomic_store(&multi_parallel_stop, 1);
-    if ((write_embedding) || (genus == filter) || (genus == filter2)) code();
+    if (multi_should_write_code(genus)) code();
     return;
   }
 
@@ -1613,7 +1623,7 @@ void rec_genus(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell, int genus,
     if (max_genus == genus) {
       *found = 1;
       atomic_store(&multi_parallel_stop, 1);
-      if ((write_embedding) || (genus == filter) || (genus == filter2)) code();
+      if (multi_should_write_code(genus)) code();
     }
     return;
   }
@@ -1766,7 +1776,7 @@ void pre_rec_genus(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell,
     if (max_genus == genus) {
       *found = 1;
       atomic_store(&multi_parallel_stop, 1);
-      if ((write_embedding) || (genus == filter) || (genus == filter2)) code();
+      if (multi_should_write_code(genus)) code();
     }
     return;
   }
@@ -2070,6 +2080,7 @@ unsigned long long multi_count_bound_split_nodes(GRAPH graph, ADJAZENZ adj,
   multi_split_node_count = 0;
   multi_split_node_limit = limit;
   atomic_store(&multi_parallel_stop, 0);
+  atomic_store(&multi_output_claimed, 0);
   multi_search_bound(graph, adj, max_genus, &found, split_depth);
   multi_count_split_nodes = 0;
   multi_split_node_limit = 0;
@@ -2250,7 +2261,7 @@ int get_genus(GRAPH graph, ADJAZENZ adj) {
   //  fprintf(stderr,"min genus=%d\n",min_genus);
 
   parallel_threads = multi_thread_count();
-  use_parallel = (parallel_threads > 1) && !write_embedding && !all && (filter < 0) &&
+  use_parallel = (parallel_threads > 1) && !all && (filter < 0) &&
                  (filter2 < 0) && !filterlarge;
 
   if (filter >= 0) {

@@ -17,6 +17,9 @@ run_parallel: multi_genus_parallel
 draw: multi_genus planar_draw
 	cat $(ADJ) | $(BDIR)/multi_genus w | $(BDIR)/planar_draw f l > test.tex
 
+draw_parallel: multi_genus_parallel planar_draw
+	cat $(ADJ) | $(BDIR)/multi_genus_parallel w | $(BDIR)/planar_draw f l > test.tex
+
 multi_genus: multi_genus.c
 	$(CC) -O3 -DLONG -march=native -o "$(BDIR)/multi_genus" multi_genus.c -lm
 
