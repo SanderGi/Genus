@@ -17,5 +17,7 @@ MultiGenus/multi_genus
 MultiGenus/planar_draw
 MultiGenus/multi_genus.exe
 MultiGenus/planar_draw.exe
+MultiGenus/multi_genus_parallel
+MultiGenus/multi_genus_parallel.exe
 
 python-3.8.6-embed-amd64

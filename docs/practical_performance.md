@@ -5,32 +5,32 @@
 
 # Practical Performance
 The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), computation time for the genus using SageMath (SM time), and computation time using multi_genus.c (MG time).
-\#                                              | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s)
+\#                                              | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s) [parallel]
 ----------------------------------------------- | --- | --- | ---- | ----- | ---------- | ---------- | -------- | ----------- | -----------
-[1/1](../PAGE/adjacency_lists/3-3-cage.txt)     | 3   | 3   | 4    | 6     | 24         | 0          | 0.004    | 0.004       | 0.006
-[1/1](../PAGE/adjacency_lists/3-4-cage.txt)     | 3   | 4   | 6    | 9     | 72         | 1          | 0.003    | 0.039       | 0.006
-[1/1](../PAGE/adjacency_lists/3-5-cage.txt)     | 3   | 5   | 10   | 15    | 120        | 1          | 0.005    | 0.027       | 0.006
-[1/1](../PAGE/adjacency_lists/3-6-cage.txt)     | 3   | 6   | 14   | 21    | 336        | 1          | 0.005    | 0.010       | 0.006
-[1/1](../PAGE/adjacency_lists/3-7-cage.txt)     | 3   | 7   | 24   | 36    | 32         | 2          | 0.005    | 1.737       | 0.006
-[1/1](../PAGE/adjacency_lists/3-8-cage.txt)     | 3   | 8   | 30   | 45    | 1440       | 4          | 0.016    | 118.958     | 0.012
-[1/18](../PAGE/adjacency_lists/3-9-cage1.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.222    | days        | 29.084
-[2/18](../PAGE/adjacency_lists/3-9-cage2.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.018    | days        | 30.909
-[3/18](../PAGE/adjacency_lists/3-9-cage3.txt)   | 3   | 9   | 58   | 87    | 24         | 7          | 1.851    | days        | 25.993
-[4/18](../PAGE/adjacency_lists/3-9-cage4.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.301    | days        | 54.396
-[5/18](../PAGE/adjacency_lists/3-9-cage5.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.380    | days        | 67.89
-[6/18](../PAGE/adjacency_lists/3-9-cage6.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 0.330    | days        | 45.310
-[7/18](../PAGE/adjacency_lists/3-9-cage7.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.639    | days        | 37.257
-[8/18](../PAGE/adjacency_lists/3-9-cage8.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.024    | days        | 42.843
-[9/18](../PAGE/adjacency_lists/3-9-cage9.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.903    | days        | 34.437
-[10/18](../PAGE/adjacency_lists/3-9-cage10.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.215    | days        | 86.54
-[11/18](../PAGE/adjacency_lists/3-9-cage11.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.204    | days        | 54.990
-[12/18](../PAGE/adjacency_lists/3-9-cage12.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 1.273    | days        | 51.589
-[13/18](../PAGE/adjacency_lists/3-9-cage13.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.839    | days        | 32.340
-[14/18](../PAGE/adjacency_lists/3-9-cage14.txt) | 3   | 9   | 58   | 87    | 12         | 7          | 1.056    | days        | 30.824
-[15/18](../PAGE/adjacency_lists/3-9-cage15.txt) | 3   | 9   | 58   | 87    | 8          | 7          | 0.530    | days        | 44.888
-[16/18](../PAGE/adjacency_lists/3-9-cage16.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.208    | days        | 57.890
-[17/18](../PAGE/adjacency_lists/3-9-cage17.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.879    | days        | 140.50
-[18/18](../PAGE/adjacency_lists/3-9-cage18.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.849    | days        | 47.737
+[1/1](../PAGE/adjacency_lists/3-3-cage.txt)     | 3   | 3   | 4    | 6     | 24         | 0          | 0.004    | 0.004       | 0.006 [0.020]
+[1/1](../PAGE/adjacency_lists/3-4-cage.txt)     | 3   | 4   | 6    | 9     | 72         | 1          | 0.003    | 0.039       | 0.006 [0.020]
+[1/1](../PAGE/adjacency_lists/3-5-cage.txt)     | 3   | 5   | 10   | 15    | 120        | 1          | 0.005    | 0.027       | 0.006 [0.020]
+[1/1](../PAGE/adjacency_lists/3-6-cage.txt)     | 3   | 6   | 14   | 21    | 336        | 1          | 0.005    | 0.010       | 0.006 [0.020]
+[1/1](../PAGE/adjacency_lists/3-7-cage.txt)     | 3   | 7   | 24   | 36    | 32         | 2          | 0.005    | 1.737       | 0.006 [0.020]
+[1/1](../PAGE/adjacency_lists/3-8-cage.txt)     | 3   | 8   | 30   | 45    | 1440       | 4          | 0.016    | 118.958     | 0.012 [0.024]
+[1/18](../PAGE/adjacency_lists/3-9-cage1.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.222    | days        | 29.084 [4.208]
+[2/18](../PAGE/adjacency_lists/3-9-cage2.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.018    | days        | 30.909 [4.449]
+[3/18](../PAGE/adjacency_lists/3-9-cage3.txt)   | 3   | 9   | 58   | 87    | 24         | 7          | 1.851    | days        | 25.993 [3.857]
+[4/18](../PAGE/adjacency_lists/3-9-cage4.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.301    | days        | 54.396 [7.515]
+[5/18](../PAGE/adjacency_lists/3-9-cage5.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.380    | days        | 67.89 [9.688]
+[6/18](../PAGE/adjacency_lists/3-9-cage6.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 0.330    | days        | 45.310 [6.491]
+[7/18](../PAGE/adjacency_lists/3-9-cage7.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.639    | days        | 37.257 [5.390]
+[8/18](../PAGE/adjacency_lists/3-9-cage8.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.024    | days        | 42.843 [6.028]
+[9/18](../PAGE/adjacency_lists/3-9-cage9.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.903    | days        | 34.437 [4.961]
+[10/18](../PAGE/adjacency_lists/3-9-cage10.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.215    | days        | 86.54 [10.821]
+[11/18](../PAGE/adjacency_lists/3-9-cage11.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.204    | days        | 54.990 [7.341]
+[12/18](../PAGE/adjacency_lists/3-9-cage12.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 1.273    | days        | 51.589 [7.747]
+[13/18](../PAGE/adjacency_lists/3-9-cage13.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.839    | days        | 32.340 [4.527]
+[14/18](../PAGE/adjacency_lists/3-9-cage14.txt) | 3   | 9   | 58   | 87    | 12         | 7          | 1.056    | days        | 30.824 [4.394]
+[15/18](../PAGE/adjacency_lists/3-9-cage15.txt) | 3   | 9   | 58   | 87    | 8          | 7          | 0.530    | days        | 44.888 [6.431]
+[16/18](../PAGE/adjacency_lists/3-9-cage16.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.208    | days        | 57.890 [7.589]
+[17/18](../PAGE/adjacency_lists/3-9-cage17.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.879    | days        | 140.50 [18.710]
+[18/18](../PAGE/adjacency_lists/3-9-cage18.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.849    | days        | 47.737 [47.862]
 [1/3](../PAGE/adjacency_lists/3-10-cage1.txt)   | 3   | 10  | 70   | 105   | 120        | 9          | 0.547    | DNF         | 9354.14
 [2/3](../PAGE/adjacency_lists/3-10-cage2.txt)   | 3   | 10  | 70   | 105   | 24         | 9          | 0.694    | DNF         | 9556.13
 [3/3](../PAGE/adjacency_lists/3-10-cage3.txt)   | 3   | 10  | 70   | 105   | 80         | 9          | 0.418    | DNF         | 10680.89

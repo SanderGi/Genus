@@ -54,7 +54,9 @@ The code has been modified for bundling as a python package and to support extra
 You can find Brinkmann's original code [here](https://caagt.ugent.be/cubic-bip-nonham/).
 
 ## Usage
-To use the version included in this repository, use `make run ADJ=graphs/k3-3.mc` to run the algorithm and `make draw ADJ=graphs/k3-3.mc` to also generate a LaTeX visualization of the embedding. You can read more about the multi code binary graph format on [House of Graphs](https://houseofgraphs.org/help) under supported graph formats.
+To use the version included in this repository, use `make run ADJ=graphs/k3-3.mc` to run the algorithm and `make draw ADJ=graphs/k3-3.mc` to also generate a LaTeX visualization of the embedding. Optionally, you can run an experimental multi-threaded version with `make run_parallel ADJ=graphs/k3-3.mc` though it is not yet faster for all graphs since it depends heavily on the choice of `MULTI_GENUS_SPLIT_DEPTH` due to multi_genus not being built for per-graph parallelism like PAGE. This algorithm is better used for computing many graphs in parallel. 
+
+You can read more about the multi code binary graph format on [House of Graphs](https://houseofgraphs.org/help) under supported graph formats.
 
 ## License
 This project is licensed under the terms of the **GNU General Public License v2.0** (GPLv2). 
