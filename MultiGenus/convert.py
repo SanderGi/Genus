@@ -42,3 +42,9 @@ def convert(name):
                 readable.append(0)
 
     print(readable)
+
+
+if __name__ == "__main__":
+    for name in os.listdir(INPUT_DIR):
+        if name.endswith(".txt"):
+            convert(name.removesuffix(".txt"))
