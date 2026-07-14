@@ -8,7 +8,7 @@ import networkx as nx  # type: ignore
 import os, signal
 import subprocess, threading
 from sage.all import Graph  # type: ignore
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore
 
 
 class Command(object):

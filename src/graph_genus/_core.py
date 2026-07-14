@@ -61,6 +61,7 @@ def embed(
     *,
     algorithm: Algorithm = "page",
     output_format: OutputFormat = "rotation_system",
+    low_memory: bool = False,
 ) -> tuple[int, list[list[int]] | str]:
     """Embed a graph and return its genus plus the requested artifact.
 
@@ -74,6 +75,7 @@ def embed(
       ``"none"`` treats ``adjacency_list`` as an already chosen rotation system.
     - ``output_format`` -- ``"rotation_system"`` (default), ``"drawing"`` for
       TikZ/LaTeX output from ``planar_draw``, or ``"3D"`` for OBJ output.
+    - ``low_memory`` -- true to run the low memory version of the algorithm if available. Might be slow but can make running on larger graphs possible.
 
     OUTPUT:
 
@@ -91,7 +93,7 @@ def embed(
         rotation_system = graph
         genus = genus_from_rotation(rotation_system)
     elif algorithm == "page":
-        genus, rotation_system = _run_page(graph)
+        genus, rotation_system = _run_page(graph, low_memory)
     else:
         genus, rotation_system = _run_multi_genus(graph)
 
@@ -216,7 +218,7 @@ def _normalize_output_format(output_format: str) -> OutputFormat:
     return normalized  # type: ignore[return-value]
 
 
-def _run_page(graph: list[list[int]]) -> tuple[int, list[list[int]]]:
+def _run_page(graph: list[list[int]], low_memory: bool) -> tuple[int, list[list[int]]]:
     max_degree = max((len(neighbors) for neighbors in graph), default=0)
     if max_degree < 2:
         return genus_from_rotation(graph), graph
@@ -235,7 +237,7 @@ def _run_page(graph: list[list[int]]) -> tuple[int, list[list[int]]]:
             }
         )
         proc = subprocess.run(
-            [_tool_path("page")],
+            [_tool_path("page_low_mem") if low_memory else _tool_path("page")],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,

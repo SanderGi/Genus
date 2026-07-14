@@ -47,10 +47,16 @@ class build_py_with_native_tools(build_py):
             shutil.rmtree(bin_dir)
         bin_dir.mkdir(parents=True, exist_ok=True)
         page_source = source_root / "PAGE" / "page.c"
+        page_low_mem_source = source_root / "PAGE" / "page_low_mem.c"
         multi_genus_source = source_root / "MultiGenus" / "multi_genus.c"
         planar_draw_source = source_root / "MultiGenus" / "planar_draw.c"
 
-        for source in (page_source, multi_genus_source, planar_draw_source):
+        for source in (
+            page_source,
+            page_low_mem_source,
+            multi_genus_source,
+            planar_draw_source,
+        ):
             if not source.is_file():
                 raise FileNotFoundError(
                     f"Required native source file is missing from the package: {source}"
@@ -70,6 +76,14 @@ class build_py_with_native_tools(build_py):
                 "-o",
                 str(bin_dir / f"page{exe}"),
                 str(page_source),
+            ],
+            cc_parts
+            + [
+                "-O3",
+                "-std=c17",
+                "-o",
+                str(bin_dir / f"page_low_mem{exe}"),
+                str(page_low_mem_source),
             ],
             cc_parts
             + [
@@ -102,7 +116,7 @@ class build_py_with_native_tools(build_py):
 
 setup(
     name="graph-genus",
-    version="0.1.1",
+    version="0.1.2",
     description="Python bindings for various graph genus and embedding tools",
     long_description=Path("README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",

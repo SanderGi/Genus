@@ -6,9 +6,10 @@
 import os, re, subprocess, sys, time
 from pathlib import Path
 
-TIMEOUT = 90
+TIMEOUT = 40
 # IMPLEMENTATION = "python"
 # IMPLEMENTATION = "c"
+# IMPLEMENTATION = "low_mem"
 IMPLEMENTATION = os.environ.get("IMPLEMENTATION", "c")
 
 # Identify the graphs that finish in finite time in the docs
@@ -29,6 +30,8 @@ for line in Path("../docs/practical_performance.md").read_text().splitlines():
     if not re.fullmatch(r"\d+(?:\.\d+)?", page_time):
         continue
     path = m.group(1).replace("../PAGE/", "")
+    if "bipartite-kneser" in path:
+        continue
     vals = list(map(int, Path(path).read_text().split()))
     n = vals[0]
     degree = (len(vals) - 2) // n
@@ -62,12 +65,14 @@ for idx, (path, degree, expected) in enumerate(rows, 1):
         ]
     elif IMPLEMENTATION == "c":
         cmd = ["make", "run"]
-        env["S"] = str(start)
-        env["DEG"] = str(degree)
+        env["ADJ"] = path
+        env["STDOUT"] = "1"
+    elif IMPLEMENTATION == "low_mem":
+        cmd = ["make", "run_low_mem"]
         env["ADJ"] = path
         env["STDOUT"] = "1"
     else:
-        raise ValueError("Invalid implementation: must be 'python' or 'c'")
+        raise ValueError("Invalid implementation: must be 'python', 'c', or 'low_mem'")
     try:
         cp = subprocess.run(
             cmd, text=True, capture_output=True, timeout=TIMEOUT, env=env

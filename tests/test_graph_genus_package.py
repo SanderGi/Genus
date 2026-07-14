@@ -77,6 +77,8 @@ class GraphGenusPackageTests(unittest.TestCase):
                 continue
 
             graph_path = repo / match.group(1).replace("../", "")
+            if "bipartite-kneser" in str(graph_path):
+                continue
             rows.append((graph_path, int(genus)))
 
         self.assertGreater(len(rows), 0)

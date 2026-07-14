@@ -15,7 +15,10 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
 
+#include <ctype.h>
+#include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -57,6 +60,7 @@
 #define LENGTH_COMPOSITION_WORK_LIMIT 25000000ULL
 #define LENGTH_FEASIBILITY_CACHE_LIMIT 10000000ULL
 #define SHORTEST_PACKING_CALL_LIMIT 1000000ULL
+#define DEFAULT_MAX_CYCLE_MEMORY_MB 1024ULL
 #define START_BRANCH_THREAD_CAP 8
 #define START_BRANCH_PARALLEL_MIN_CYCLES 750
 // Symmetry discovery is opportunistic: found automorphisms are used for sound
@@ -165,6 +169,10 @@ typedef struct {
     bool* solution_used_cycles;
     atomic_bool stop_requested;
 } start_branch_search_t;
+typedef struct {
+    uint32_t start;
+    uint32_t degree;
+} input_layout_t;
 
 // macros
 // assert(condition, message, ...fmt_args)
@@ -231,6 +239,7 @@ static FILE* output_file = NULL;
 static vertex_t start_index = 0;
 static degree_t vertex_degree = 3;
 static cycle_index_t pre_genus_lower_bound = 0;
+static size_t max_cycle_memory_bytes = 0;
 static char* adj_filename = NULL;
 static cycle_length_t smallest_cycle_length;
 static bool output_to_stdout = false;
@@ -298,8 +307,10 @@ static automorphism_list_t graph_automorphisms = {0, 0, 0, NULL};
 static page_mutex_t output_file_mutex = PAGE_MUTEX_INITIALIZER;
 
 // auxiliary data structures
+static input_layout_t detect_input_layout(const char* filename, uint32_t ignored_vertex);
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges);
 vertex_t* adj_get_neighbors(adj_t adjacency_list, vertex_t vertex);
+bool adj_is_bipartite(adj_t adjacency_list, vertex_t num_vertices);
 void graph_free(adj_t adjacency_list);
 bool graph_has_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex);
 uint32_t directed_edge_key(vertex_t start_vertex, vertex_t end_vertex);
@@ -315,7 +326,7 @@ void adj_undo_remove_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t 
 bool adj_has_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vertex);
 
 cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_length_t cycle_length,
-                        cycle_index_t* num_cycles);
+                        cycle_index_t* num_cycles, size_t existing_cycle_bytes);
 vertex_t* cycle_get(cycles_t cycles, cycle_length_t max_cycle_length, cycle_index_t cycle_index,
                     cycle_length_t* cycle_length);
 
@@ -936,14 +947,31 @@ packing_result_t can_pack_shortest_cycles(vertex_t num_vertices, edge_t num_edge
 }
 
 int main(void) {
-    start_index = atoi(getenv("S"));
-    vertex_degree = atoi(getenv("DEG"));
     if (getenv("GLB") != NULL) {
         pre_genus_lower_bound = atoi(getenv("GLB"));
     }
     adj_filename = getenv("ADJ");
+    assert(adj_filename != NULL, "Usage: ADJ=adjacency_lists/3-8-cage.txt ./page\n");
+    input_layout_t detected = detect_input_layout(adj_filename, MAX_VERTICES);
+    const char* start_text = getenv("S");
+    const char* degree_text = getenv("DEG");
+    start_index = (vertex_t)(start_text == NULL ? detected.start : strtoul(start_text, NULL, 10));
+    vertex_degree = (degree_t)(degree_text == NULL ? detected.degree : strtoul(degree_text, NULL, 10));
+    assert(detected.degree <= UINT8_MAX, "Error: page.c supports degree at most %u\n", UINT8_MAX);
     output_to_stdout = getenv("STDOUT") != NULL;
     progress_bar_newline = getenv("PBN") != NULL;
+    const char* cycle_memory_mb_text = getenv("MAX_CYCLE_MEMORY_MB");
+    char* cycle_memory_mb_end = NULL;
+    unsigned long long cycle_memory_mb =
+        cycle_memory_mb_text == NULL
+            ? DEFAULT_MAX_CYCLE_MEMORY_MB
+            : strtoull(cycle_memory_mb_text, &cycle_memory_mb_end, 10);
+    assert(cycle_memory_mb > 0 &&
+               (cycle_memory_mb_text == NULL ||
+                (cycle_memory_mb_end != cycle_memory_mb_text && *cycle_memory_mb_end == '\0')) &&
+               cycle_memory_mb <= SIZE_MAX / (1024ULL * 1024ULL),
+           "Error: MAX_CYCLE_MEMORY_MB must be a positive integer that fits in size_t\n");
+    max_cycle_memory_bytes = (size_t)cycle_memory_mb * 1024ULL * 1024ULL;
 
     if (PRINT_PROGRESS) {
         fprintf(stderr, "Loading adjacency list...\n");
@@ -952,6 +980,7 @@ int main(void) {
     vertex_t num_vertices;
     edge_t num_edges;
     adj_t adjacency_list = adj_load(ADJACENCY_LIST_FILENAME, &num_vertices, &num_edges);
+    bool graph_is_bipartite = adj_is_bipartite(adjacency_list, num_vertices);
     initial_vertex_uses = (degree_t*)malloc(num_vertices * sizeof(degree_t));
     assert(initial_vertex_uses != NULL,
            "Error allocating memory for the initial vertex use counts\n");
@@ -1045,10 +1074,29 @@ int main(void) {
                         cur_max_cycle_length);
             }
 
+            if (graph_is_bipartite && cur_max_cycle_length % 2 != 0) {
+                current_length_cycle_count = 0;
+                if (PRINT_PROGRESS) {
+                    fprintf(stderr,
+                            "No cycles of odd length in a bipartite graph. Skipping.\n");
+                }
+                continue;
+            }
+
+            size_t existing_cycle_bytes = 0;
+            if (cycles != NULL) {
+                assert((size_t)num_cycles <=
+                           SIZE_MAX / (cycles_max_cycle_length + 2) / sizeof(vertex_t),
+                       "Error: existing cycle storage size overflow\n");
+                existing_cycle_bytes =
+                    (size_t)num_cycles * (cycles_max_cycle_length + 2) * sizeof(vertex_t);
+            }
             cycles_t new_cycles =
                 cycle_generate(adjacency_list, num_vertices, cur_max_cycle_length,
-                               &num_new_cycles);
+                               &num_new_cycles, existing_cycle_bytes);
             current_length_cycle_count = num_new_cycles;
+            assert(num_new_cycles <= MAX_CYCLES - num_cycles,
+                   "Error: cumulative cycle count exceeds PAGE's cycle index limit\n");
             num_cycles += num_new_cycles;
 
             if (num_new_cycles == 0) {
@@ -1098,26 +1146,57 @@ int main(void) {
                 cycles = new_cycles;
                 cycles_max_cycle_length = cur_max_cycle_length;
             } else {
-                cycles_t combined =
-                    (cycles_t)malloc(num_cycles * (cur_max_cycle_length + 2) * sizeof(vertex_t));
-                assert(combined != NULL, "Error allocating memory for the combined cycles\n");
-                for (cycle_index_t i = 0; i < num_cycles - num_new_cycles; i++) {
-                    for (cycle_length_t j = 0; j < cycles_max_cycle_length + 2; j++) {
-                        combined[i * (cur_max_cycle_length + 2) + j] =
-                            cycles[i * (cycles_max_cycle_length + 2) + j];
+                cycle_index_t old_num_cycles = num_cycles - num_new_cycles;
+                size_t old_cycle_bytes =
+                    (size_t)old_num_cycles * (cycles_max_cycle_length + 2) * sizeof(vertex_t);
+                size_t new_cycle_bytes =
+                    (size_t)num_new_cycles * (cur_max_cycle_length + 2) * sizeof(vertex_t);
+                assert((size_t)num_cycles <=
+                           SIZE_MAX / (cur_max_cycle_length + 2) / sizeof(vertex_t),
+                       "Error: combined cycle storage size overflow\n");
+                size_t combined_cycle_bytes =
+                    (size_t)num_cycles * (cur_max_cycle_length + 2) * sizeof(vertex_t);
+                size_t transient_cycle_bytes =
+                    combined_cycle_bytes +
+                    (old_cycle_bytes < new_cycle_bytes ? old_cycle_bytes : new_cycle_bytes);
+                assert(transient_cycle_bytes <= max_cycle_memory_bytes,
+                       "Error: combining cycles needs %zu MiB temporarily, exceeding the %zu "
+                       "MiB cycle memory budget. Increase MAX_CYCLE_MEMORY_MB only if enough "
+                       "memory is available.\n",
+                       (transient_cycle_bytes + 1024 * 1024 - 1) / (1024 * 1024),
+                       max_cycle_memory_bytes / (1024 * 1024));
+
+                cycles_t combined;
+                if (old_cycle_bytes <= new_cycle_bytes) {
+                    combined = (cycles_t)realloc(new_cycles, combined_cycle_bytes);
+                    assert(combined != NULL,
+                           "Error expanding memory for the combined cycles\n");
+                    for (cycle_index_t i = num_new_cycles; i > 0; i--) {
+                        memmove(&combined[(old_num_cycles + i - 1) *
+                                          (cur_max_cycle_length + 2)],
+                                &combined[(i - 1) * (cur_max_cycle_length + 2)],
+                                (cur_max_cycle_length + 2) * sizeof(vertex_t));
                     }
-                }
-                for (cycle_index_t i = 0; i < num_new_cycles; i++) {
-                    for (cycle_length_t j = 0; j < cur_max_cycle_length + 2; j++) {
-                        combined[(num_cycles - num_new_cycles + i) *
-                                     (cur_max_cycle_length + 2) +
-                                 j] =
-                            new_cycles[i * (cur_max_cycle_length + 2) + j];
+                    for (cycle_index_t i = 0; i < old_num_cycles; i++) {
+                        memcpy(&combined[i * (cur_max_cycle_length + 2)],
+                               &cycles[i * (cycles_max_cycle_length + 2)],
+                               (cycles_max_cycle_length + 2) * sizeof(vertex_t));
                     }
+                    free(cycles);
+                } else {
+                    combined = (cycles_t)realloc(cycles, combined_cycle_bytes);
+                    assert(combined != NULL,
+                           "Error expanding memory for the combined cycles\n");
+                    for (cycle_index_t i = old_num_cycles; i > 0; i--) {
+                        memmove(&combined[(i - 1) * (cur_max_cycle_length + 2)],
+                                &combined[(i - 1) * (cycles_max_cycle_length + 2)],
+                                (cycles_max_cycle_length + 2) * sizeof(vertex_t));
+                    }
+                    memcpy(&combined[old_num_cycles * (cur_max_cycle_length + 2)],
+                           new_cycles, new_cycle_bytes);
+                    free(new_cycles);
                 }
                 cycles_max_cycle_length = cur_max_cycle_length;
-                free(cycles);
-                free(new_cycles);
                 cycles = combined;
             }
         }
@@ -2751,6 +2830,71 @@ bool path_has_reverse_transition(vertex_t* path, cycle_length_t path_length, ver
     return false;
 }
 
+static input_layout_t detect_input_layout(const char* filename,
+                                          uint32_t ignored_vertex) {
+    FILE* input = fopen(filename, "r");
+    assert(input != NULL, "Error opening file %s\n", filename);
+
+    unsigned vertex_count;
+    unsigned ignored_edge_count;
+    assert(fscanf(input, "%u %u", &vertex_count, &ignored_edge_count) == 2,
+            "Error reading graph size from %s\n", filename);
+
+    int character;
+    while ((character = fgetc(input)) != '\n' && character != EOF) {
+    }
+
+    size_t line_capacity = (size_t)vertex_count * 6 + 2;
+    char* line = malloc(line_capacity * sizeof(char));
+    uint32_t minimum_label = UINT32_MAX;
+    uint32_t maximum_degree = 0;
+
+    for (unsigned row = 0; row < vertex_count; row++) {
+        assert(fgets(line, (int)line_capacity, input) != NULL,
+                "Error reading adjacency row %u from %s\n", row, filename);
+        assert(strchr(line, '\n') != NULL || feof(input),
+                "Error: adjacency row %u is too long\n", row);
+
+        uint32_t row_degree = 0;
+        char* cursor = line;
+        while (*cursor != '\0') {
+            while (isspace((unsigned char)*cursor)) {
+                cursor++;
+            }
+            if (*cursor == '\0') {
+                break;
+            }
+
+            errno = 0;
+            char* end;
+            unsigned long value = strtoul(cursor, &end, 10);
+            assert(errno == 0 && end != cursor && value <= ignored_vertex,
+                    "Error: invalid neighbor on row %u\n", row);
+            if (value != ignored_vertex) {
+                row_degree++;
+                if (value < minimum_label) {
+                    minimum_label = (uint32_t)value;
+                }
+            }
+            cursor = end;
+        }
+
+        if (row_degree > maximum_degree) {
+            maximum_degree = row_degree;
+        }
+    }
+
+    free(line);
+    fclose(input);
+    assert(maximum_degree != 0 && minimum_label != UINT32_MAX,
+            "Error: graph has no adjacency entries\n");
+
+    return (input_layout_t){
+        .start = minimum_label,
+        .degree = maximum_degree,
+    };
+}
+
 adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
     FILE* fp = fopen(filename, "r");
     assert(fp != NULL, "Error opening file %s\n", filename);
@@ -2865,6 +3009,48 @@ adj_t adj_load(char* filename, vertex_t* num_vertices, edge_t* num_edges) {
 
 vertex_t* adj_get_neighbors(adj_t adjacency_list, vertex_t vertex) {
     return &adjacency_list[vertex * VERTEX_DEGREE];
+}
+
+bool adj_is_bipartite(adj_t adjacency_list, vertex_t num_vertices) {
+    int8_t* colors = (int8_t*)malloc(num_vertices * sizeof(int8_t));
+    vertex_t* queue = (vertex_t*)malloc(num_vertices * sizeof(vertex_t));
+    assert(colors != NULL && queue != NULL,
+           "Error allocating memory for the bipartiteness check\n");
+    for (vertex_t i = 0; i < num_vertices; i++) {
+        colors[i] = -1;
+    }
+
+    for (vertex_t root = 0; root < num_vertices; root++) {
+        if (colors[root] != -1) {
+            continue;
+        }
+        cycle_index_t head = 0;
+        cycle_index_t tail = 0;
+        colors[root] = 0;
+        queue[tail++] = root;
+        while (head < tail) {
+            vertex_t vertex = queue[head++];
+            vertex_t* neighbors = adj_get_neighbors(adjacency_list, vertex);
+            for (degree_t i = 0; i < VERTEX_DEGREE; i++) {
+                vertex_t neighbor = neighbors[i];
+                if (neighbor == MAX_VERTICES) {
+                    continue;
+                }
+                if (colors[neighbor] == -1) {
+                    colors[neighbor] = 1 - colors[vertex];
+                    queue[tail++] = neighbor;
+                } else if (colors[neighbor] == colors[vertex]) {
+                    free(colors);
+                    free(queue);
+                    return false;
+                }
+            }
+        }
+    }
+
+    free(colors);
+    free(queue);
+    return true;
 }
 
 void graph_free(adj_t adjacency_list) {
@@ -3368,39 +3554,78 @@ bool adj_has_edge(adj_t adjacency_list, vertex_t start_vertex, vertex_t end_vert
     return directed_edge_remaining[edge_id];
 }
 
+typedef struct {
+    size_t used;
+    size_t limit;
+} fifo_memory_budget_t;
+
 struct fifo {
     vertex_t* data;
-    cycle_index_t head;
-    cycle_index_t tail;
-    cycle_index_t capacity;
+    size_t head;
+    size_t tail;
+    size_t capacity;
     cycle_length_t path_length;
+    fifo_memory_budget_t* memory_budget;
+    const char* name;
 };
-void fifo_init(struct fifo* fifo, cycle_index_t initial_capacity, cycle_length_t path_length) {
-    fifo->data = (vertex_t*)malloc(initial_capacity * path_length * sizeof(vertex_t));
-    assert(fifo->data != NULL, "Error allocating memory for the fifo\n");
+
+size_t fifo_allocation_bytes(size_t capacity, cycle_length_t path_length) {
+    assert(path_length > 0 && capacity <= SIZE_MAX / path_length / sizeof(vertex_t),
+           "Error: cycle-generation allocation size overflow\n");
+    return capacity * (size_t)path_length * sizeof(vertex_t);
+}
+
+void fifo_reserve_memory(struct fifo* fifo, size_t new_capacity) {
+    size_t old_bytes = fifo_allocation_bytes(fifo->capacity, fifo->path_length);
+    size_t new_bytes = fifo_allocation_bytes(new_capacity, fifo->path_length);
+    size_t additional_bytes = new_bytes - old_bytes;
+    assert(fifo->memory_budget->used <= fifo->memory_budget->limit &&
+               additional_bytes <= fifo->memory_budget->limit - fifo->memory_budget->used,
+           "Error: cycle generation exceeded the %zu MiB memory budget while growing the %s. "
+           "This graph has too many candidate paths or cycles to materialize. Increase "
+           "MAX_CYCLE_MEMORY_MB only if enough memory is available.\n",
+           fifo->memory_budget->limit / (1024 * 1024), fifo->name);
+
+    size_t old_capacity = fifo->capacity;
+    vertex_t* new_data = (vertex_t*)realloc(fifo->data, new_bytes);
+    assert(new_data != NULL,
+           "Error allocating %zu bytes while growing the cycle-generation %s\n",
+           new_bytes, fifo->name);
+
+    if (fifo->tail < fifo->head) {
+        memmove(&new_data[old_capacity * fifo->path_length], new_data,
+                fifo->tail * fifo->path_length * sizeof(vertex_t));
+        fifo->tail += old_capacity;
+    }
+    fifo->data = new_data;
+    fifo->capacity = new_capacity;
+    fifo->memory_budget->used += additional_bytes;
+}
+
+void fifo_init(struct fifo* fifo, size_t initial_capacity, cycle_length_t path_length,
+               fifo_memory_budget_t* memory_budget, const char* name) {
+    assert(initial_capacity >= 2, "Error: cycle-generation fifo capacity is too small\n");
     fifo->head = 0;
     fifo->tail = 0;
     fifo->capacity = initial_capacity;
     fifo->path_length = path_length;
+    fifo->memory_budget = memory_budget;
+    fifo->name = name;
+    size_t allocation_bytes = fifo_allocation_bytes(initial_capacity, path_length);
+    assert(memory_budget->used <= memory_budget->limit &&
+               allocation_bytes <= memory_budget->limit - memory_budget->used,
+           "Error: the %zu MiB cycle-generation memory budget is too small\n",
+           memory_budget->limit / (1024 * 1024));
+    fifo->data = (vertex_t*)malloc(allocation_bytes);
+    assert(fifo->data != NULL, "Error allocating memory for the fifo\n");
+    memory_budget->used += allocation_bytes;
 }
 bool fifo_empty(struct fifo* fifo) { return fifo->head == fifo->tail; }
 void fifo_push(struct fifo* fifo, vertex_t* path) {
     if ((fifo->tail + 1) % fifo->capacity == fifo->head) {
-        // double the capacity
-        vertex_t* new_data =
-            (vertex_t*)malloc(2 * fifo->capacity * fifo->path_length * sizeof(vertex_t));
-        assert(new_data != NULL, "Error allocating memory for the fifo\n");
-        for (cycle_index_t i = 0; i < fifo->capacity; i++) {
-            for (cycle_length_t j = 0; j < fifo->path_length; j++) {
-                new_data[i * fifo->path_length + j] =
-                    fifo->data[((fifo->head + i) % fifo->capacity) * fifo->path_length + j];
-            }
-        }
-        free(fifo->data);
-        fifo->data = new_data;
-        fifo->head = 0;
-        fifo->tail = fifo->capacity - 1;
-        fifo->capacity *= 2;
+        assert(fifo->capacity <= SIZE_MAX / 2,
+               "Error: cycle-generation fifo capacity overflow\n");
+        fifo_reserve_memory(fifo, fifo->capacity * 2);
     }
 
     for (cycle_length_t i = 0; i < fifo->path_length; i++) {
@@ -3414,23 +3639,38 @@ void fifo_pop(struct fifo* fifo, vertex_t* path) {
     }
     fifo->head = (fifo->head + 1) % fifo->capacity;
 }
-cycle_index_t fifo_size(struct fifo* fifo) {
+size_t fifo_size(struct fifo* fifo) {
     return (fifo->tail - fifo->head + fifo->capacity) % fifo->capacity;
 }
 void fifo_free(struct fifo* fifo) {
+    if (fifo->data != NULL) {
+        size_t allocation_bytes = fifo_allocation_bytes(fifo->capacity, fifo->path_length);
+        assert(fifo->memory_budget->used >= allocation_bytes,
+               "Error: invalid cycle-generation memory accounting\n");
+        fifo->memory_budget->used -= allocation_bytes;
+    }
     free(fifo->data);
     fifo->data = NULL;
 }
 
 cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_length_t cycle_length,
-                        cycle_index_t* num_cycles) {
+                        cycle_index_t* num_cycles, size_t existing_cycle_bytes) {
     vertex_t* buffer = (vertex_t*)malloc((cycle_length + 2) * sizeof(vertex_t));
     assert(buffer != NULL, "Error allocating memory for the buffer\n");
 
+    assert(existing_cycle_bytes <= max_cycle_memory_bytes,
+           "Error: existing cycles already exceed the %zu MiB cycle memory budget\n",
+           max_cycle_memory_bytes / (1024 * 1024));
+    fifo_memory_budget_t memory_budget = {
+        .used = existing_cycle_bytes,
+        .limit = max_cycle_memory_bytes,
+    };
     struct fifo cycle_list;
-    fifo_init(&cycle_list, cycle_length * num_vertices, cycle_length + 2);
+    fifo_init(&cycle_list, (size_t)cycle_length * num_vertices, cycle_length + 2,
+              &memory_budget, "cycle list");
     struct fifo queue;
-    fifo_init(&queue, cycle_length * num_vertices, cycle_length + 2);
+    fifo_init(&queue, (size_t)cycle_length * num_vertices, cycle_length + 2,
+              &memory_budget, "path queue");
 
     for (cycle_length_t i = 2; i < cycle_length + 2; i++) {
         buffer[i] = 0;
@@ -3539,11 +3779,16 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_lengt
 
     fifo_free(&queue);
     free(buffer);
-    *num_cycles = fifo_size(&cycle_list);
+    size_t generated_cycles = fifo_size(&cycle_list);
+    assert(generated_cycles <= MAX_CYCLES,
+           "Error: generated %zu cycles, exceeding PAGE's cycle index limit\n",
+           generated_cycles);
+    *num_cycles = (cycle_index_t)generated_cycles;
     vertex_t* cycles = NULL;
     if (*num_cycles != 0) {
-        cycles = (vertex_t*)realloc(cycle_list.data,
-                                    *num_cycles * (cycle_length + 2) * sizeof(vertex_t));
+        size_t cycle_bytes =
+            fifo_allocation_bytes(generated_cycles, cycle_length + 2);
+        cycles = (vertex_t*)realloc(cycle_list.data, cycle_bytes);
         assert(cycles != NULL, "Error reallocating memory for the cycles\n");
     }
     cycle_list.data = NULL;

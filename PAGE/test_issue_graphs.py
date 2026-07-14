@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 ADJ_DIR = ROOT / "adjacency_lists"
+PAGE_BINARY = Path(os.environ.get("PAGE_BINARY", ROOT / "page"))
 
 CASES = [
     ("issue2_quartic_counterexample.txt", 2, "issue #2 quartic counterexample"),
@@ -120,7 +121,7 @@ def run_case(case: tuple) -> tuple[bool, str]:
     if glb is not None:
         env["GLB"] = str(glb)
     result = subprocess.run(
-        [str(ROOT / "page")],
+        [str(PAGE_BINARY)],
         cwd=ROOT,
         env=env,
         text=True,
@@ -140,7 +141,8 @@ def run_case(case: tuple) -> tuple[bool, str]:
 
 
 def main() -> int:
-    subprocess.run(["make"], cwd=ROOT, check=True)
+    target = PAGE_BINARY.name if PAGE_BINARY.parent == ROOT else "page"
+    subprocess.run(["make", target], cwd=ROOT, check=True)
     failures = []
     for case in CASES:
         ok, message = run_case(case)

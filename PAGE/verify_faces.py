@@ -8,16 +8,19 @@ from sage.all import Graph, matrix  # type: ignore
 
 IGNORE_VERTEX = 65535
 GRAPH = "austin_test.txt"
+# GRAPH = "bipartite-kneser43-2.txt"
 FACES = [
-    [0, 6, 2, 8, 1, 7, 0],
-    [3, 9, 4, 11, 5, 10, 3],
-    [0, 8, 2, 11, 4, 10, 5, 9, 3, 7, 1, 6, 0],
-    [0, 7, 3, 10, 4, 9, 5, 11, 2, 6, 1, 8, 0],
+    [0, 6, 2, 8, 1, 7],
+    [3, 9, 4, 11, 5, 10],
+    [0, 8, 2, 11, 4, 10, 5, 9, 3, 7, 1, 6],
+    [0, 7, 3, 10, 4, 9, 5, 11, 2, 6, 1, 8],
 ]
+# with open("z43_antipodal_quadrangulation.faces") as f:
+#     FACES = list(map(lambda s: list(map(int, s.split())), f.readlines()))
 
 # convert off-indexed to 0-indexed
 off = min(min(v for v in f) for f in FACES)
-solution = [[x - off for x in y] for y in FACES]
+solution = [[x - off for x in y] + [y[0] - off] for y in FACES]
 
 # load the graph
 with open(os.path.join("adjacency_lists", GRAPH), "r") as f:

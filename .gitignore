@@ -12,6 +12,8 @@ PAGE/page.exe
 PAGE/page.out
 PAGE/page_py.out
 PAGE/adjacency_lists/rome-graphml.tgz
+PAGE/page_low_mem
+PAGE/page_low_mem.exe
 
 MultiGenus/multi_genus
 MultiGenus/planar_draw
