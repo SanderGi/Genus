@@ -13,10 +13,10 @@ run_multicode: genus
 	$(BDIR)/genus --multicode
 
 run_page: genus
-	$(BDIR)/genus --only-page
+	$(BDIR)/genus --multicode --page-only
 
 run_multi_genus: genus
-	$(BDIR)/genus --only-multi_genus
+	$(BDIR)/genus --multicode --multi_genus-only
 
 genus: genus.c
 	$(CC) -O3 -DLONG -ftree-vectorize -funroll-loops -Wall -std=gnu17 -g -pthread -o "$(BDIR)/genus" genus.c -lm

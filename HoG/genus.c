@@ -5,9 +5,8 @@
 // Interface:
 //   ./genus [--graph6|--multicode] [-j jobs] [--page-only] [--multi_genus-only] < graphs
 //
-// It prints one integer genus per input graph on stdout. Internally it forks a
-// PAGE worker and a MultiGenus worker, then keeps the first valid genus and
-// stops the other worker.
+// It prints one labeled genus per input graph, followed by a run summary.
+// By default it races PAGE and MultiGenus and keeps the first valid result.
 //
 // Compilation: 
 //   gcc -O3 -DLONG -ftree-vectorize -funroll-loops -Wall -std=gnu17 -g -pthread -o "./genus" genus.c -lm
@@ -39,6 +38,7 @@
 #endif
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 /* PAGE core. Copyright (C) 2026 Alexander Metzger. */
@@ -156,10 +156,10 @@ typedef struct {
 } start_branch_search_t;
 
 
-#define assert(condition, ...)        \
-    if (!(condition)) {               \
-        fprintf(stderr, __VA_ARGS__); \
-        exit(1);                      \
+#define assert(condition, ...)                                                    \
+    if (!(condition)) {                                                           \
+        fprintf(page_log_file == NULL ? stderr : page_log_file, __VA_ARGS__);     \
+        exit(1);                                                                  \
     }
 
 int page_mutex_init(page_mutex_t* mutex) {
@@ -188,6 +188,7 @@ int page_thread_join(page_thread_t thread) {
 
 
 static FILE* output_file = NULL;
+static FILE* page_log_file = NULL;
 static degree_t vertex_degree = 3;
 static cycle_length_t smallest_cycle_length;
 static unsigned page_thread_override = 0;
@@ -847,10 +848,11 @@ packing_result_t can_pack_shortest_cycles(vertex_t num_vertices, edge_t num_edge
 }
 
 static int ph_page_run(adj_t adjacency_list, vertex_t num_vertices, edge_t num_edges,
-                       degree_t degree, unsigned page_threads) {
+                       degree_t degree, unsigned page_threads, FILE* result_output) {
     vertex_degree = degree;
     page_thread_override = page_threads;
-    output_file = stdout;
+    output_file = result_output;
+    page_log_file = result_output;
 
     initial_vertex_uses = (degree_t*)malloc(num_vertices * sizeof(degree_t));
     assert(initial_vertex_uses != NULL,
@@ -1542,7 +1544,7 @@ static int ph_page_run(adj_t adjacency_list, vertex_t num_vertices, edge_t num_e
 
         free(length_cache_without_required);
         free(length_cache_with_required);
-                fprintf(stderr,
+                fprintf(page_log_file,
                 "\nFit does not exist. Adjusting bounds. Used %" PRId64 " iterations so far.\n",
                 num_search_calls);
         genus_lower_bound_implied_fit--;
@@ -1563,11 +1565,10 @@ static int ph_page_run(adj_t adjacency_list, vertex_t num_vertices, edge_t num_e
     rotation_state_free();
     free(transitions_used);
     transitions_used = NULL;
-    fclose(output_file);
-
-    fprintf(stderr,
+    fprintf(page_log_file,
         "Was not able to fit any cycles. Double check the settings "
         "and adjacency list.\n");
+    fclose(output_file);
     return 1;
 }
 
@@ -4203,6 +4204,7 @@ void pre_rec_genus(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell,
 
 {
   KANTE *run, *end, *run2, *end2;
+  (void)last;
 
   if (ell == 0) {
     if (max_genus == genus) {
@@ -4570,6 +4572,129 @@ static bool hog_graph_add_edge(hog_graph_t* graph, int u, int v) {
     return true;
 }
 
+static int hog_graph_is_connected(const hog_graph_t* graph) {
+    bool* seen = (bool*)calloc((size_t)graph->n, sizeof(bool));
+    int* stack = (int*)malloc((size_t)graph->n * sizeof(int));
+    int stack_size = 0;
+    int visited = 0;
+
+    if (seen == NULL || stack == NULL) {
+        free(seen);
+        free(stack);
+        return -1;
+    }
+    seen[0] = true;
+    stack[stack_size++] = 0;
+    while (stack_size > 0) {
+        int vertex = stack[--stack_size];
+        visited++;
+        for (int i = 0; i < graph->degree[vertex]; i++) {
+            int neighbor = graph->adj[vertex][i];
+            if (!seen[neighbor]) {
+                seen[neighbor] = true;
+                stack[stack_size++] = neighbor;
+            }
+        }
+    }
+    free(seen);
+    free(stack);
+    return visited == graph->n;
+}
+
+static int hog_graph_has_bridge(const hog_graph_t* graph) {
+    int* discovery = (int*)malloc((size_t)graph->n * sizeof(int));
+    int* low = (int*)malloc((size_t)graph->n * sizeof(int));
+    int* parent = (int*)malloc((size_t)graph->n * sizeof(int));
+    int* next_neighbor = (int*)calloc((size_t)graph->n, sizeof(int));
+    int* stack = (int*)malloc((size_t)graph->n * sizeof(int));
+    int stack_size = 1;
+    int next_discovery = 1;
+    int has_bridge = 0;
+
+    if (discovery == NULL || low == NULL || parent == NULL || next_neighbor == NULL ||
+        stack == NULL) {
+        has_bridge = -1;
+        goto done;
+    }
+    for (int i = 0; i < graph->n; i++) {
+        discovery[i] = -1;
+        parent[i] = -1;
+    }
+    discovery[0] = 0;
+    low[0] = 0;
+    stack[0] = 0;
+
+    while (stack_size > 0 && !has_bridge) {
+        int vertex = stack[stack_size - 1];
+        if (next_neighbor[vertex] < graph->degree[vertex]) {
+            int neighbor = graph->adj[vertex][next_neighbor[vertex]++];
+            if (discovery[neighbor] < 0) {
+                parent[neighbor] = vertex;
+                discovery[neighbor] = next_discovery;
+                low[neighbor] = next_discovery++;
+                stack[stack_size++] = neighbor;
+            } else if (neighbor != parent[vertex] && discovery[neighbor] < low[vertex]) {
+                low[vertex] = discovery[neighbor];
+            }
+        } else {
+            int child = stack[--stack_size];
+            int ancestor = parent[child];
+            if (ancestor >= 0) {
+                if (low[child] > discovery[ancestor]) {
+                    has_bridge = 1;
+                } else if (low[child] < low[ancestor]) {
+                    low[ancestor] = low[child];
+                }
+            }
+        }
+    }
+
+done:
+    free(discovery);
+    free(low);
+    free(parent);
+    free(next_neighbor);
+    free(stack);
+    return has_bridge;
+}
+
+static bool hog_page_supports(const hog_graph_t* graph) {
+    return graph->n <= MAX_VERTICES && graph->m <= MAX_EDGES &&
+           graph->max_degree <= UINT8_MAX;
+}
+
+static bool hog_multigenus_supports(const hog_graph_t* graph) {
+    return graph->n <= knoten && 2 * graph->m <= d_kanten;
+}
+
+static const char* hog_graph_error(const hog_graph_t* graph, bool page_only,
+                                   bool multi_genus_only, bool* has_bridge_out) {
+    int connected = hog_graph_is_connected(graph);
+    int has_bridge;
+    bool is_tree;
+    if (connected < 0) return "could not allocate memory while validating the graph";
+    if (!connected) return "disconnected graphs are not supported";
+    has_bridge = hog_graph_has_bridge(graph);
+    if (has_bridge < 0) return "could not allocate memory while validating the graph";
+    *has_bridge_out = has_bridge != 0;
+    is_tree = graph->m == graph->n - 1;
+    if (page_only && !is_tree && has_bridge) {
+        return "PAGE-only mode does not support graphs with bridges";
+    }
+    if (page_only && !hog_page_supports(graph)) {
+        return "graph exceeds PAGE's vertex, edge, or degree limits";
+    }
+    if (multi_genus_only && !hog_multigenus_supports(graph)) {
+        return "graph exceeds MultiGenus's 128-vertex or 512-edge limits";
+    }
+    if (!page_only && !multi_genus_only &&
+        ((!hog_page_supports(graph) || (has_bridge && !is_tree)) &&
+         !hog_multigenus_supports(graph))) {
+        return "no available algorithm supports this graph within the current build limits";
+    }
+    return NULL;
+}
+
 static bool hog_bytes_append(hog_bytes_t* bytes, const void* data, size_t size) {
     if (size == 0) return true;
     if (bytes->size + size > bytes->capacity) {
@@ -4656,10 +4781,19 @@ static bool hog_parse_graph6_line(const char* line, size_t length, hog_graph_t* 
         return false;
     }
     needed_bits = (uint64_t)n * (uint64_t)(n - 1) / 2;
-    if ((uint64_t)(value_count - pos) * 6 < needed_bits) {
+    if ((uint64_t)(value_count - pos) != (needed_bits + 5) / 6) {
         free(values);
         hog_graph_free(graph);
         return false;
+    }
+    if (needed_bits % 6 != 0) {
+        unsigned padding_bits = 6 - (unsigned)(needed_bits % 6);
+        unsigned char padding_mask = (unsigned char)((1U << padding_bits) - 1U);
+        if ((values[value_count - 1] & padding_mask) != 0) {
+            free(values);
+            hog_graph_free(graph);
+            return false;
+        }
     }
 
     for (int j = 1; j < n; j++) {
@@ -4676,6 +4810,17 @@ static bool hog_parse_graph6_line(const char* line, size_t length, hog_graph_t* 
     }
     free(values);
     return true;
+}
+
+static bool hog_graph6_line_is_ignorable(const char* line, size_t length) {
+    const char header[] = ">>graph6<<";
+    while (length > 0 && isspace((unsigned char)line[length - 1])) length--;
+    while (length > 0 && isspace((unsigned char)*line)) {
+        line++;
+        length--;
+    }
+    return length == 0 ||
+           (length == sizeof(header) - 1 && memcmp(line, header, length) == 0);
 }
 
 static bool hog_graphs_push(hog_graph_t** graphs, int* count, int* capacity,
@@ -4705,6 +4850,10 @@ static bool hog_parse_graph6_input(const hog_bytes_t* input, hog_graph_t** graph
     for (size_t i = 0; i <= input->size; i++) {
         if (i == input->size || input->data[i] == '\n') {
             hog_graph_t graph;
+            if (hog_graph6_line_is_ignorable(input->data + start, i - start)) {
+                start = i + 1;
+                continue;
+            }
             if (hog_parse_graph6_line(input->data + start, i - start, &graph)) {
                 if (!hog_graphs_push(&graphs, &count, &capacity, &graph)) {
                     hog_graph_free(&graph);
@@ -4712,6 +4861,10 @@ static bool hog_parse_graph6_input(const hog_bytes_t* input, hog_graph_t** graph
                     free(graphs);
                     return false;
                 }
+            } else {
+                for (int j = 0; j < count; j++) hog_graph_free(&graphs[j]);
+                free(graphs);
+                return false;
             }
             start = i + 1;
         }
@@ -4748,7 +4901,8 @@ static bool hog_parse_multicode_input(const hog_bytes_t* input, hog_graph_t** gr
             if (value == 0) {
                 current++;
                 zeros++;
-            } else if (!hog_graph_add_edge(&graph, current, value - 1)) {
+            } else if (value - 1 <= current || value > n ||
+                       !hog_graph_add_edge(&graph, current, value - 1)) {
                 hog_graph_free(&graph);
                 goto fail;
             }
@@ -4943,12 +5097,14 @@ static void hog_redirect_to_file(const char* path) {
 
 static void hog_child_page(const hog_graph_t* graph, const char* output_path, int page_threads) {
     adj_t adjacency_list = hog_to_page_adjacency(graph);
+    int status;
     if (adjacency_list == NULL) _exit(125);
 
     hog_redirect_to_file(output_path);
-    ph_page_run(adjacency_list, (vertex_t)graph->n, (edge_t)graph->m,
-                (degree_t)graph->max_degree, (unsigned)(page_threads < 1 ? 1 : page_threads));
-    _exit(0);
+    status = ph_page_run(adjacency_list, (vertex_t)graph->n, (edge_t)graph->m,
+                         (degree_t)graph->max_degree,
+                         (unsigned)(page_threads < 1 ? 1 : page_threads), stdout);
+    _exit(status == 0 ? 0 : 126);
 }
 
 static void hog_child_multigenus(const hog_graph_t* graph, const char* output_path) {
@@ -5005,29 +5161,77 @@ static void hog_cleanup_child(hog_child_t* child) {
     }
 }
 
-static bool hog_run_graph(const hog_graph_t* graph, int jobs, int* genus_out, bool page_only, bool multi_genus_only) {
+static bool hog_run_page_direct(const hog_graph_t* graph, int jobs, int* genus_out) {
+    char output_path[4096];
+    FILE* result_output;
+    adj_t adjacency_list;
+    int status;
+    char* output;
+
+    if (!hog_make_temp_path(output_path, sizeof(output_path))) return false;
+    result_output = fopen(output_path, "wb");
+    if (result_output == NULL) {
+        unlink(output_path);
+        return false;
+    }
+    adjacency_list = hog_to_page_adjacency(graph);
+    if (adjacency_list == NULL) {
+        fclose(result_output);
+        unlink(output_path);
+        return false;
+    }
+    status = ph_page_run(adjacency_list, (vertex_t)graph->n, (edge_t)graph->m,
+                         (degree_t)graph->max_degree, (unsigned)(jobs < 1 ? 1 : jobs),
+                         result_output);
+    output = hog_read_file(output_path);
+    unlink(output_path);
+    if (status != 0 || output == NULL) {
+        free(output);
+        return false;
+    }
+    *genus_out = hog_parse_genus_text(output);
+    free(output);
+    return *genus_out >= 0;
+}
+
+static bool hog_run_multigenus_direct(const hog_graph_t* graph, int* genus_out) {
+    GRAPH mg_graph;
+    ADJAZENZ mg_adj;
+    if (!hog_to_multigenus_graph(graph, mg_graph, mg_adj)) return false;
+    hog_reset_multigenus_options();
+    *genus_out = graph->n < 3 ? 0 : get_genus(mg_graph, mg_adj);
+    return *genus_out >= 0;
+}
+
+static bool hog_run_graph(const hog_graph_t* graph, int jobs, int* genus_out,
+                          bool page_only, bool multi_genus_only, bool has_bridge) {
     hog_child_t children[2];
     int child_count = 0;
     int finished = 0;
-    int page_threads = jobs > 1 ? jobs - 1 : 1;
-    bool multigenus_ok = graph->n <= knoten && 2 * graph->m <= d_kanten;
+    bool page_ok = hog_page_supports(graph) && !has_bridge;
+    bool multigenus_ok = hog_multigenus_supports(graph);
+    int page_threads = jobs - (multigenus_ok ? 1 : 0);
+    if (page_threads < 1) page_threads = 1;
 
     memset(children, 0, sizeof(children));
-    if (graph->max_degree < 2) {
+    if (graph->m == graph->n - 1) {
         *genus_out = 0;
         return true;
     }
+    if (page_only) return hog_run_page_direct(graph, jobs, genus_out);
+    if (multi_genus_only) return hog_run_multigenus_direct(graph, genus_out);
 
-    if (!multi_genus_only) {
-        if (!hog_spawn_child(graph, HOG_WORKER_PAGE, page_threads, &children[child_count])) {
-            return false;
+    if (page_ok) {
+        if (hog_spawn_child(graph, HOG_WORKER_PAGE, page_threads,
+                            &children[child_count])) {
+            child_count++;
         }
-        child_count++;
     }
-    if (!page_only && multigenus_ok &&
+    if (multigenus_ok &&
         hog_spawn_child(graph, HOG_WORKER_MULTI_GENUS, 1, &children[child_count])) {
         child_count++;
     }
+    if (child_count == 0) return false;
 
     while (finished < child_count) {
         int status = 0;
@@ -5077,30 +5281,51 @@ static int hog_online_jobs(void) {
 #endif
 }
 
-static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format, int* jobs, bool* page_only, bool* multi_genus_only) {
+static bool hog_parse_jobs(const char* text, int* jobs) {
+    char* end = NULL;
+    long value;
+    errno = 0;
+    value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || value < 1 || value > 1024) {
+        return false;
+    }
+    *jobs = (int)value;
+    return true;
+}
+
+static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format, int* jobs,
+                           bool* page_only, bool* multi_genus_only) {
     *format = HOG_INPUT_GRAPH6;
     *jobs = hog_online_jobs();
+    *page_only = false;
+    *multi_genus_only = false;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--graph6") == 0 || strcmp(argv[i], "-g") == 0) {
             *format = HOG_INPUT_GRAPH6;
         } else if (strcmp(argv[i], "--multicode") == 0 || strcmp(argv[i], "-m") == 0) {
             *format = HOG_INPUT_MULTICODE;
-        } else if (strcmp(argv[i], "--page-only")) {
+        } else if (strcmp(argv[i], "--page-only") == 0) {
             *page_only = true;
-        } else if (strcmp(argv[i], "--multi_genus-only")) {
+        } else if (strcmp(argv[i], "--multi_genus-only") == 0) {
             *multi_genus_only = true;
         } else if ((strcmp(argv[i], "--jobs") == 0 || strcmp(argv[i], "-j") == 0) &&
                    i + 1 < argc) {
-            *jobs = atoi(argv[++i]);
-            if (*jobs < 1) *jobs = 1;
+            if (!hog_parse_jobs(argv[++i], jobs)) return false;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: page_hog [--graph6|--multicode] [-j jobs] [--page-only] [--multi_genus-only] < graphs");
+            puts("usage: ./genus [--graph6|--multicode] [-j jobs] "
+                 "[--page-only|--multi_genus-only] < graphs");
             exit(0);
         } else {
             return false;
         }
     }
-    return true;
+    return !(*page_only && *multi_genus_only);
+}
+
+static double hog_monotonic_seconds(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
+    return (double)now.tv_sec + (double)now.tv_nsec / 1000000000.0;
 }
 
 int main(int argc, char** argv) {
@@ -5109,31 +5334,56 @@ int main(int argc, char** argv) {
     hog_graph_t* graphs = NULL;
     int graph_count = 0;
     int jobs;
+    int failures = 0;
     bool ok;
     bool page_only = false;
     bool multi_genus_only = false;
+    double start_time = hog_monotonic_seconds();
 
-    if (!hog_parse_args(argc, argv, &format, &jobs, &page_only, &multi_genus_only)) return 2;
-    if (!hog_read_stdin(&input)) return 1;
+    if (!hog_parse_args(argc, argv, &format, &jobs, &page_only, &multi_genus_only)) {
+        fprintf(stderr,
+                "usage: ./genus [--graph6|--multicode] [-j jobs] "
+                "[--page-only|--multi_genus-only] < graphs\n");
+        return 2;
+    }
+    if (!hog_read_stdin(&input)) {
+        fprintf(stderr, "Error: could not read graph input.\n");
+        return 1;
+    }
 
     ok = format == HOG_INPUT_GRAPH6
              ? hog_parse_graph6_input(&input, &graphs, &graph_count)
              : hog_parse_multicode_input(&input, &graphs, &graph_count);
     hog_bytes_free(&input);
-    if (!ok) return 1;
+    if (!ok) {
+        fprintf(stderr, "Error: input is empty or malformed for the selected format.\n");
+        return 1;
+    }
 
     for (int i = 0; i < graph_count; i++) {
         int genus = -1;
-        if (!hog_run_graph(&graphs[i], jobs, &genus, page_only, multi_genus_only)) {
-            for (int j = 0; j < graph_count; j++) hog_graph_free(&graphs[j]);
-            free(graphs);
-            return 1;
+        bool has_bridge = false;
+        const char* graph_error =
+            hog_graph_error(&graphs[i], page_only, multi_genus_only, &has_bridge);
+        if (graph_error != NULL) {
+            fprintf(stderr, "Graph %d error: %s.\n", i + 1, graph_error);
+            failures++;
+            continue;
         }
-        printf("%d\n", genus);
+        if (!hog_run_graph(&graphs[i], jobs, &genus, page_only, multi_genus_only,
+                           has_bridge)) {
+            fprintf(stderr, "Graph %d error: genus computation failed.\n", i + 1);
+            failures++;
+            continue;
+        }
+        printf("Graph %d has genus %d\n", i + 1, genus);
         fflush(stdout);
     }
 
     for (int i = 0; i < graph_count; i++) hog_graph_free(&graphs[i]);
     free(graphs);
-    return 0;
+    printf("Processed %d graph%s: %d succeeded, %d failed in %.3f seconds.\n",
+           graph_count, graph_count == 1 ? "" : "s", graph_count - failures,
+           failures, hog_monotonic_seconds() - start_time);
+    return failures == 0 ? 0 : 1;
 }

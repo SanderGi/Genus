@@ -9,13 +9,23 @@ This subfolder contains a simplified C program for computing the minimum genus t
 
 ## Usage
 
-It takes the graph via stdin and outputs a single number, the minimum genus to stdout for easy parsing.
+It takes one or more graphs via stdin. Successful records are printed as
+`Graph N has genus G`, followed by a summary containing the number of processed
+graphs and total runtime. Per-graph errors are written to stderr, processing
+continues with the next record, and the program exits nonzero if any graph
+failed.
 
 Compile with `make`, then run with `./genus < 3-8-cage.g6` or run directly with `make run < 3-8-cage.g6`. 
 
 Use multicode format with `./genus --multicode < 3-8-cage.mc` or `make run_multicode < 3-8-cage.mc`.
 
-Since the [PAGE algorithm](../PAGE/README.md) (by myself and Austin) excels at some graphs (particularly those with tight lower bounds or high girth) and [multi_genus](../MultiGenus/README.md) (by Brinkmann) excels at others, by default, the program races both against each other and returns the fastest result. To run only PAGE, use `./genus --page-only < 3-8-cage.g6` or `make run_page < 3-8-cage.g6`. To run only multi_genus, use `./genus --multi_genus-only < 3-8-cage.g6` or `make run_multi_genus < 3-8-cage.g6`.
+Since the [PAGE algorithm](../PAGE/README.md) (by myself and Austin) excels at some graphs (particularly those with tight lower bounds or high girth) and [multi_genus](../MultiGenus/README.md) (by Brinkmann) excels at others, by default, the program races both against each other and returns the fastest result. To run only PAGE, use `./genus --page-only < 3-8-cage.g6` or `make run_page < 3-8-cage.mc`. To run only multi_genus, use `./genus --multi_genus-only < 3-8-cage.g6` or `make run_multi_genus < 3-8-cage.mc`. The only-algorithm modes run in-process; with `-j 1`, PAGE uses its serial search and MultiGenus uses its serial implementation without an additional worker.
+
+The current algorithms require connected simple graphs. Disconnected inputs are
+reported as unsupported rather than being assigned a misleading genus. In
+PAGE-only mode, trees are handled directly as genus zero, while other graphs
+with bridges are reported as unsupported; the default mode routes those graphs
+to MultiGenus.
 
 ## Performance Benchmarks
 For full performance benchmarks, check [here](../docs/practical_performance.md). Some highlights include: 

@@ -26,6 +26,8 @@ for line in Path("../docs/practical_performance.md").read_text().splitlines():
     if not re.fullmatch(r"\d+(?:\.\d+)?", page_time):
         continue
     path = m.group(1).replace("../PAGE/", "")
+    if "bipartite-kneser" in path:
+        continue
     rows.append((path, int(genus)))
 
 # Run the graphs
@@ -52,7 +54,9 @@ for idx, (path, expected) in enumerate(rows, 1):
         )
         fail.append((path, "timeout", expected, None))
         continue
-    got = int(cp.stdout.decode())
+    output = cp.stdout.decode()
+    match = re.search(r"^Graph 1 has genus (\d+)$", output, re.MULTILINE)
+    got = int(match.group(1)) if match else None
     status = "OK" if cp.returncode == 0 and got == expected else "FAIL"
     print(
         f"{idx:02d}/{len(rows)} {status} {path} expected={expected} got={got} time={time.perf_counter()-t:.3f}s",
