@@ -22,10 +22,13 @@ Use multicode format with `./genus --multicode < 3-8-cage.mc` or `make run_multi
 Since the [PAGE algorithm](../PAGE/README.md) (by myself and Austin) excels at some graphs (particularly those with tight lower bounds or high girth) and [multi_genus](../MultiGenus/README.md) (by Brinkmann) excels at others, by default, the program races both against each other and returns the fastest result. To run only PAGE, use `./genus --page-only < 3-8-cage.g6` or `make run_page < 3-8-cage.mc`. To run only multi_genus, use `./genus --multi_genus-only < 3-8-cage.g6` or `make run_multi_genus < 3-8-cage.mc`. The only-algorithm modes run in-process; with `-j 1`, PAGE uses its serial search and MultiGenus uses its serial implementation without an additional worker.
 
 The current algorithms require connected simple graphs. Disconnected inputs are
-reported as unsupported rather than being assigned a misleading genus. In
-PAGE-only mode, trees are handled directly as genus zero, while other graphs
-with bridges are reported as unsupported; the default mode routes those graphs
-to MultiGenus.
+reported as unsupported rather than being assigned a misleading genus. PAGE
+supports bridges by decomposing the graph into biconnected blocks, ignoring
+bridge-only blocks, computing every nontrivial block independently, and summing
+their genera. This is exact by the
+[Battle-Harary-Kodama-Youngs genus additivity theorem](https://doi.org/10.1090/S0002-9904-1962-10847-7).
+
+Run the test suite with `make test`.
 
 ## Performance Benchmarks
 For full performance benchmarks, check [here](../docs/practical_performance.md). Some highlights include: 
@@ -35,7 +38,7 @@ For full performance benchmarks, check [here](../docs/practical_performance.md).
 - PAGE completes the (3, 12)-cage in less than a second whereas multi_genus takes nearly 3 hours on each (3, 10)-cage and times out on anything larger.
 - multi_genus completes the Triangle Replaced Coxeter Graph in less than a second whereas PAGE takes days.
 
-Note that PAGE is built to scale very well with the number of cores. Use the `-j <number>` flag to run it with more CPU cores for extra tricky graphs. multi_genus [can also be modified to run in parallel](MultiGenus/multi_genus_parallel.c), but it does not work as well (yet). 
+Note that PAGE is built to scale very well with the number of cores. Use the `-j <number>` flag to run it with more CPU cores for extra tricky graphs. multi_genus [can also be modified to run in parallel](MultiGenus/multi_genus_parallel.c), but it does not work as well (yet).
 
 ## License
 This project is licensed under the terms of the **GNU General Public License v2.0** (GPLv2). 

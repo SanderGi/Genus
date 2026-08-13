@@ -18,6 +18,11 @@ run_page: genus
 run_multi_genus: genus
 	$(BDIR)/genus --multicode --multi_genus-only
 
+test: genus
+	python3 test_cli.py
+	python3 test_docs.py
+	python3 test_rome.py
+
 genus: genus.c
 	$(CC) -O3 -DLONG -ftree-vectorize -funroll-loops -Wall -std=gnu17 -g -pthread -o "$(BDIR)/genus" genus.c -lm
 
