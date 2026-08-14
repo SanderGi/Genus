@@ -60,6 +60,7 @@ your operating system to limit the number of CPU cores:
 - Windows: `start "" /b /wait /affinity 1 cmd /c ".\genus.exe -j 2 < graphs.g6"` (1 is a hexidecimal mask that selects CPU zero, use 2 for CPU 1, 4 for CPU 2, [and so on](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/start))
 - MacOS approx: `brew install cpulimit` then `cpulimit --limit 100 -- ./genus -j 2 < graphs.g6`
 - Docker: `docker run --rm -i --cpuset-cpus=0 -v "$PWD":/src -w /src gcc:14 sh -c 'make genus && exec ./genus -j 2' < graphs.g6`
+
 This will take roughly twice as long as running with two cores (or just choosing the right algorithm with one core).
 
 Run the test suite with `make test`.
