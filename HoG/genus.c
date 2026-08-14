@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 //
 // Interface:
-//   ./genus [--graph6|--multicode] [-j jobs] [--page-only] [--multi_genus-only] < graphs
+//   ./genus [--graph6|--multicode] [-j jobs] [--low-mem]
+//           [--page-only|--multi_genus-only] < graphs
 //
 // It prints one labeled genus per input graph, followed by a run summary.
 // By default it races PAGE and MultiGenus and keeps the first valid result.
@@ -33,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #endif
@@ -4865,8 +4867,11 @@ static bool hog_multigenus_supports(const hog_graph_t* graph) {
     return graph->n <= knoten && 2 * graph->m <= d_kanten;
 }
 
+static bool hog_low_mem_supports(const hog_graph_t* graph);
+
 static const char* hog_graph_error(const hog_graph_t* graph, bool page_only,
-                                   bool multi_genus_only, bool* has_bridge_out,
+                                   bool multi_genus_only, bool low_mem,
+                                   bool* has_bridge_out,
                                    bool* page_supported_out) {
     int connected = hog_graph_is_connected(graph);
     int has_bridge;
@@ -4877,14 +4882,17 @@ static const char* hog_graph_error(const hog_graph_t* graph, bool page_only,
     if (has_bridge < 0) return "could not allocate memory while validating the graph";
     *has_bridge_out = has_bridge != 0;
     if (!multi_genus_only) {
-        page_supported = hog_page_supports(graph, *has_bridge_out);
+        page_supported = low_mem ? hog_low_mem_supports(graph)
+                                 : hog_page_supports(graph, *has_bridge_out);
         if (page_supported < 0) {
             return "could not allocate memory while decomposing the graph into blocks";
         }
     }
     *page_supported_out = page_supported != 0;
     if (page_only && !page_supported) {
-        return "graph exceeds PAGE's vertex, edge, or degree limits";
+        return low_mem
+                   ? "graph exceeds low-memory PAGE's vertex, edge, or degree limits"
+                   : "graph exceeds PAGE's vertex, edge, or degree limits";
     }
     if (multi_genus_only && !hog_multigenus_supports(graph)) {
         return "graph exceeds MultiGenus's 128-vertex or 512-edge limits";
@@ -5075,51 +5083,151 @@ static bool hog_parse_graph6_input(const hog_bytes_t* input, hog_graph_t** graph
     return count > 0;
 }
 
-static bool hog_parse_multicode_input(const hog_bytes_t* input, hog_graph_t** graphs_out,
-                                      int* count_out) {
+static bool hog_multicode_read_value(const hog_bytes_t* input, size_t* pos,
+                                     int width, uint32_t* value) {
+    if (width != 1 && width != 2) return false;
+    if (*pos > input->size || (size_t)width > input->size - *pos) return false;
+    const unsigned char* data = (const unsigned char*)input->data;
+    *value = data[*pos];
+    if (width == 2) *value |= (uint32_t)data[*pos + 1] << 8;
+    *pos += (size_t)width;
+    return true;
+}
+
+static bool hog_multicode_graph_end(const hog_bytes_t* input, size_t start,
+                                    int width, size_t* end_out) {
+    size_t pos = start;
+    uint32_t* seen = NULL;
+    uint32_t n;
+    uint32_t current = 0;
+    bool valid = false;
+
+    if (!hog_multicode_read_value(input, &pos, width, &n) || n == 0 ||
+        (width == 1 && n >= 256) || (width == 2 && n < 256) ||
+        n > PAGEHOG_MAX_VERTEX) {
+        return false;
+    }
+    seen = (uint32_t*)calloc((size_t)n + 1, sizeof(uint32_t));
+    if (seen == NULL) return false;
+    while (current < n - 1) {
+        uint32_t value;
+        if (!hog_multicode_read_value(input, &pos, width, &value)) goto done;
+        if (value == 0) {
+            current++;
+        } else if (value <= current + 1 || value > n ||
+                   seen[value] == current + 1) {
+            goto done;
+        } else {
+            seen[value] = current + 1;
+        }
+    }
+    *end_out = pos;
+    valid = true;
+
+done:
+    free(seen);
+    return valid;
+}
+
+static bool hog_parse_multicode_graph(const hog_bytes_t* input, size_t* pos,
+                                      int width, hog_graph_t* graph) {
+    uint32_t n;
+    uint32_t current = 0;
+    memset(graph, 0, sizeof(*graph));
+    if (!hog_multicode_read_value(input, pos, width, &n) ||
+        !hog_graph_init(graph, (int)n)) {
+        return false;
+    }
+    while (current < n - 1) {
+        uint32_t value;
+        if (!hog_multicode_read_value(input, pos, width, &value)) goto fail;
+        if (value == 0) {
+            current++;
+        } else if (value <= current + 1 || value > n ||
+                   !hog_graph_add_edge(graph, (int)current, (int)value - 1)) {
+            goto fail;
+        }
+    }
+    return true;
+
+fail:
+    hog_graph_free(graph);
+    return false;
+}
+
+static bool hog_parse_multicode_input(const hog_bytes_t* input,
+                                      hog_graph_t** graphs_out, int* count_out) {
     const unsigned char header[] = ">>multi_code<<";
-    size_t pos = 0;
+    size_t start = 0;
+    size_t* predecessor = NULL;
+    uint8_t* width_at = NULL;
+    uint8_t* widths = NULL;
     hog_graph_t* graphs = NULL;
     int count = 0;
     int capacity = 0;
+    int width_count = 0;
 
     *graphs_out = NULL;
     *count_out = 0;
     if (input->size >= sizeof(header) - 1 &&
         memcmp(input->data, header, sizeof(header) - 1) == 0) {
-        pos = sizeof(header) - 1;
+        start = sizeof(header) - 1;
     }
+    if (start == input->size) return false;
 
-    while (pos < input->size) {
-        int n = (unsigned char)input->data[pos++];
-        int current = 0;
-        int zeros = 0;
-        hog_graph_t graph;
+    predecessor = (size_t*)malloc((input->size + 1) * sizeof(size_t));
+    width_at = (uint8_t*)calloc(input->size + 1, sizeof(uint8_t));
+    if (predecessor == NULL || width_at == NULL) goto fail;
+    for (size_t i = 0; i <= input->size; i++) predecessor[i] = SIZE_MAX;
+    predecessor[start] = start;
 
-        if (n == 0 || !hog_graph_init(&graph, n)) goto fail;
-        while (pos < input->size && zeros < n - 1) {
-            int value = (unsigned char)input->data[pos++];
-            if (value == 0) {
-                current++;
-                zeros++;
-            } else if (value - 1 <= current || value > n ||
-                       !hog_graph_add_edge(&graph, current, value - 1)) {
-                hog_graph_free(&graph);
-                goto fail;
+    for (size_t pos = start; pos < input->size; pos++) {
+        if (predecessor[pos] == SIZE_MAX) continue;
+        for (int width = 1; width <= 2; width++) {
+            size_t end;
+            if (hog_multicode_graph_end(input, pos, width, &end) &&
+                predecessor[end] == SIZE_MAX) {
+                predecessor[end] = pos;
+                width_at[end] = (uint8_t)width;
             }
         }
-        if (zeros != n - 1 || !hog_graphs_push(&graphs, &count, &capacity, &graph)) {
+    }
+    if (predecessor[input->size] == SIZE_MAX) goto fail;
+
+    for (size_t pos = input->size; pos != start; pos = predecessor[pos]) {
+        width_count++;
+    }
+    widths = (uint8_t*)malloc((size_t)width_count);
+    if (widths == NULL) goto fail;
+    size_t pos = input->size;
+    for (int i = width_count - 1; i >= 0; i--) {
+        widths[i] = width_at[pos];
+        pos = predecessor[pos];
+    }
+
+    pos = start;
+    for (int i = 0; i < width_count; i++) {
+        hog_graph_t graph;
+        if (!hog_parse_multicode_graph(input, &pos, widths[i], &graph) ||
+            !hog_graphs_push(&graphs, &count, &capacity, &graph)) {
             hog_graph_free(&graph);
             goto fail;
         }
     }
+    if (pos != input->size) goto fail;
 
+    free(predecessor);
+    free(width_at);
+    free(widths);
     *graphs_out = graphs;
     *count_out = count;
     return count > 0;
 
 fail:
-    for (int j = 0; j < count; j++) hog_graph_free(&graphs[j]);
+    free(predecessor);
+    free(width_at);
+    free(widths);
+    for (int i = 0; i < count; i++) hog_graph_free(&graphs[i]);
     free(graphs);
     return false;
 }
@@ -5214,6 +5322,714 @@ static adj_t hog_to_page_adjacency(const hog_graph_t* graph) {
     return adjacency;
 }
 
+static bool hog_low_mem_supports(const hog_graph_t* graph) {
+    uint64_t darts = 2ULL * (uint64_t)graph->m;
+    return graph->n > 0 && graph->n < UINT16_MAX &&
+           graph->max_degree < UINT16_MAX && darts <= UINT32_MAX &&
+           darts <= (SIZE_MAX - 2) / (2 * sizeof(uint16_t));
+}
+
+/* Lazy facial-walk PAGE search. Copyright (C) 2026 Alexander Metzger. */
+static int hog_low_mem_vertex_compare(const void* left, const void* right) {
+    uint16_t a = *(const uint16_t*)left;
+    uint16_t b = *(const uint16_t*)right;
+    return (a > b) - (a < b);
+}
+
+#define HOG_LM_NO_DART UINT32_MAX
+#define HOG_LM_PROBE_DARTS 32
+#define HOG_LM_STACK_BASE (4ULL * 1024 * 1024)
+#define HOG_LM_STACK_PER_LEVEL 512ULL
+
+typedef struct {
+    const hog_graph_t* input;
+    uint32_t darts;
+    uint32_t* offset;
+    uint16_t* adjacency;
+    uint16_t* dart_from;
+    uint32_t* reverse;
+    bool bipartite;
+    bool has_bridge;
+    uint32_t girth;
+} hog_lm_graph_t;
+
+typedef struct {
+    hog_lm_graph_t* graph;
+    uint8_t* used;
+    uint16_t* rotation_next;
+    uint16_t* rotation_prev;
+    uint16_t* rotation_count;
+    uint32_t remaining_darts;
+    uint32_t min_face_length;
+    uint16_t* path_vertices;
+    uint32_t* path_darts;
+    uint32_t* distance;
+    uint16_t* bfs_queue;
+    uint16_t* face_data;
+    size_t face_data_capacity;
+    size_t face_data_length;
+} hog_lm_search_t;
+
+static void hog_lm_graph_free(hog_lm_graph_t* graph) {
+    free(graph->offset);
+    free(graph->adjacency);
+    free(graph->dart_from);
+    free(graph->reverse);
+    memset(graph, 0, sizeof(*graph));
+}
+
+static int hog_lm_bipartite(const hog_graph_t* graph) {
+    int8_t* color = (int8_t*)malloc((size_t)graph->n);
+    int* queue = (int*)malloc((size_t)graph->n * sizeof(int));
+    if (color == NULL || queue == NULL) {
+        free(color);
+        free(queue);
+        return -1;
+    }
+    memset(color, -1, (size_t)graph->n);
+    int head = 0;
+    int tail = 1;
+    color[0] = 0;
+    queue[0] = 0;
+    while (head < tail) {
+        int vertex = queue[head++];
+        for (int slot = 0; slot < graph->degree[vertex]; slot++) {
+            int neighbor = graph->adj[vertex][slot];
+            if (color[neighbor] < 0) {
+                color[neighbor] = (int8_t)(1 - color[vertex]);
+                queue[tail++] = neighbor;
+            } else if (color[neighbor] == color[vertex]) {
+                free(color);
+                free(queue);
+                return 0;
+            }
+        }
+    }
+    free(color);
+    free(queue);
+    return 1;
+}
+
+static uint32_t hog_lm_girth(const hog_graph_t* graph) {
+    int* distance = (int*)malloc((size_t)graph->n * sizeof(int));
+    int* parent = (int*)malloc((size_t)graph->n * sizeof(int));
+    int* queue = (int*)malloc((size_t)graph->n * sizeof(int));
+    uint32_t best = UINT32_MAX;
+    if (distance == NULL || parent == NULL || queue == NULL) {
+        free(distance);
+        free(parent);
+        free(queue);
+        return UINT32_MAX;
+    }
+    for (int root = 0; root < graph->n && best > 3; root++) {
+        for (int vertex = 0; vertex < graph->n; vertex++) {
+            distance[vertex] = -1;
+            parent[vertex] = -1;
+        }
+        int head = 0;
+        int tail = 1;
+        distance[root] = 0;
+        queue[0] = root;
+        while (head < tail) {
+            int vertex = queue[head++];
+            if ((uint32_t)(2 * distance[vertex] + 1) >= best) continue;
+            for (int slot = 0; slot < graph->degree[vertex]; slot++) {
+                int neighbor = graph->adj[vertex][slot];
+                if (distance[neighbor] < 0) {
+                    distance[neighbor] = distance[vertex] + 1;
+                    parent[neighbor] = vertex;
+                    queue[tail++] = neighbor;
+                } else if (parent[vertex] != neighbor) {
+                    uint32_t length =
+                        (uint32_t)(distance[vertex] + distance[neighbor] + 1);
+                    if (length < best) best = length;
+                }
+            }
+        }
+    }
+    free(distance);
+    free(parent);
+    free(queue);
+    return best == UINT32_MAX ? 0 : best;
+}
+
+static uint32_t hog_lm_find_slot(const hog_lm_graph_t* graph, uint16_t from,
+                                 uint16_t to) {
+    uint32_t low = graph->offset[from];
+    uint32_t high = graph->offset[from + 1];
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2;
+        if (graph->adjacency[middle] < to) low = middle + 1;
+        else high = middle;
+    }
+    return low < graph->offset[from + 1] && graph->adjacency[low] == to
+               ? low - graph->offset[from]
+               : UINT32_MAX;
+}
+
+static bool hog_lm_graph_init(const hog_graph_t* input, bool has_bridge,
+                              hog_lm_graph_t* graph) {
+    memset(graph, 0, sizeof(*graph));
+    if (!hog_low_mem_supports(input)) return false;
+    graph->input = input;
+    graph->darts = (uint32_t)(2U * (uint32_t)input->m);
+    graph->offset = (uint32_t*)malloc(((size_t)input->n + 1) * sizeof(uint32_t));
+    graph->adjacency = (uint16_t*)malloc(
+        (graph->darts == 0 ? 1 : graph->darts) * sizeof(uint16_t));
+    graph->dart_from = (uint16_t*)malloc(
+        (graph->darts == 0 ? 1 : graph->darts) * sizeof(uint16_t));
+    graph->reverse = (uint32_t*)malloc(
+        (graph->darts == 0 ? 1 : graph->darts) * sizeof(uint32_t));
+    if (graph->offset == NULL || graph->adjacency == NULL ||
+        graph->dart_from == NULL || graph->reverse == NULL) {
+        hog_lm_graph_free(graph);
+        return false;
+    }
+
+    graph->offset[0] = 0;
+    for (int vertex = 0; vertex < input->n; vertex++) {
+        graph->offset[vertex + 1] =
+            graph->offset[vertex] + (uint32_t)input->degree[vertex];
+        for (int slot = 0; slot < input->degree[vertex]; slot++) {
+            uint32_t dart = graph->offset[vertex] + (uint32_t)slot;
+            graph->adjacency[dart] = (uint16_t)input->adj[vertex][slot];
+            graph->dart_from[dart] = (uint16_t)vertex;
+        }
+        qsort(&graph->adjacency[graph->offset[vertex]],
+              (size_t)input->degree[vertex], sizeof(uint16_t),
+              hog_low_mem_vertex_compare);
+    }
+    if (graph->offset[input->n] != graph->darts) {
+        hog_lm_graph_free(graph);
+        return false;
+    }
+
+    for (uint32_t dart = 0; dart < graph->darts; dart++) {
+        uint16_t from = graph->dart_from[dart];
+        uint16_t to = graph->adjacency[dart];
+        uint32_t slot = hog_lm_find_slot(graph, to, from);
+        if (slot == UINT32_MAX) {
+            hog_lm_graph_free(graph);
+            return false;
+        }
+        graph->reverse[dart] = graph->offset[to] + slot;
+    }
+    int bipartite = hog_lm_bipartite(input);
+    if (bipartite < 0) {
+        hog_lm_graph_free(graph);
+        return false;
+    }
+    graph->bipartite = bipartite != 0;
+    graph->has_bridge = has_bridge;
+    graph->girth = hog_lm_girth(input);
+    if (graph->girth == UINT32_MAX) {
+        hog_lm_graph_free(graph);
+        return false;
+    }
+    return true;
+}
+
+static uint32_t hog_lm_rotation_successor(const hog_lm_graph_t* graph,
+                                          uint32_t dart) {
+    uint16_t center = graph->adjacency[dart];
+    uint32_t incoming = graph->reverse[dart] - graph->offset[center];
+    uint32_t degree = (uint32_t)graph->input->degree[center];
+    return graph->offset[center] + (incoming + 1) % degree;
+}
+
+static uint32_t hog_lm_input_face_count(const hog_lm_graph_t* graph) {
+    uint8_t* seen = (uint8_t*)calloc(graph->darts, 1);
+    uint32_t faces = 0;
+    if (seen == NULL) return 0;
+    for (uint32_t start = 0; start < graph->darts; start++) {
+        if (seen[start]) continue;
+        faces++;
+        uint32_t current = start;
+        do {
+            if (seen[current]) {
+                free(seen);
+                return 0;
+            }
+            seen[current] = 1;
+            current = hog_lm_rotation_successor(graph, current);
+        } while (current != start);
+    }
+    free(seen);
+    return faces;
+}
+
+static void hog_lm_search_free(hog_lm_search_t* search) {
+    free(search->used);
+    free(search->rotation_next);
+    free(search->rotation_prev);
+    free(search->rotation_count);
+    free(search->path_vertices);
+    free(search->path_darts);
+    free(search->distance);
+    free(search->bfs_queue);
+    free(search->face_data);
+    memset(search, 0, sizeof(*search));
+}
+
+static bool hog_lm_search_init(hog_lm_graph_t* graph, hog_lm_search_t* search) {
+    size_t darts = graph->darts == 0 ? 1 : graph->darts;
+    size_t vertices = (size_t)graph->input->n;
+    memset(search, 0, sizeof(*search));
+    search->graph = graph;
+    search->used = (uint8_t*)calloc(darts, 1);
+    search->rotation_next = (uint16_t*)malloc(darts * sizeof(uint16_t));
+    search->rotation_prev = (uint16_t*)malloc(darts * sizeof(uint16_t));
+    search->rotation_count = (uint16_t*)calloc(vertices, sizeof(uint16_t));
+    search->path_vertices =
+        (uint16_t*)malloc((darts + 1) * sizeof(uint16_t));
+    search->path_darts = (uint32_t*)malloc(darts * sizeof(uint32_t));
+    search->distance = (uint32_t*)malloc(vertices * sizeof(uint32_t));
+    search->bfs_queue = (uint16_t*)malloc(vertices * sizeof(uint16_t));
+    search->face_data_capacity = 2 * darts + 1;
+    search->face_data =
+        (uint16_t*)malloc(search->face_data_capacity * sizeof(uint16_t));
+    if (search->used == NULL || search->rotation_next == NULL ||
+        search->rotation_prev == NULL || search->rotation_count == NULL ||
+        search->path_vertices == NULL || search->path_darts == NULL ||
+        search->distance == NULL || search->bfs_queue == NULL ||
+        search->face_data == NULL) {
+        hog_lm_search_free(search);
+        return false;
+    }
+    return true;
+}
+
+static bool hog_lm_prepare_stack(uint32_t darts, uint32_t faces) {
+    struct rlimit limit;
+    uint64_t levels = (uint64_t)darts + faces;
+    if (levels > (UINT64_MAX - HOG_LM_STACK_BASE) / HOG_LM_STACK_PER_LEVEL) {
+        return false;
+    }
+    uint64_t required =
+        HOG_LM_STACK_BASE + HOG_LM_STACK_PER_LEVEL * levels;
+    if (required > (uint64_t)RLIM_INFINITY) required = (uint64_t)RLIM_INFINITY;
+    if (getrlimit(RLIMIT_STACK, &limit) != 0) return false;
+    if (limit.rlim_cur == RLIM_INFINITY || (uint64_t)limit.rlim_cur >= required) {
+        return true;
+    }
+    if (limit.rlim_max != RLIM_INFINITY && (uint64_t)limit.rlim_max < required) {
+        return false;
+    }
+    limit.rlim_cur = (rlim_t)required;
+    return setrlimit(RLIMIT_STACK, &limit) == 0;
+}
+
+static void hog_lm_search_reset(hog_lm_search_t* search) {
+    hog_lm_graph_t* graph = search->graph;
+    memset(search->used, 0, graph->darts);
+    memset(search->rotation_next, 0xff,
+           (size_t)graph->darts * sizeof(uint16_t));
+    memset(search->rotation_prev, 0xff,
+           (size_t)graph->darts * sizeof(uint16_t));
+    memset(search->rotation_count, 0,
+           (size_t)graph->input->n * sizeof(uint16_t));
+    search->remaining_darts = graph->darts;
+    search->min_face_length =
+        graph->has_bridge || graph->girth == 0 ? 2 : graph->girth;
+    search->face_data_length = 0;
+}
+
+static bool hog_lm_rotation_add(hog_lm_search_t* search, uint16_t center,
+                                uint16_t incoming, uint16_t outgoing) {
+    hog_lm_graph_t* graph = search->graph;
+    uint16_t degree = (uint16_t)graph->input->degree[center];
+    uint32_t incoming_index = graph->offset[center] + incoming;
+    uint32_t outgoing_index = graph->offset[center] + outgoing;
+    if (search->rotation_next[incoming_index] != UINT16_MAX ||
+        search->rotation_prev[outgoing_index] != UINT16_MAX ||
+        (incoming == outgoing && degree > 1)) {
+        return false;
+    }
+
+    search->rotation_next[incoming_index] = outgoing;
+    search->rotation_prev[outgoing_index] = incoming;
+    search->rotation_count[center]++;
+    uint16_t cursor = outgoing;
+    bool closed = false;
+    for (uint32_t steps = 0; steps <= degree; steps++) {
+        uint16_t next = search->rotation_next[graph->offset[center] + cursor];
+        if (next == UINT16_MAX) break;
+        cursor = next;
+        if (cursor == incoming) {
+            closed = true;
+            break;
+        }
+    }
+    if ((closed && search->rotation_count[center] < degree) ||
+        (!closed && search->rotation_count[center] == degree)) {
+        search->rotation_next[incoming_index] = UINT16_MAX;
+        search->rotation_prev[outgoing_index] = UINT16_MAX;
+        search->rotation_count[center]--;
+        return false;
+    }
+    return true;
+}
+
+static void hog_lm_rotation_remove(hog_lm_search_t* search, uint16_t center,
+                                   uint16_t incoming, uint16_t outgoing) {
+    hog_lm_graph_t* graph = search->graph;
+    search->rotation_next[graph->offset[center] + incoming] = UINT16_MAX;
+    search->rotation_prev[graph->offset[center] + outgoing] = UINT16_MAX;
+    search->rotation_count[center]--;
+}
+
+static bool hog_lm_transition_add(hog_lm_search_t* search, uint32_t incoming,
+                                  uint32_t outgoing) {
+    hog_lm_graph_t* graph = search->graph;
+    uint16_t center = graph->adjacency[incoming];
+    if (center != graph->dart_from[outgoing]) return false;
+    uint16_t incoming_slot =
+        (uint16_t)(graph->reverse[incoming] - graph->offset[center]);
+    uint16_t outgoing_slot =
+        (uint16_t)(outgoing - graph->offset[center]);
+    return hog_lm_rotation_add(search, center, incoming_slot, outgoing_slot);
+}
+
+static void hog_lm_transition_remove(hog_lm_search_t* search, uint32_t incoming,
+                                     uint32_t outgoing) {
+    hog_lm_graph_t* graph = search->graph;
+    uint16_t center = graph->adjacency[incoming];
+    hog_lm_rotation_remove(
+        search, center,
+        (uint16_t)(graph->reverse[incoming] - graph->offset[center]),
+        (uint16_t)(outgoing - graph->offset[center]));
+}
+
+static void hog_lm_compute_distances(hog_lm_search_t* search, uint16_t target) {
+    hog_lm_graph_t* graph = search->graph;
+    for (int vertex = 0; vertex < graph->input->n; vertex++) {
+        search->distance[vertex] = UINT32_MAX;
+    }
+    uint32_t head = 0;
+    uint32_t tail = 0;
+    search->distance[target] = 0;
+    search->bfs_queue[tail++] = target;
+    while (head < tail) {
+        uint16_t vertex = search->bfs_queue[head++];
+        for (uint32_t dart = graph->offset[vertex];
+             dart < graph->offset[vertex + 1]; dart++) {
+            uint16_t neighbor = graph->adjacency[dart];
+            if (search->distance[neighbor] == UINT32_MAX) {
+                search->distance[neighbor] = search->distance[vertex] + 1;
+                search->bfs_queue[tail++] = neighbor;
+            }
+        }
+    }
+}
+
+static bool hog_lm_search_faces(hog_lm_search_t* search, uint32_t faces_left);
+
+static bool hog_lm_finish_face(hog_lm_search_t* search, uint32_t length,
+                               uint32_t faces_left, uint32_t start_dart) {
+    size_t old_length = search->face_data_length;
+    if (old_length + length + 1 > search->face_data_capacity) return false;
+    memcpy(&search->face_data[old_length], search->path_vertices,
+           ((size_t)length + 1) * sizeof(uint16_t));
+    search->face_data_length += (size_t)length + 1;
+    if (hog_lm_search_faces(search, faces_left - 1)) return true;
+
+    memcpy(search->path_vertices, &search->face_data[old_length],
+           ((size_t)length + 1) * sizeof(uint16_t));
+    for (uint32_t i = 0; i < length; i++) {
+        uint16_t from = search->path_vertices[i];
+        uint32_t slot =
+            hog_lm_find_slot(search->graph, from, search->path_vertices[i + 1]);
+        if (slot == UINT32_MAX) return false;
+        search->path_darts[i] = search->graph->offset[from] + slot;
+    }
+    search->face_data_length = old_length;
+    hog_lm_compute_distances(search, search->graph->dart_from[start_dart]);
+    return false;
+}
+
+static bool hog_lm_generate_face(hog_lm_search_t* search, uint32_t start_dart,
+                                 uint32_t target_length, uint32_t length,
+                                 uint32_t faces_left) {
+    hog_lm_graph_t* graph = search->graph;
+    uint16_t start = graph->dart_from[start_dart];
+    uint16_t current = search->path_vertices[length];
+    uint32_t incoming = search->path_darts[length - 1];
+
+    if (length == target_length) {
+        if (current != start ||
+            !hog_lm_transition_add(search, incoming, start_dart)) {
+            return false;
+        }
+        if (hog_lm_finish_face(search, length, faces_left, start_dart)) {
+            return true;
+        }
+        hog_lm_transition_remove(search, incoming, start_dart);
+        return false;
+    }
+    if (search->distance[current] == UINT32_MAX ||
+        length + search->distance[current] > target_length) {
+        return false;
+    }
+
+    for (int reverse_used = 1; reverse_used >= 0; reverse_used--) {
+        for (uint32_t outgoing = graph->offset[current];
+             outgoing < graph->offset[current + 1]; outgoing++) {
+            if (search->used[outgoing] ||
+                (int)search->used[graph->reverse[outgoing]] != reverse_used) {
+                continue;
+            }
+            uint16_t next = graph->adjacency[outgoing];
+            if (length + 1 + search->distance[next] > target_length ||
+                !hog_lm_transition_add(search, incoming, outgoing)) {
+                continue;
+            }
+            search->used[outgoing] = 1;
+            search->remaining_darts--;
+            search->path_darts[length] = outgoing;
+            search->path_vertices[length + 1] = next;
+            if (hog_lm_generate_face(search, start_dart, target_length,
+                                     length + 1, faces_left)) {
+                return true;
+            }
+            search->used[outgoing] = 0;
+            search->remaining_darts++;
+            hog_lm_transition_remove(search, incoming, outgoing);
+        }
+    }
+    return false;
+}
+
+static uint32_t hog_lm_count_face_paths(hog_lm_search_t* search,
+                                        uint32_t start_dart,
+                                        uint32_t target_length,
+                                        uint32_t length, uint32_t limit) {
+    hog_lm_graph_t* graph = search->graph;
+    uint16_t start = graph->dart_from[start_dart];
+    uint16_t current = search->path_vertices[length];
+    uint32_t incoming = search->path_darts[length - 1];
+    if (length == target_length) {
+        if (current != start ||
+            !hog_lm_transition_add(search, incoming, start_dart)) {
+            return 0;
+        }
+        hog_lm_transition_remove(search, incoming, start_dart);
+        return 1;
+    }
+    if (search->distance[current] == UINT32_MAX ||
+        length + search->distance[current] > target_length) {
+        return 0;
+    }
+
+    uint32_t count = 0;
+    for (int reverse_used = 1; reverse_used >= 0 && count < limit;
+         reverse_used--) {
+        for (uint32_t outgoing = graph->offset[current];
+             outgoing < graph->offset[current + 1] && count < limit;
+             outgoing++) {
+            if (search->used[outgoing] ||
+                (int)search->used[graph->reverse[outgoing]] != reverse_used) {
+                continue;
+            }
+            uint16_t next = graph->adjacency[outgoing];
+            if (length + 1 + search->distance[next] > target_length ||
+                !hog_lm_transition_add(search, incoming, outgoing)) {
+                continue;
+            }
+            search->used[outgoing] = 1;
+            search->remaining_darts--;
+            search->path_darts[length] = outgoing;
+            search->path_vertices[length + 1] = next;
+            count += hog_lm_count_face_paths(
+                search, start_dart, target_length, length + 1, limit - count);
+            search->used[outgoing] = 0;
+            search->remaining_darts++;
+            hog_lm_transition_remove(search, incoming, outgoing);
+        }
+    }
+    return count;
+}
+
+static uint32_t hog_lm_count_faces_through_dart(hog_lm_search_t* search,
+                                                 uint32_t start_dart,
+                                                 uint32_t target_length,
+                                                 uint32_t limit) {
+    hog_lm_compute_distances(search, search->graph->dart_from[start_dart]);
+    search->used[start_dart] = 1;
+    search->remaining_darts--;
+    search->path_darts[0] = start_dart;
+    search->path_vertices[0] = search->graph->dart_from[start_dart];
+    search->path_vertices[1] = search->graph->adjacency[start_dart];
+    uint32_t count = hog_lm_count_face_paths(
+        search, start_dart, target_length, 1, limit);
+    search->used[start_dart] = 0;
+    search->remaining_darts++;
+    return count;
+}
+
+static bool hog_lm_dart_better(const hog_lm_search_t* search, uint32_t left,
+                               uint32_t right) {
+    hog_lm_graph_t* graph = search->graph;
+    bool left_reverse = search->used[graph->reverse[left]] != 0;
+    bool right_reverse = search->used[graph->reverse[right]] != 0;
+    if (left_reverse != right_reverse) return left_reverse > right_reverse;
+
+    uint16_t left_from = graph->dart_from[left];
+    uint16_t left_to = graph->adjacency[left];
+    uint16_t right_from = graph->dart_from[right];
+    uint16_t right_to = graph->adjacency[right];
+    int left_remaining =
+        graph->input->degree[left_to] - search->rotation_count[left_to];
+    int right_remaining =
+        graph->input->degree[right_to] - search->rotation_count[right_to];
+    if (left_remaining != right_remaining) return left_remaining < right_remaining;
+    uint32_t left_pressure =
+        search->rotation_count[left_from] + search->rotation_count[left_to];
+    uint32_t right_pressure =
+        search->rotation_count[right_from] + search->rotation_count[right_to];
+    return left_pressure > right_pressure;
+}
+
+static uint32_t hog_lm_choose_start_dart(hog_lm_search_t* search,
+                                         uint32_t probe_length) {
+    uint32_t probes[HOG_LM_PROBE_DARTS];
+    uint32_t probe_count = 0;
+    for (uint32_t dart = 0; dart < search->graph->darts; dart++) {
+        if (search->used[dart]) continue;
+        uint32_t position = probe_count;
+        while (position > 0 &&
+               hog_lm_dart_better(search, dart, probes[position - 1])) {
+            if (position < HOG_LM_PROBE_DARTS) {
+                probes[position] = probes[position - 1];
+            }
+            position--;
+        }
+        if (position < HOG_LM_PROBE_DARTS) {
+            probes[position] = dart;
+            if (probe_count < HOG_LM_PROBE_DARTS) probe_count++;
+        }
+    }
+    if (probe_count == 0) return HOG_LM_NO_DART;
+
+    uint32_t best = probes[0];
+    uint32_t best_count = UINT32_MAX;
+    for (uint32_t i = 0; i < probe_count; i++) {
+        uint32_t count = hog_lm_count_faces_through_dart(
+            search, probes[i], probe_length, best_count);
+        if (count < best_count) {
+            best = probes[i];
+            best_count = count;
+            if (best_count == 0) break;
+        }
+    }
+    return best;
+}
+
+static bool hog_lm_rotations_complete(const hog_lm_search_t* search) {
+    for (int vertex = 0; vertex < search->graph->input->n; vertex++) {
+        if (search->rotation_count[vertex] !=
+            (uint16_t)search->graph->input->degree[vertex]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool hog_lm_search_faces(hog_lm_search_t* search, uint32_t faces_left) {
+    if (faces_left == 0) {
+        return search->remaining_darts == 0 && hog_lm_rotations_complete(search);
+    }
+    if (search->remaining_darts <
+        (uint64_t)faces_left * search->min_face_length) {
+        return false;
+    }
+
+    uint32_t max_length = search->remaining_darts -
+                          (faces_left - 1) * search->min_face_length;
+    uint32_t first_length = search->min_face_length;
+    uint32_t step = search->graph->bipartite ? 2 : 1;
+    if (faces_left == 1) first_length = max_length = search->remaining_darts;
+    uint32_t start_dart = hog_lm_choose_start_dart(search, first_length);
+    if (start_dart == HOG_LM_NO_DART) return false;
+
+    hog_lm_compute_distances(search, search->graph->dart_from[start_dart]);
+    search->used[start_dart] = 1;
+    search->remaining_darts--;
+    search->path_darts[0] = start_dart;
+    search->path_vertices[0] = search->graph->dart_from[start_dart];
+    search->path_vertices[1] = search->graph->adjacency[start_dart];
+    for (uint32_t length = first_length; length <= max_length; length += step) {
+        uint32_t remaining_after = search->remaining_darts + 1 - length;
+        if (remaining_after <
+            (uint64_t)(faces_left - 1) * search->min_face_length) {
+            continue;
+        }
+        if (search->graph->bipartite && length % 2 != 0) continue;
+        if (hog_lm_generate_face(search, start_dart, length, 1, faces_left)) {
+            return true;
+        }
+        if (length > UINT32_MAX - step) break;
+    }
+    search->used[start_dart] = 0;
+    search->remaining_darts++;
+    return false;
+}
+
+static bool hog_run_page_low_mem_direct(const hog_graph_t* input,
+                                        bool has_bridge, int* genus_out) {
+    hog_lm_graph_t graph;
+    hog_lm_search_t search;
+    bool ok = false;
+    if (input->m == input->n - 1) {
+        *genus_out = 0;
+        return true;
+    }
+    if (!hog_lm_graph_init(input, has_bridge, &graph)) return false;
+
+    uint32_t input_faces = hog_lm_input_face_count(&graph);
+    int64_t upper_numerator =
+        2 - (int64_t)input->n + input->m - input_faces;
+    if (input_faces == 0 || upper_numerator < 0 || upper_numerator % 2 != 0) {
+        goto done_graph;
+    }
+    uint32_t upper_genus = (uint32_t)(upper_numerator / 2);
+    uint32_t bound_face_length = has_bridge ? 2 : graph.girth;
+    uint32_t face_upper_bound = graph.darts / bound_face_length;
+    int64_t lower_numerator =
+        2 - (int64_t)input->n + input->m - face_upper_bound;
+    uint32_t lower_genus =
+        lower_numerator <= 0 ? 0 : (uint32_t)((lower_numerator + 1) / 2);
+    int64_t max_faces =
+        (int64_t)input->m - input->n + 2 - 2 * (int64_t)lower_genus;
+    if (lower_genus > upper_genus || max_faces <= 0 ||
+        max_faces > UINT32_MAX ||
+        !hog_lm_prepare_stack(graph.darts, (uint32_t)max_faces) ||
+        !hog_lm_search_init(&graph, &search)) {
+        goto done_graph;
+    }
+
+    for (uint32_t genus = lower_genus; genus < upper_genus; genus++) {
+        int64_t faces =
+            (int64_t)input->m - input->n + 2 - 2 * (int64_t)genus;
+        if (faces <= 0 || faces > UINT32_MAX) continue;
+        hog_lm_search_reset(&search);
+        if (hog_lm_search_faces(&search, (uint32_t)faces)) {
+            *genus_out = (int)genus;
+            ok = true;
+            goto done_search;
+        }
+    }
+    if (upper_genus <= INT_MAX) {
+        *genus_out = (int)upper_genus;
+        ok = true;
+    }
+
+done_search:
+    hog_lm_search_free(&search);
+done_graph:
+    hog_lm_graph_free(&graph);
+    return ok;
+}
+
 static bool hog_to_multigenus_graph(const hog_graph_t* graph, GRAPH mg_graph, ADJAZENZ mg_adj) {
     if (graph->n > knoten || 2 * graph->m > d_kanten) return false;
     memset(mg_graph, 0, sizeof(GRAPH));
@@ -5297,15 +6113,17 @@ static void hog_redirect_to_file(const char* path) {
 }
 
 static bool hog_run_page_direct(const hog_graph_t* graph, int jobs, bool has_bridge,
-                                const char* scratch_path, int* genus_out);
+                                bool low_mem, const char* scratch_path,
+                                int* genus_out);
 
 static void hog_child_page(const hog_graph_t* graph, const char* output_path,
                            const char* scratch_path, int page_threads,
-                           bool has_bridge) {
+                           bool has_bridge, bool low_mem) {
     int genus;
 
     hog_redirect_to_file(output_path);
-    if (!hog_run_page_direct(graph, page_threads, has_bridge, scratch_path, &genus)) {
+    if (!hog_run_page_direct(graph, page_threads, has_bridge, low_mem,
+                             scratch_path, &genus)) {
         _exit(126);
     }
     printf("%d\n", genus);
@@ -5328,9 +6146,10 @@ static void hog_child_multigenus(const hog_graph_t* graph, const char* output_pa
 }
 
 static bool hog_spawn_child(const hog_graph_t* graph, hog_worker_kind_t kind,
-                            int page_threads, bool has_bridge, hog_child_t* child) {
+                            int page_threads, bool has_bridge, bool low_mem,
+                            hog_child_t* child) {
     if (!hog_make_temp_path(child->output_path, sizeof(child->output_path))) return false;
-    if (kind == HOG_WORKER_PAGE &&
+    if (kind == HOG_WORKER_PAGE && !low_mem &&
         !hog_make_temp_path(child->scratch_path, sizeof(child->scratch_path))) {
         unlink(child->output_path);
         child->output_path[0] = '\0';
@@ -5348,7 +6167,7 @@ static bool hog_spawn_child(const hog_graph_t* graph, hog_worker_kind_t kind,
     if (child->pid == 0) {
         if (kind == HOG_WORKER_PAGE) {
             hog_child_page(graph, child->output_path, child->scratch_path,
-                           page_threads, has_bridge);
+                           page_threads, has_bridge, low_mem);
         } else {
             hog_child_multigenus(graph, child->output_path);
         }
@@ -5420,10 +6239,12 @@ static bool hog_run_page_block(const hog_graph_t* graph, int jobs,
 }
 
 static bool hog_run_page_direct(const hog_graph_t* graph, int jobs, bool has_bridge,
-                                const char* scratch_path, int* genus_out) {
+                                bool low_mem, const char* scratch_path,
+                                int* genus_out) {
     hog_block_list_t blocks;
     int genus = 0;
 
+    if (low_mem) return hog_run_page_low_mem_direct(graph, has_bridge, genus_out);
     if (!has_bridge) return hog_run_page_block(graph, jobs, scratch_path, genus_out);
 
     /* Orientable genus is additive over blocks; K2 bridge blocks have genus zero. */
@@ -5453,7 +6274,7 @@ static bool hog_run_multigenus_direct(const hog_graph_t* graph, int* genus_out) 
 
 static bool hog_run_graph(const hog_graph_t* graph, int jobs, int* genus_out,
                           bool page_only, bool multi_genus_only, bool has_bridge,
-                          bool page_supported) {
+                          bool page_supported, bool low_mem) {
     hog_child_t children[2];
     int child_count = 0;
     int finished = 0;
@@ -5467,18 +6288,20 @@ static bool hog_run_graph(const hog_graph_t* graph, int jobs, int* genus_out,
         *genus_out = 0;
         return true;
     }
-    if (page_only) return hog_run_page_direct(graph, jobs, has_bridge, NULL, genus_out);
+    if (page_only) {
+        return hog_run_page_direct(graph, jobs, has_bridge, low_mem, NULL, genus_out);
+    }
     if (multi_genus_only) return hog_run_multigenus_direct(graph, genus_out);
 
     if (page_ok) {
         if (hog_spawn_child(graph, HOG_WORKER_PAGE, page_threads,
-                            has_bridge, &children[child_count])) {
+                            has_bridge, low_mem, &children[child_count])) {
             child_count++;
         }
     }
     if (multigenus_ok &&
         hog_spawn_child(graph, HOG_WORKER_MULTI_GENUS, 1, has_bridge,
-                        &children[child_count])) {
+                        low_mem, &children[child_count])) {
         child_count++;
     }
     if (child_count == 0) return false;
@@ -5544,12 +6367,14 @@ static bool hog_parse_jobs(const char* text, int* jobs) {
     return true;
 }
 
-static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format, int* jobs,
-                           bool* page_only, bool* multi_genus_only) {
+static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format,
+                           int* jobs, bool* page_only, bool* multi_genus_only,
+                           bool* low_mem) {
     *format = HOG_INPUT_GRAPH6;
     *jobs = hog_online_jobs();
     *page_only = false;
     *multi_genus_only = false;
+    *low_mem = false;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--graph6") == 0 || strcmp(argv[i], "-g") == 0) {
             *format = HOG_INPUT_GRAPH6;
@@ -5559,18 +6384,21 @@ static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format, in
             *page_only = true;
         } else if (strcmp(argv[i], "--multi_genus-only") == 0) {
             *multi_genus_only = true;
+        } else if (strcmp(argv[i], "--low-mem") == 0) {
+            *low_mem = true;
         } else if ((strcmp(argv[i], "--jobs") == 0 || strcmp(argv[i], "-j") == 0) &&
                    i + 1 < argc) {
             if (!hog_parse_jobs(argv[++i], jobs)) return false;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: ./genus [--graph6|--multicode] [-j jobs] "
+            puts("usage: ./genus [--graph6|--multicode] [-j jobs] [--low-mem] "
                  "[--page-only|--multi_genus-only] < graphs");
             exit(0);
         } else {
             return false;
         }
     }
-    return !(*page_only && *multi_genus_only);
+    return !(*page_only && *multi_genus_only) &&
+           !(*low_mem && *multi_genus_only);
 }
 
 static double hog_monotonic_seconds(void) {
@@ -5589,11 +6417,13 @@ int main(int argc, char** argv) {
     bool ok;
     bool page_only = false;
     bool multi_genus_only = false;
+    bool low_mem = false;
     double start_time = hog_monotonic_seconds();
 
-    if (!hog_parse_args(argc, argv, &format, &jobs, &page_only, &multi_genus_only)) {
+    if (!hog_parse_args(argc, argv, &format, &jobs, &page_only,
+                        &multi_genus_only, &low_mem)) {
         fprintf(stderr,
-                "usage: ./genus [--graph6|--multicode] [-j jobs] "
+                "usage: ./genus [--graph6|--multicode] [-j jobs] [--low-mem] "
                 "[--page-only|--multi_genus-only] < graphs\n");
         return 2;
     }
@@ -5616,15 +6446,15 @@ int main(int argc, char** argv) {
         bool has_bridge = false;
         bool page_supported = false;
         const char* graph_error =
-            hog_graph_error(&graphs[i], page_only, multi_genus_only, &has_bridge,
-                            &page_supported);
+            hog_graph_error(&graphs[i], page_only, multi_genus_only, low_mem,
+                            &has_bridge, &page_supported);
         if (graph_error != NULL) {
             fprintf(stderr, "Graph %d error: %s.\n", i + 1, graph_error);
             failures++;
             continue;
         }
         if (!hog_run_graph(&graphs[i], jobs, &genus, page_only, multi_genus_only,
-                           has_bridge, page_supported)) {
+                           has_bridge, page_supported, low_mem)) {
             fprintf(stderr, "Graph %d error: genus computation failed.\n", i + 1);
             failures++;
             continue;

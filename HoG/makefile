@@ -15,6 +15,9 @@ run_multicode: genus
 run_page: genus
 	$(BDIR)/genus --multicode --page-only
 
+run_low_mem: genus
+	$(BDIR)/genus --multicode --page-only --low-mem
+
 run_multi_genus: genus
 	$(BDIR)/genus --multicode --multi_genus-only
 

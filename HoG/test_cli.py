@@ -4,6 +4,7 @@
 """Focused command-line regression tests for HoG/genus."""
 
 import subprocess
+import resource
 import unittest
 from pathlib import Path
 
@@ -45,10 +46,12 @@ def multicode(num_vertices, edges):
     for left, right in edges:
         left, right = sorted((left, right))
         neighbors[left].append(right)
-    result = bytearray([num_vertices])
+    width = 1 if num_vertices < 256 else 2
+    result = bytearray(num_vertices.to_bytes(width, byteorder="little"))
     for vertex in range(num_vertices - 1):
-        result.extend(neighbor + 1 for neighbor in sorted(neighbors[vertex]))
-        result.append(0)
+        for neighbor in sorted(neighbors[vertex]):
+            result.extend((neighbor + 1).to_bytes(width, byteorder="little"))
+        result.extend((0).to_bytes(width, byteorder="little"))
     return bytes(result)
 
 
@@ -112,6 +115,28 @@ class GenusCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode())
         self.assertIn("Graph 1 has genus 1", result.stdout.decode())
 
+    def test_multicode_mixes_one_and_two_byte_graphs(self):
+        graphs = [
+            (5, complete_edges(5), 1),
+            (255, {(vertex, (vertex + 1) % 255) for vertex in range(255)}, 0),
+            (256, {(vertex, (vertex + 1) % 256) for vertex in range(256)}, 0),
+            (272, {(vertex, (vertex + 1) % 272) for vertex in range(272)}, 0),
+            (660, {(vertex, (vertex + 1) % 660) for vertex in range(660)}, 0),
+            (3, complete_edges(3), 0),
+        ]
+        data = b">>multi_code<<" + b"".join(
+            multicode(num_vertices, edges)
+            for num_vertices, edges, _ in graphs
+        )
+        result = self.run_genus(
+            data, "--multicode", "--page-only", "--low-mem", "-j", "1"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        for index, (_, _, genus) in enumerate(graphs, start=1):
+            self.assertIn(
+                f"Graph {index} has genus {genus}\n", result.stdout.decode()
+            )
+
     def test_disconnected_graph_reports_error_and_stream_continues(self):
         disconnected = graph6(7, complete_edges(5))
         connected = graph6(5, complete_edges(5))
@@ -137,6 +162,54 @@ class GenusCliTests(unittest.TestCase):
         self.assertIn("Graph 1 has genus 0", page.stdout.decode())
         self.assertEqual(multi_genus.returncode, 1)
         self.assertIn("exceeds MultiGenus", multi_genus.stderr.decode())
+
+    def test_low_mem_page_on_bipartite_kneser_graph(self):
+        data = (
+            HERE.parent / "MultiGenus" / "graphs" / "bipartite-kneser8-2.mc"
+        ).read_bytes()
+        for arguments in (
+            ("--multicode", "--page-only", "--low-mem", "-j", "1"),
+            ("--multicode", "--low-mem", "-j", "2"),
+        ):
+            with self.subTest(arguments=arguments):
+                result = self.run_genus(data, *arguments)
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                self.assertIn("Graph 1 has genus 78", result.stdout.decode())
+
+    def test_low_mem_page_handles_bridges_without_decomposition(self):
+        pendant_k5 = complete_edges(5) | {(0, 5)}
+        result = self.run_genus(
+            graph6(6, pendant_k5), "--page-only", "--low-mem", "-j", "1"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn("Graph 1 has genus 1", result.stdout.decode())
+
+    def test_low_mem_raises_small_stack_for_deep_face_search(self):
+        block_count = 1200
+        edges = set()
+        for block in range(block_count):
+            vertices = (
+                0,
+                block + 1,
+                block_count + block + 1,
+                2 * block_count + block + 1,
+            )
+            edges |= complete_edges_on(vertices)
+
+        def reduce_stack():
+            _, hard_limit = resource.getrlimit(resource.RLIMIT_STACK)
+            resource.setrlimit(resource.RLIMIT_STACK, (1024 * 1024, hard_limit))
+
+        result = subprocess.run(
+            [str(BINARY), "--multicode", "--page-only", "--low-mem", "-j", "1"],
+            input=multicode(1 + 3 * block_count, edges),
+            capture_output=True,
+            timeout=15,
+            check=False,
+            preexec_fn=reduce_stack,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn("Graph 1 has genus 0", result.stdout.decode())
 
     def test_page_supports_bridge_blocks(self):
         pendant_k5 = complete_edges(5) | {(0, 5)}
@@ -241,6 +314,14 @@ class GenusCliTests(unittest.TestCase):
         )
         self.assertEqual(conflicting.returncode, 2)
         self.assertIn("usage:", conflicting.stderr.decode())
+
+        low_mem_multi_genus = self.run_genus(
+            graph6(5, complete_edges(5)),
+            "--low-mem",
+            "--multi_genus-only",
+        )
+        self.assertEqual(low_mem_multi_genus.returncode, 2)
+        self.assertIn("usage:", low_mem_multi_genus.stderr.decode())
 
 
 if __name__ == "__main__":
