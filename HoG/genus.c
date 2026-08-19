@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 //
 // Interface:
-//   ./genus [--graph6|--multicode] [-j jobs] [--low-mem]
+//   ./genus [--graph6|--multicode] [-j jobs]
+//           [--low-mem|--auto-low-mem]
 //           [--page-only|--multi_genus-only] < graphs
 //
 // It prints one labeled genus per input graph, followed by a run summary.
@@ -64,6 +65,7 @@
 #endif
 #define HOG_PAGE_MAX_CYCLE_MEMORY_BYTES \
     (HOG_PAGE_MAX_CYCLE_MEMORY_MB * 1024ULL * 1024ULL)
+#define HOG_PAGE_EXIT_CYCLE_MEMORY_LIMIT 120
 #define START_BRANCH_THREAD_CAP 8
 #define START_BRANCH_PARALLEL_MIN_CYCLES 750
 
@@ -167,6 +169,12 @@ typedef struct {
     if (!(condition)) {                                                           \
         fprintf(page_log_file == NULL ? stderr : page_log_file, __VA_ARGS__);     \
         exit(1);                                                                  \
+    }
+
+#define page_cycle_memory_assert(condition, ...)                                  \
+    if (!(condition)) {                                                           \
+        fprintf(page_log_file == NULL ? stderr : page_log_file, __VA_ARGS__);     \
+        exit(HOG_PAGE_EXIT_CYCLE_MEMORY_LIMIT);                                   \
     }
 
 int page_mutex_init(page_mutex_t* mutex) {
@@ -992,11 +1000,12 @@ static int ph_page_run(adj_t adjacency_list, vertex_t num_vertices, edge_t num_e
                 size_t transient_cycle_bytes =
                     combined_cycle_bytes +
                     (old_cycle_bytes < new_cycle_bytes ? old_cycle_bytes : new_cycle_bytes);
-                assert(transient_cycle_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
-                       "Error: materialized PAGE needs at least %zu MiB of cycle storage, "
-                       "exceeding its %llu MiB safety limit; rerun with --low-mem.\n",
-                       (transient_cycle_bytes + 1024 * 1024 - 1) / (1024 * 1024),
-                       (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
+                page_cycle_memory_assert(
+                    transient_cycle_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
+                    "Error: materialized PAGE needs at least %zu MiB of cycle storage, "
+                    "exceeding its %llu MiB safety limit; rerun with --low-mem.\n",
+                    (transient_cycle_bytes + 1024 * 1024 - 1) / (1024 * 1024),
+                    (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
 
                 cycles_t combined;
                 if (old_cycle_bytes <= new_cycle_bytes) {
@@ -2992,11 +3001,12 @@ void fifo_reserve_memory(struct fifo* fifo, size_t new_capacity) {
     size_t old_bytes = fifo_allocation_bytes(fifo->capacity, fifo->path_length);
     size_t new_bytes = fifo_allocation_bytes(new_capacity, fifo->path_length);
     size_t additional_bytes = new_bytes - old_bytes;
-    assert(fifo->memory_budget->used <= fifo->memory_budget->limit &&
-               additional_bytes <= fifo->memory_budget->limit - fifo->memory_budget->used,
-           "Error: materialized PAGE exceeded its %llu MiB cycle-memory safety limit "
-           "while growing the %s; rerun with --low-mem.\n",
-           (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB, fifo->name);
+    page_cycle_memory_assert(
+        fifo->memory_budget->used <= fifo->memory_budget->limit &&
+            additional_bytes <= fifo->memory_budget->limit - fifo->memory_budget->used,
+        "Error: materialized PAGE exceeded its %llu MiB cycle-memory safety limit "
+        "while growing the %s; rerun with --low-mem.\n",
+        (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB, fifo->name);
 
     size_t old_capacity = fifo->capacity;
     vertex_t* new_data = (vertex_t*)realloc(fifo->data, new_bytes);
@@ -3026,11 +3036,12 @@ void fifo_init(struct fifo* fifo, size_t initial_capacity, cycle_length_t path_l
     fifo->memory_budget = memory_budget;
     fifo->name = name;
     size_t allocation_bytes = fifo_allocation_bytes(initial_capacity, path_length);
-    assert(memory_budget->used <= memory_budget->limit &&
-               allocation_bytes <= memory_budget->limit - memory_budget->used,
-           "Error: materialized PAGE's %llu MiB cycle-memory safety limit is too small "
-           "for the initial %s; rerun with --low-mem.\n",
-           (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB, name);
+    page_cycle_memory_assert(
+        memory_budget->used <= memory_budget->limit &&
+            allocation_bytes <= memory_budget->limit - memory_budget->used,
+        "Error: materialized PAGE's %llu MiB cycle-memory safety limit is too small "
+        "for the initial %s; rerun with --low-mem.\n",
+        (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB, name);
     fifo->data = (vertex_t*)malloc(allocation_bytes);
     assert(fifo->data != NULL,
            "Error allocating memory for the cycle-generation %s; rerun with --low-mem.\n",
@@ -3075,10 +3086,11 @@ cycles_t cycle_generate(adj_t adjacency_list, vertex_t num_vertices, cycle_lengt
     vertex_t* buffer = (vertex_t*)malloc((cycle_length + 2) * sizeof(vertex_t));
     assert(buffer != NULL, "Error allocating memory for the cycle-generation buffer.\n");
 
-    assert(existing_cycle_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
-           "Error: existing cycles exceed materialized PAGE's %llu MiB cycle-memory "
-           "safety limit; rerun with --low-mem.\n",
-           (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
+    page_cycle_memory_assert(
+        existing_cycle_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
+        "Error: existing cycles exceed materialized PAGE's %llu MiB cycle-memory "
+        "safety limit; rerun with --low-mem.\n",
+        (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
     fifo_memory_budget_t memory_budget = {
         .used = existing_cycle_bytes,
         .limit = (size_t)HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
@@ -3231,11 +3243,12 @@ cycle_index_t* cbv_generate(vertex_t num_vertices, cycles_t cycles, cycle_index_
            "Error: cycles-by-vertex allocation size overflow; rerun with --low-mem.\n");
     size_t cycles_by_vertex_bytes =
         (size_t)num_vertices * vertex_row_width * sizeof(cycle_index_t);
-    assert(cycles_by_vertex_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
-           "Error: materialized PAGE needs %zu MiB for its cycles-by-vertex index, "
-           "exceeding the %llu MiB safety limit; rerun with --low-mem.\n",
-           (cycles_by_vertex_bytes + 1024 * 1024 - 1) / (1024 * 1024),
-           (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
+    page_cycle_memory_assert(
+        cycles_by_vertex_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
+        "Error: materialized PAGE needs %zu MiB for its cycles-by-vertex index, "
+        "exceeding the %llu MiB safety limit; rerun with --low-mem.\n",
+        (cycles_by_vertex_bytes + 1024 * 1024 - 1) / (1024 * 1024),
+        (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
     cbv_t cycles_by_vertex = (cbv_t)malloc(cycles_by_vertex_bytes);
     assert(cycles_by_vertex != NULL, "Error allocating memory for the cycles by vertex\n");
 
@@ -3308,11 +3321,12 @@ cycle_index_t* cbe_generate(vertex_t num_vertices, cycles_t cycles, cycle_index_
            "Error: cycles-by-edge allocation size overflow; rerun with --low-mem.\n");
     size_t cycles_by_edge_bytes =
         (size_t)edge_slots * edge_row_width * sizeof(cycle_index_t);
-    assert(cycles_by_edge_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
-           "Error: materialized PAGE needs %zu MiB for its cycles-by-edge index, "
-           "exceeding the %llu MiB safety limit; rerun with --low-mem.\n",
-           (cycles_by_edge_bytes + 1024 * 1024 - 1) / (1024 * 1024),
-           (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
+    page_cycle_memory_assert(
+        cycles_by_edge_bytes <= HOG_PAGE_MAX_CYCLE_MEMORY_BYTES,
+        "Error: materialized PAGE needs %zu MiB for its cycles-by-edge index, "
+        "exceeding the %llu MiB safety limit; rerun with --low-mem.\n",
+        (cycles_by_edge_bytes + 1024 * 1024 - 1) / (1024 * 1024),
+        (unsigned long long)HOG_PAGE_MAX_CYCLE_MEMORY_MB);
     cbe_t cycles_by_edge = (cbe_t)malloc(cycles_by_edge_bytes);
     cycle_index_t* edge_fill = (cycle_index_t*)calloc(edge_slots, sizeof(cycle_index_t));
     assert(cycles_by_edge != NULL && edge_fill != NULL,
@@ -3479,6 +3493,7 @@ cycle_index_t* start_cycles_prune_by_symmetry(cycles_t cycles,
 }
 
 #undef assert
+#undef page_cycle_memory_assert
 
 
 /* MultiGenus core. Copyright (C) 2026 Gunnar Brinkmann. */
@@ -4728,6 +4743,7 @@ typedef enum {
 typedef struct {
     hog_worker_kind_t kind;
     pid_t pid;
+    bool low_mem;
     char output_path[4096];
     char scratch_path[4096];
 } hog_child_t;
@@ -6409,6 +6425,8 @@ static void hog_child_multigenus(const hog_graph_t* graph, const char* output_pa
 static bool hog_spawn_child(const hog_graph_t* graph, hog_worker_kind_t kind,
                             int page_threads, bool has_bridge, bool low_mem,
                             hog_child_t* child) {
+    child->output_path[0] = '\0';
+    child->scratch_path[0] = '\0';
     if (!hog_make_temp_path(child->output_path, sizeof(child->output_path))) return false;
     if (kind == HOG_WORKER_PAGE && !low_mem &&
         !hog_make_temp_path(child->scratch_path, sizeof(child->scratch_path))) {
@@ -6417,6 +6435,7 @@ static bool hog_spawn_child(const hog_graph_t* graph, hog_worker_kind_t kind,
         return false;
     }
     child->kind = kind;
+    child->low_mem = low_mem;
     child->pid = fork();
     if (child->pid < 0) {
         unlink(child->output_path);
@@ -6435,6 +6454,12 @@ static bool hog_spawn_child(const hog_graph_t* graph, hog_worker_kind_t kind,
         _exit(127);
     }
     return true;
+}
+
+static bool hog_page_hit_cycle_memory_limit(const hog_child_t* child, int status) {
+    return child->kind == HOG_WORKER_PAGE && !child->low_mem &&
+           WIFEXITED(status) &&
+           WEXITSTATUS(status) == HOG_PAGE_EXIT_CYCLE_MEMORY_LIMIT;
 }
 
 static int hog_child_result(const hog_child_t* child) {
@@ -6565,7 +6590,7 @@ static bool hog_run_page_direct(const hog_graph_t* graph, int jobs, bool has_bri
 
 static bool hog_run_graph(const hog_graph_t* graph, int jobs, int* genus_out,
                           bool page_only, bool multi_genus_only, bool has_bridge,
-                          bool page_supported, bool low_mem,
+                          bool page_supported, bool low_mem, bool auto_low_mem,
                           char* error, size_t error_size) {
     hog_child_t children[2];
     int child_count = 0;
@@ -6591,27 +6616,43 @@ static bool hog_run_graph(const hog_graph_t* graph, int jobs, int* genus_out,
                      page_only ? "PAGE" : "MultiGenus");
             return false;
         }
-        pid_t waited;
-        do {
-            waited = waitpid(children[0].pid, &status, 0);
-        } while (waited < 0 && errno == EINTR);
-        children[0].pid = 0;
-        if (waited > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-            int genus = hog_child_result(&children[0]);
-            if (genus >= 0) {
-                *genus_out = genus;
-                hog_cleanup_child(&children[0]);
-                return true;
+        while (true) {
+            pid_t waited;
+            do {
+                waited = waitpid(children[0].pid, &status, 0);
+            } while (waited < 0 && errno == EINTR);
+            children[0].pid = 0;
+            if (waited > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+                int genus = hog_child_result(&children[0]);
+                if (genus >= 0) {
+                    *genus_out = genus;
+                    hog_cleanup_child(&children[0]);
+                    return true;
+                }
             }
+            if (waited > 0 && auto_low_mem &&
+                hog_page_hit_cycle_memory_limit(&children[0], status)) {
+                hog_cleanup_child(&children[0]);
+                memset(&children[0], 0, sizeof(children[0]));
+                if (hog_spawn_child(graph, HOG_WORKER_PAGE, 1, has_bridge, true,
+                                    &children[0])) {
+                    auto_low_mem = false;
+                    continue;
+                }
+                snprintf(error, error_size,
+                         "PAGE reached its cycle-memory limit, but the low-memory "
+                         "fallback could not be started");
+                return false;
+            }
+            if (waited < 0) {
+                snprintf(error, error_size, "could not wait for the %s worker: %s",
+                         page_only ? "PAGE" : "MultiGenus", strerror(errno));
+            } else {
+                hog_child_failure_message(&children[0], status, error, error_size);
+            }
+            hog_cleanup_child(&children[0]);
+            return false;
         }
-        if (waited < 0) {
-            snprintf(error, error_size, "could not wait for the %s worker: %s",
-                     page_only ? "PAGE" : "MultiGenus", strerror(errno));
-        } else {
-            hog_child_failure_message(&children[0], status, error, error_size);
-        }
-        hog_cleanup_child(&children[0]);
-        return false;
     }
 
     if (page_ok) {
@@ -6637,6 +6678,21 @@ static bool hog_run_graph(const hog_graph_t* graph, int jobs, int* genus_out,
         for (int i = 0; i < child_count; i++) {
             if (children[i].pid != pid) continue;
             children[i].pid = 0;
+            if (auto_low_mem && hog_page_hit_cycle_memory_limit(&children[i], status)) {
+                hog_cleanup_child(&children[i]);
+                memset(&children[i], 0, sizeof(children[i]));
+                if (hog_spawn_child(graph, HOG_WORKER_PAGE, 1, has_bridge, true,
+                                    &children[i])) {
+                    continue;
+                }
+                if (error_size > 0 && error[0] == '\0') {
+                    snprintf(error, error_size,
+                             "PAGE reached its cycle-memory limit, but the low-memory "
+                             "fallback could not be started");
+                }
+                finished++;
+                continue;
+            }
             finished++;
             if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
                 int genus = hog_child_result(&children[i]);
@@ -6696,12 +6752,13 @@ static bool hog_parse_jobs(const char* text, int* jobs) {
 
 static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format,
                            int* jobs, bool* page_only, bool* multi_genus_only,
-                           bool* low_mem) {
+                           bool* low_mem, bool* auto_low_mem) {
     *format = HOG_INPUT_GRAPH6;
     *jobs = hog_online_jobs();
     *page_only = false;
     *multi_genus_only = false;
     *low_mem = false;
+    *auto_low_mem = false;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--graph6") == 0 || strcmp(argv[i], "-g") == 0) {
             *format = HOG_INPUT_GRAPH6;
@@ -6713,11 +6770,14 @@ static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format,
             *multi_genus_only = true;
         } else if (strcmp(argv[i], "--low-mem") == 0) {
             *low_mem = true;
+        } else if (strcmp(argv[i], "--auto-low-mem") == 0) {
+            *auto_low_mem = true;
         } else if ((strcmp(argv[i], "--jobs") == 0 || strcmp(argv[i], "-j") == 0) &&
                    i + 1 < argc) {
             if (!hog_parse_jobs(argv[++i], jobs)) return false;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: ./genus [--graph6|--multicode] [-j jobs] [--low-mem] "
+            puts("usage: ./genus [--graph6|--multicode] [-j jobs] "
+                 "[--low-mem|--auto-low-mem] "
                  "[--page-only|--multi_genus-only] < graphs");
             exit(0);
         } else {
@@ -6725,7 +6785,9 @@ static bool hog_parse_args(int argc, char** argv, hog_input_format_t* format,
         }
     }
     return !(*page_only && *multi_genus_only) &&
-           !(*low_mem && *multi_genus_only);
+           !(*low_mem && *multi_genus_only) &&
+           !(*auto_low_mem && *multi_genus_only) &&
+           !(*auto_low_mem && *low_mem);
 }
 
 static double hog_monotonic_seconds(void) {
@@ -6745,12 +6807,14 @@ int main(int argc, char** argv) {
     bool page_only = false;
     bool multi_genus_only = false;
     bool low_mem = false;
+    bool auto_low_mem = false;
     double start_time = hog_monotonic_seconds();
 
     if (!hog_parse_args(argc, argv, &format, &jobs, &page_only,
-                        &multi_genus_only, &low_mem)) {
+                        &multi_genus_only, &low_mem, &auto_low_mem)) {
         fprintf(stderr,
-                "usage: ./genus [--graph6|--multicode] [-j jobs] [--low-mem] "
+                "usage: ./genus [--graph6|--multicode] [-j jobs] "
+                "[--low-mem|--auto-low-mem] "
                 "[--page-only|--multi_genus-only] < graphs\n");
         return 2;
     }
@@ -6782,7 +6846,7 @@ int main(int argc, char** argv) {
             continue;
         }
         if (!hog_run_graph(&graphs[i], jobs, &genus, page_only, multi_genus_only,
-                           has_bridge, page_supported, low_mem,
+                           has_bridge, page_supported, low_mem, auto_low_mem,
                            computation_error, sizeof(computation_error))) {
             fprintf(stderr, "Graph %d error: %s%s\n", i + 1,
                     computation_error[0] == '\0' ? "genus computation failed"

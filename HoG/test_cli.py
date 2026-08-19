@@ -84,12 +84,12 @@ class GenusCliTests(unittest.TestCase):
     def setUpClass(cls):
         subprocess.run(["make", "genus"], cwd=HERE, check=True)
 
-    def run_genus(self, data, *arguments):
+    def run_genus(self, data, *arguments, timeout=15):
         return subprocess.run(
             [str(BINARY), *arguments],
             input=data,
             capture_output=True,
-            timeout=15,
+            timeout=timeout,
             check=False,
         )
 
@@ -194,6 +194,26 @@ class GenusCliTests(unittest.TestCase):
         self.assertIn("Graph 2 has genus 1", result.stdout.decode())
         self.assertIn(
             "Processed 2 graphs: 1 succeeded, 1 failed", result.stdout.decode()
+        )
+
+    def test_auto_low_mem_retries_bipartite_kneser_graph(self):
+        data = (
+            HERE.parent / "MultiGenus" / "graphs" / "bipartite-kneser13-2.mc"
+        ).read_bytes()
+        result = self.run_genus(
+            data,
+            "--multicode",
+            "--page-only",
+            "--auto-low-mem",
+            "-j",
+            "1",
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertEqual(result.stderr, b"")
+        self.assertIn("Graph 1 has genus 996", result.stdout.decode())
+        self.assertIn(
+            "Processed 1 graph: 1 succeeded, 0 failed", result.stdout.decode()
         )
 
     def test_low_mem_page_handles_bridges_without_decomposition(self):
@@ -342,6 +362,17 @@ class GenusCliTests(unittest.TestCase):
         )
         self.assertEqual(low_mem_multi_genus.returncode, 2)
         self.assertIn("usage:", low_mem_multi_genus.stderr.decode())
+
+        for incompatible in (
+            ("--auto-low-mem", "--multi_genus-only"),
+            ("--auto-low-mem", "--low-mem"),
+        ):
+            with self.subTest(incompatible=incompatible):
+                result = self.run_genus(
+                    graph6(5, complete_edges(5)), *incompatible
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("usage:", result.stderr.decode())
 
 
 if __name__ == "__main__":

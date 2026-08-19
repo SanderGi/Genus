@@ -52,6 +52,12 @@ without exceeding the operating system's hard limit. On linux, you can configure
 the hard limit using `ulimit -s`. On MacOS, you'll want to compile the program 
 with a larger stack size using compiler flags, e.g., `-Wl,-stack_size,<stack_size>`.
 
+Use `--auto-low-mem` to begin with materialized PAGE and automatically restart
+with low-memory PAGE if the candidate-cycle safety limit is reached. It works
+in PAGE-only mode and in the normal PAGE/MultiGenus race. It cannot be combined 
+with `--low-mem` or `--multi_genus-only`. The preliminary materialized search is
+discarded, so this mode can waste substantial time and memory before restarting.
+
 The current algorithms require connected simple graphs. Disconnected inputs are
 reported as unsupported rather than being assigned a misleading genus.
 Materialized PAGE supports bridges by decomposing the graph into biconnected
