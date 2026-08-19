@@ -176,6 +176,26 @@ class GenusCliTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr.decode())
                 self.assertIn("Graph 1 has genus 78", result.stdout.decode())
 
+    def test_materialized_page_memory_limit_reports_error_and_continues(self):
+        large_graph = (
+            HERE.parent / "MultiGenus" / "graphs" / "bipartite-kneser13-2.mc"
+        ).read_bytes()
+        data = large_graph + multicode(5, complete_edges(5))
+        result = self.run_genus(
+            data, "--multicode", "--page-only", "-j", "1"
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "Graph 1 error: PAGE failed: materialized PAGE exceeded its 1024 MiB "
+            "cycle-memory safety limit",
+            result.stderr.decode(),
+        )
+        self.assertIn("rerun with --low-mem", result.stderr.decode())
+        self.assertIn("Graph 2 has genus 1", result.stdout.decode())
+        self.assertIn(
+            "Processed 2 graphs: 1 succeeded, 1 failed", result.stdout.decode()
+        )
+
     def test_low_mem_page_handles_bridges_without_decomposition(self):
         pendant_k5 = complete_edges(5) | {(0, 5)}
         result = self.run_genus(

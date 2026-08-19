@@ -29,8 +29,15 @@ by default, the program races both against each other and returns the fastest
 result. To run only PAGE, use `./genus --page-only < 3-8-cage.g6` 
 or `make run_page < 3-8-cage.mc`. To run only multi_genus, use 
 `./genus --multi_genus-only < 3-8-cage.g6` or `make run_multi_genus < 3-8-cage.mc`.
-The only-algorithm modes run in-process; with `-j 1`, PAGE uses its serial search 
-and MultiGenus uses its serial implementation without an additional worker.
+
+By default, PAGE limits candidate-cycle storage to 1024 MiB and checks all
+cycle-storage size arithmetic before allocation. If you have a lot of memory
+available, you can change this safety limit by rebuilding with 
+`make -B CC='gcc -DHOG_PAGE_MAX_CYCLE_MEMORY_MB=4096'`. Make sure you do not
+set the limit higher than `SIZE_MAX / (1024 * 1024)` (so 17,592,186,044,415 on
+64-bit systems and 4095 on 32-bit systems). Note that higher limits may use
+several times that amount of total RAM, so it is usually safer to run in low
+memory mode for large cycle sets which you can do as follows:
 
 Use `--low-mem` to replace PAGE's materialized cycle search with its serial,
 lazy facial-walk search. It avoids precomputing and storing every candidate
@@ -41,10 +48,9 @@ input. The low-memory engine is currently single-threaded, so `-j` does not
 change its search; `--low-mem` and `--multi_genus-only` are mutually exclusive.
 Unlike materialized PAGE, the lazy engine handles bridge facial walks directly.
 For searches with many faces, it raises the process's soft stack limit as needed
-without exceeding the operating system's hard limit. A segmentation error likely
-means the hard limit has been exceeded. On linux, you can configure this using
-`ulimit -s`. On MacOS, you'll want to compile the program with a larger stack 
-size using compiler flags, e.g., `-Wl,-stack_size,<stack_size>`.
+without exceeding the operating system's hard limit. On linux, you can configure 
+the hard limit using `ulimit -s`. On MacOS, you'll want to compile the program 
+with a larger stack size using compiler flags, e.g., `-Wl,-stack_size,<stack_size>`.
 
 The current algorithms require connected simple graphs. Disconnected inputs are
 reported as unsupported rather than being assigned a misleading genus.
