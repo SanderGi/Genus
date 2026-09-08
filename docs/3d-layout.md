@@ -64,6 +64,52 @@ surface bends. Stroke thickness and label size use the fixed handle scale,
 rather than growing with the whole model's bounding radius. Labels reference the
 same endpoints as the edge records.
 
+## Large sparse maps
+
+Maps with more than 50 vertices, genus at least 8, at most 10 vertices per handle,
+and maximum degree at most 4 use a compact normal-arc representation. This covers
+the 126-vertex, 189-edge (3,12)-cage at genus 17. Small-map layouts retain the
+existing placement comparisons and rerouting cleanup.
+
+The compact path uses a 24-by-16 mesh per torus, with appropriately sized neck
+openings. After each edge insertion it discards subdivision diagonals that carry
+no topology. Crossings of the original surface edges remain ordered. An empty
+bigon can be removed only when its crossings are consecutive both along the
+curve and along that surface edge. Once these bigons are removed, arcs inside
+an original triangle join different sides and can be straightened simultaneously
+without crossing. The resulting convex cells receive minimal triangulations;
+obsolete vertices are reclaimed. This prevents repeated subdivision from growing
+into millions of triangles.
+
+The route search uses physical distances and a consistent Euclidean A* potential.
+Two-sheet parity covers are tried before the larger homology covers, and clearance
+is computed once per edge rather than once per retry. Forest edges join different
+boundary components and need no separate connected-complement scan. All other
+spine edges retain that check.
+
+After the first valid placement, 48 coupled one-dimensional flow sweeps shorten
+normal arcs and spread their crossings along the original surface edges. A
+logarithmic spacing barrier and bounded Newton steps keep crossings strictly
+ordered. This replaces the expensive triangle-by-triangle spring checks and
+all-pairs proximity scans of the full cleanup for these large maps. Centerlines
+remain on the same polyhedral surface with the same vertex rotations. The
+coarser routing mesh and first-valid-placement policy trade some geometric detail
+and layout optimization for interactive latency; dense bundles can still occur.
+
+Reproduce the timing with fresh native processes (no layout cache):
+
+```sh
+make -C MultiGenus planar_draw
+python3 tests/benchmark_surface_router.py --page --runs 3
+```
+
+The benchmark reports PAGE separately from layout plus OBJ export. Rendering and
+browser parsing are not included. The former exporter had not completed the
+(3,12)-cage after 90 seconds in the development benchmark; the compact exporter
+had a median of **1.99 seconds** over three fresh exports on the same arm64
+machine (1.958–2.136 seconds), with PAGE taking another 0.708 seconds. Exact time depends on the
+rotation system, placement retries, compiler, and hardware.
+
 ## Compatibility and limits
 
 The legacy surface remains available with `planar_draw ... --legacy-surface`.
@@ -96,5 +142,7 @@ legacy manual surface. Fixed (3,6)-cage and genus-4 (3,8)-cage rotations also
 check these invariants, total route length, sampled inter-edge proximity away
 from junctions, and departure arc/chord ratios to catch vertex hairpins. Proximity
 sampling is an aesthetic regression metric, not a global clearance proof.
-The browser geometry test checks that short polyline
-segments retain their exact centerline knots.
+The genus-17 (3,12)-cage fixture, its mirror, a relabeling, and an attached bridge verify the
+normal-arc path and bound mesh complexity to prevent refinement blowup. The
+browser geometry test checks that short polyline segments retain their exact
+centerline knots.

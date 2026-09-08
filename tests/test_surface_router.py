@@ -3,6 +3,7 @@
 """Topology and geometry regressions for the higher-genus native exporter."""
 
 import math
+import json
 from itertools import product
 import shutil
 import subprocess
@@ -145,13 +146,13 @@ class SurfaceRouterTests(unittest.TestCase):
                         str(repo / "MultiGenus/planar_draw.c"), "-lm"],
                        check=True, capture_output=True)
 
-    def export(self, rotation, legacy=False):
+    def export(self, rotation, legacy=False, timeout=120):
         code = bytes([len(rotation)] + [value for row in rotation
                      for value in [*[v + 1 for v in row], 0]])
         prefix = str(Path(self.directory.name) / "surface")
         result = subprocess.run([self.binary, "f", "l", "o", prefix]
                                 + (["--legacy-surface"] if legacy else []),
-                                input=code, capture_output=True, timeout=120)
+                                input=code, capture_output=True, timeout=timeout)
         self.assertEqual(result.returncode, 0, result.stderr.decode())
         return Path(prefix + ".obj").read_text()
 
@@ -256,6 +257,29 @@ class SurfaceRouterTests(unittest.TestCase):
         rotation[0].insert(2, 8)
         rotation.extend([[0, 9], [8]])
         self.verify_embedding(self.export(rotation), rotation, 2)
+
+    def test_large_cage_normal_arcs(self):
+        repo = Path(__file__).resolve().parents[1]
+        rotation = json.loads((repo / "tests/fixtures/3-12-cage-genus17.json").read_text())
+        graph = [list(map(int, row.split())) for row in
+                 (repo / "PAGE/adjacency_lists/3-12-cage.txt").read_text().splitlines()[1:]]
+        self.assertEqual([sorted(row) for row in rotation], [sorted(row) for row in graph])
+        permutation = [(37 * i + 11) % len(rotation) for i in range(len(rotation))]
+        relabeled = [[] for _ in rotation]
+        for u, row in enumerate(rotation):
+            relabeled[permutation[u]] = [permutation[v] for v in row]
+        with_bridge = [row[:] for row in rotation]
+        with_bridge[0].append(126)
+        with_bridge.extend([[0, 127], [126]])
+        for variant, r in [("original", rotation), ("mirror", [row[::-1] for row in rotation]),
+                           ("relabel", relabeled), ("bridge", with_bridge)]:
+            with self.subTest(variant=variant):
+                obj = self.export(r, timeout=30)
+                self.assertIn("surface_layout normal_arcs", obj)
+                self.verify_embedding(obj, r, 17)
+                # Bound geometric complexity, independently of machine speed.
+                # The old refinement could exceed millions of triangles.
+                self.assertLess(sum(line.startswith("f ") for line in obj.splitlines()), 250_000)
 
     def test_legacy_manual_surface(self):
         rotation = [[3, 5, 4], [3, 4, 5], [3, 4, 5], [0, 1, 2], [0, 1, 2], [0, 1, 2]]

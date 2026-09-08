@@ -7,13 +7,14 @@
 #ifndef SURFACE_ROUTER_H
 #define SURFACE_ROUTER_H
 
-typedef struct { double p[3],u,v,axis[3]; int h,kind; } SRPoint;
+typedef struct { double p[3],u,v,axis[3]; int h,kind,sides[2]; } SRPoint;
 typedef struct { int v[3], next[3], wall[3], owner,base; } SRTriangle;
 typedef struct { int a,b,face,side,used; } SRHash;
-typedef struct { int u,v,start,end,*path,length,*poly,plen,left,right; } SRRoute;
+typedef struct { int u,v,start,end,startbase,endbase,*path,length,*poly,plen,left,right,spinecheck; } SRRoute;
 typedef struct {
   SRPoint *points,*centers,*normals;
-  SRTriangle *triangles;
+  SRTriangle *triangles,*base_triangles;
+  int nbases,base_np,compact;
   int np,nt,pcap,tcap,nu,nw,genus;
   int *walls,nwalls,wcap;
   int *removed,*vertex,*ports, *blocked;
@@ -93,6 +94,10 @@ static void sr_mesh(SRMesh *m,int genus,int seed)
   memset(&p,0,sizeof(p));
   memset(m,0,sizeof(*m)); m->genus=genus;m->nu=64;m->nw=48;m->random=seed;m->strategy=((seed-17)/7919)%3;
   for(i=1;i<=nv;i++)if(adj[i]>maxdegree)maxdegree=adj[i];
+  /* Large sparse maps use normal arcs on a coarser routing triangulation.
+   * Keep the established small-map layout and degree-dependent disk capacity. */
+  m->compact=nv>50 && genus>=8 && nv<=10*genus && maxdegree<=4;
+  if(m->compact){m->nu=24;m->nw=16;}
   if(maxdegree>24){m->nu+=8*((maxdegree+3)/4-6);m->nw+=4*((maxdegree+3)/4-6);}
   m->removed=sr_alloc(genus*m->nu*m->nw,sizeof(int));
   m->vertex=sr_alloc(nv+1,sizeof(int));
@@ -106,8 +111,8 @@ static void sr_mesh(SRMesh *m,int genus,int seed)
   /* Remove facing disks and join their boundaries with an embedded annulus.
    * This is a connected sum of tori, hence exactly the requested genus. */
   for(h=0;h<genus-1;h++) {
-    sr_remove(m,h,0,0,2,5);sr_remove(m,h+1,m->nu/2,0,2,5);
-    n=sr_ring(m,h,0,0,2,5,ring);
+    sr_remove(m,h,0,0,m->compact ? 1 : 2,m->compact ? 2 : 5);sr_remove(m,h+1,m->nu/2,0,m->compact ? 1 : 2,m->compact ? 2 : 5);
+    n=sr_ring(m,h,0,0,m->compact ? 1 : 2,m->compact ? 2 : 5,ring);
     for(k=0;k<n;k++) {
       a=ring[k]-h*m->nu*m->nw;i=a/m->nw;j=a%m->nw;
       other[k]=sr_grid(m,h+1,m->nu/2-i,j);prev[k]=ring[k];
@@ -317,7 +322,7 @@ static int sr_find_path(SRMesh *m,SRRoute *r,int id)
       if(m->triangles[node].wall[j])continue;
       next=m->triangles[node].next[j];
       if(m->blocked[next] && m->blocked[next]!=id+1)continue;
-      cost=1.0+m->repulsion[next];
+      cost=(m->compact ? sr_distance(m->centers[node],m->centers[next]) : 1.0)*(1.0+m->repulsion[next]);
       d=m->distance[node]+cost;
       if(m->stamp[next]!=m->serial || d<m->distance[next]-1e-9) {
         m->stamp[next]=m->serial;m->distance[next]=d;m->previous[next]=node;sr_heap_up(m,next);
@@ -396,10 +401,11 @@ static int sr_spine_path(SRMesh *m,SRRoute *r,int id,int cover,int shift)
 {
   int i,j,node,next,state,face,mask,length,valid,count=m->nt*cover,result=0;
   int *previous=sr_alloc(count,sizeof(int)),*seen=sr_alloc(m->nt,sizeof(int));
-  unsigned int signature;double cost;SRMesh heap;
+  unsigned int signature;double cost,*potential=sr_alloc(m->nt,sizeof(double));SRMesh heap;
   memset(&heap,0,sizeof(heap));heap.heap=sr_alloc(count+1,sizeof(int));heap.heap_pos=sr_alloc(count,sizeof(int));heap.distance=sr_alloc(count,sizeof(double));
   for(i=0;i<count;i++){previous[i]=-2;heap.heap_pos[i]=-1;heap.distance[i]=1e30;}
-  sr_clearance(m);previous[r->start]=-1;heap.distance[r->start]=0;sr_heap_up(&heap,r->start);
+  if(m->compact)for(i=0;i<m->nt;i++)potential[i]=0.99*sr_distance(m->centers[i],m->centers[r->end]);
+  previous[r->start]=-1;heap.distance[r->start]=potential[r->start];sr_heap_up(&heap,r->start);
   while(heap.heap_size) {
     state=sr_heap_pop(&heap);face=state%m->nt;mask=state/m->nt;
     if(face==r->end) {
@@ -408,8 +414,9 @@ static int sr_spine_path(SRMesh *m,SRRoute *r,int id,int cover,int shift)
       if(!valid)continue;
       free(r->path);r->path=sr_alloc(length,sizeof(int));r->length=length;
       for(node=state,i=length-1;node>=0;node=previous[node]){r->path[i--]=node%m->nt;}
-      if(sr_connected_complement(m,r)){result=1;break;}
+      if(!r->spinecheck || sr_connected_complement(m,r)){result=1;break;}
       r->length=0;
+      if(cover==1)break; /* No other target sheet exists in the ordinary search. */
       continue;
     }
     for(j=0;j<3;j++) {
@@ -417,13 +424,14 @@ static int sr_spine_path(SRMesh *m,SRRoute *r,int id,int cover,int shift)
       next=m->triangles[face].next[j];
       if(next==r->start || (m->blocked[next] && m->blocked[next]!=id+1))continue;
       signature=(sr_signature(m,face,j)>>shift)&(cover-1);node=next+(mask^signature)*m->nt;
-      cost=heap.distance[state]+1+m->repulsion[next];
+      cost=heap.distance[state]-potential[face]+potential[next]+(m->compact ? sr_distance(m->centers[face],m->centers[next]) : 1.0)*(1+m->repulsion[next]);
       if(cost<heap.distance[node]){previous[node]=state;heap.distance[node]=cost;sr_heap_up(&heap,node);}
     }
   }
-  free(heap.heap);free(heap.heap_pos);free(heap.distance);free(previous);free(seen);return result;
+  free(heap.heap);free(heap.heap_pos);free(heap.distance);free(previous);free(seen);free(potential);return result;
 }
 static void sr_commit(SRMesh *m,SRRoute *r);
+static void sr_compact_mesh(SRMesh *m,SRRoute *routes,int n);
 static void sr_prepare(SRMesh *m,SRRoute *r,int n)
 {
   int i;
@@ -452,6 +460,7 @@ static int sr_routes(SRMesh *m,SRRoute **output,int *count)
     v=edge->name;for(k=0,inverse=map[v];inverse!=edge->invers;inverse=inverse->next)k++;
     routes[n].u=u;routes[n].v=v;routes[n].start=m->ports[u*MAXVAL+j];routes[n].end=m->ports[v*MAXVAL+k];
     /* A primal tree and a disjoint dual tree leave precisely 2g handle edges. */
+    routes[n].startbase=routes[n].start;routes[n].endbase=routes[n].end;
     routes[n].left=face[edge->edgenumber];routes[n].right=face[edge->invers->edgenumber];n++;
   }
   for(i=0;i<n;i++)rank[i]=i;
@@ -474,14 +483,20 @@ static int sr_routes(SRMesh *m,SRRoute **output,int *count)
   cover=1;bits=0;
   while(bits<2*m->genus && cover*m->nt<1000000){cover*=2;bits++;}
   for(k=0;k<n;k++) {
-    i=order[k];sr_prepare(m,routes,n);
+    /* A forest edge joins different boundary components; its complement
+     * is connected without a separate whole-surface connectivity scan. */
+    i=order[k];routes[i].spinecheck=!m->compact || tree[i]!=1;sr_prepare(m,routes,n);
     while(cover>2 && cover*m->nt>2000000){cover/=2;bits--;}
     if(k<core) {
-      found=sr_spine_path(m,&routes[i],i,1,0);
+      sr_clearance(m);found=sr_spine_path(m,&routes[i],i,1,0);
+      /* A parity search has only two sheets. Try these small covers before
+       * allocating the general multi-coordinate cover. */
+      if(m->compact)for(shift=0;!found && shift<2*m->genus;shift++)found=sr_spine_path(m,&routes[i],i,2,shift);
       for(shift=0;!found && shift<2*m->genus;shift+=bits)found=sr_spine_path(m,&routes[i],i,cover,shift);
       if(!found)break;
     } else {sr_clearance(m);if(!sr_find_path(m,&routes[i],i))break;}
     sr_commit(m,&routes[i]);
+    if(m->compact)sr_compact_mesh(m,routes,n);
   }
   fprintf(stderr,"Surface spine routing: %d/%d edges (%d spine edges).\n",k,n,core);
   free(order);free(rank);free(tree);free(parent);free(face);free(dual);return k==n;
@@ -489,7 +504,7 @@ static int sr_routes(SRMesh *m,SRRoute **output,int *count)
 static void sr_free(SRMesh *m,SRRoute *routes,int n)
 {
   int i;for(i=0;i<n;i++){free(routes[i].path);free(routes[i].poly);}free(routes);free(m->walls);
-  free(m->points);free(m->centers);free(m->normals);free(m->triangles);free(m->removed);free(m->vertex);free(m->ports);free(m->blocked);
+  free(m->base_triangles);free(m->points);free(m->centers);free(m->normals);free(m->triangles);free(m->removed);free(m->vertex);free(m->ports);free(m->blocked);
   free(m->repulsion);free(m->distance);free(m->previous);free(m->stamp);free(m->heap);free(m->heap_pos);free(m->graphdistance);
 }
 /* Corridor portals are shared mesh edges. Moving a crossing only along its
@@ -506,7 +521,7 @@ static SRPoint *sr_path_geometry(SRMesh *m,SRRoute *r,int *a,int *b)
     a[i]=m->triangles[k].v[j];b[i]=m->triangles[k].v[(j+1)%3];
     p[i]=sr_lerp(m->points[a[i]],m->points[b[i]],0.5);
   }
-  for(pass=0;pass<24;pass++)for(k=1;k<n-1;k++) {
+  for(pass=0;pass<(m->compact ? 0 : 24);pass++)for(k=1;k<n-1;k++) {
     i=pass%2 ? n-1-k : k;lo=0.15;hi=0.85;
     for(j=0;j<12;j++) {
       t1=(2*lo+hi)/3;t2=(lo+2*hi)/3;
@@ -528,7 +543,7 @@ static void sr_commit(SRMesh *m,SRRoute *r)
   for(i=1;i<n-1;i++) {
     first=m->triangles[r->path[i-1]].base;second=m->triangles[r->path[i]].base;
     if(first==second){p[i].kind=1;for(j=0;j<3;j++)p[i].axis[j]=m->normals[first].p[j];}
-    else {p[i].kind=2;lo=sr_distance(m->points[a[i]],m->points[b[i]]);for(j=0;j<3;j++)p[i].axis[j]=(m->points[b[i]].p[j]-m->points[a[i]].p[j])/lo;}
+    else {p[i].kind=2;p[i].sides[0]=first;p[i].sides[1]=second;lo=sr_distance(m->points[a[i]],m->points[b[i]]);for(j=0;j<3;j++)p[i].axis[j]=(m->points[b[i]].p[j]-m->points[a[i]].p[j])/lo;}
     r->poly[i]=sr_point(m,p[i]);
   }
   for(i=0;i<r->length;i++) {
@@ -551,11 +566,11 @@ static void sr_commit(SRMesh *m,SRRoute *r)
       sr_triangle(m,first,third,second,0);m->triangles[m->nt-1].base=t.base;
     }
   }
-  for(i=1;i<n;i++) {
+  for(i=1;!m->compact && i<n;i++) {
     if(m->nwalls==m->wcap){m->wcap=m->wcap ? m->wcap*2 : 1024;m->walls=realloc(m->walls,2*m->wcap*sizeof(int));if(!m->walls)exit(1);}
     m->walls[2*m->nwalls]=r->poly[i-1];m->walls[2*m->nwalls+1]=r->poly[i];m->nwalls++;
   }
-  free(p);free(a);free(b);sr_adjacency(m);
+  free(p);free(a);free(b);if(!m->compact)sr_adjacency(m);
 }
 static void sr_write_route(FILE *out,SRRoute *r)
 {
@@ -640,6 +655,210 @@ static void sr_route_walls(SRMesh *m,SRRoute *routes,int n,int omit)
   }
   sr_adjacency(m);
 }
+/* A route only needs its crossings of ORIGINAL surface edges. Subdivision
+ * diagonals carry no topology. Remove empty bigons with an original edge,
+ * straighten the remaining normal arcs inside each original triangle, and
+ * rebuild their constrained cells. This bounds refinement by actual crossings
+ * instead of repeatedly subdividing yesterday's subdivision diagonals. */
+typedef struct { int point,a,b;double t; } SRCrossing;
+typedef struct { int a,b,next; } SRChord;
+typedef struct { int point;double t; } SRBoundary;
+typedef struct { int a,b,next,used; } SRHalfedge;
+static int sr_crossing_compare(const void *aa,const void *bb)
+{
+  const SRCrossing *a=aa,*b=bb;
+  if(a->a!=b->a)return a->a<b->a ? -1 : 1;
+  if(a->b!=b->b)return a->b<b->b ? -1 : 1;
+  return a->t<b->t ? -1 : a->t>b->t;
+}
+static int sr_boundary_compare(const void *aa,const void *bb)
+{ const SRBoundary *a=aa,*b=bb;return a->t<b->t ? -1 : a->t>b->t; }
+static int sr_halfedge_compare(const void *aa,const void *bb)
+{
+  const SRHalfedge *a=aa,*b=bb;
+  if(a->a!=b->a)return a->a<b->a ? -1 : 1;
+  return a->b-b->b;
+}
+static double sr_edge_parameter(SRMesh *m,int point,int a,int b)
+{
+  int k;double numerator=0,denominator=0,x;
+  for(k=0;k<3;k++){x=m->points[b].p[k]-m->points[a].p[k];numerator+=(m->points[point].p[k]-m->points[a].p[k])*x;denominator+=x*x;}
+  return numerator/denominator;
+}
+static void sr_compact_mesh(SRMesh *m,SRRoute *routes,int n)
+{
+  int i,j,k,h,a,b,c,x,y,prev,next,head=0,tail=0,ncross=0,nchord=0,base,count,nh,first,face,used,owner;
+  int *before=sr_alloc(m->np,sizeof(int)),*after=sr_alloc(m->np,sizeof(int)),*wireprev=sr_alloc(m->np,sizeof(int)),*wirenext=sr_alloc(m->np,sizeof(int));
+  int *routeid=sr_alloc(m->np,sizeof(int)),*queue=sr_alloc(3*m->np,sizeof(int)),*active=sr_alloc(m->np,sizeof(int)),*heads=sr_alloc(m->nbases,sizeof(int));
+  int *local=sr_alloc(m->np,sizeof(int)),*polygon,*offset;
+  SRCrossing *cross=sr_alloc(m->np,sizeof(SRCrossing));SRChord *chords;SRBoundary *boundary;SRHalfedge *half;
+  SRTriangle t;double area;
+  for(i=0;i<n;i++)if(routes[i].plen){
+    used=1;
+    for(j=1;j<routes[i].plen-1;j++)if(m->points[routes[i].poly[j]].kind==2)routes[i].poly[used++]=routes[i].poly[j];
+    routes[i].poly[used++]=routes[i].poly[routes[i].plen-1];routes[i].plen=used;
+    for(j=1;j<used-1;j++){
+      x=routes[i].poly[j];routeid[x]=i;wireprev[x]=routes[i].poly[j-1];wirenext[x]=routes[i].poly[j+1];active[x]=1;
+      a=m->points[x].sides[0];b=m->points[x].sides[1];if(a>b){c=a;a=b;b=c;}
+      t=m->base_triangles[a];
+      for(k=0;k<3;k++)if(t.next[k]==b)break;
+      if(k==3){fprintf(stderr,"Surface compaction lost an original portal.\n");exit(1);}
+      cross[ncross].point=x;cross[ncross].a=a;cross[ncross].b=b;cross[ncross++].t=sr_edge_parameter(m,x,t.v[k],t.v[(k+1)%3]);
+      queue[tail++]=x;
+    }
+  }
+  qsort(cross,ncross,sizeof(SRCrossing),sr_crossing_compare);
+  for(i=0;i<ncross;i++){
+    x=cross[i].point;before[x]=after[x]=-1;
+    if(i && cross[i-1].a==cross[i].a && cross[i-1].b==cross[i].b){y=cross[i-1].point;before[x]=y;after[y]=x;}
+  }
+  /* Only consecutive crossings in BOTH orders bound an empty bigon. Removing
+   * arbitrary same-edge pairs could move a curve through another curve. */
+  while(head<tail){
+    x=queue[head++];if(!active[x])continue;y=wirenext[x];
+    if(!active[y] || (before[x]!=y && after[x]!=y))continue;
+    i=routeid[x];a=wireprev[x];b=wirenext[y];
+    if(active[a])wirenext[a]=b;else routes[i].poly[1]=b;
+    if(active[b])wireprev[b]=a;
+    prev=before[x]==y ? before[y] : before[x];next=after[x]==y ? after[y] : after[x];
+    if(prev>=0)after[prev]=next;if(next>=0)before[next]=prev;
+    active[x]=active[y]=0;
+    if(active[a])queue[tail++]=a;
+    if(prev>=0)queue[tail++]=prev;if(next>=0)queue[tail++]=next;
+  }
+  for(i=0;i<n;i++)if(routes[i].plen){
+    x=routes[i].poly[1];used=1;
+    while(active[x]){routes[i].poly[used++]=x;x=wirenext[x];}
+    routes[i].poly[used++]=x;routes[i].plen=used;
+    free(routes[i].path);routes[i].path=NULL;routes[i].length=0;
+  }
+  /* Reclaim obsolete crossing points and cell centers as well as triangles. */
+  used=m->base_np;for(i=0;i<m->base_np;i++)local[i]=i;
+  for(i=m->base_np;i<m->np;i++)if(active[i]){local[i]=used;m->points[used++]=m->points[i];}
+  m->np=used;
+  for(i=0;i<n;i++)if(routes[i].plen)for(j=0;j<routes[i].plen;j++)routes[i].poly[j]=local[routes[i].poly[j]];
+  for(i=0;i<m->nbases;i++)heads[i]=-1;
+  chords=sr_alloc(ncross+n,sizeof(SRChord));
+  for(i=0;i<n;i++)if(routes[i].plen){
+    base=routes[i].startbase;
+    for(j=1;j<routes[i].plen;j++){
+      x=routes[i].poly[j-1];y=routes[i].poly[j];
+      chords[nchord].a=x;chords[nchord].b=y;chords[nchord].next=heads[base];heads[base]=nchord++;
+      if(j<routes[i].plen-1){a=m->points[y].sides[0];b=m->points[y].sides[1];if(base!=a && base!=b){fprintf(stderr,"Surface compaction broke a normal arc.\n");exit(1);}base=base==a ? b : a;}
+    }
+    if(base!=routes[i].endbase){fprintf(stderr,"Surface compaction changed an endpoint sector.\n");exit(1);}
+  }
+  m->nt=m->nbases;memcpy(m->triangles,m->base_triangles,m->nt*sizeof(SRTriangle));
+  boundary=sr_alloc(2*ncross+2*n+3,sizeof(SRBoundary));half=sr_alloc(6*ncross+6*n+6,sizeof(SRHalfedge));
+  polygon=sr_alloc(2*ncross+2*n+3,sizeof(int));offset=sr_alloc(2*ncross+2*n+4,sizeof(int));
+  for(base=0;base<m->nbases;base++)if(heads[base]>=0){
+    t=m->base_triangles[base];count=3;
+    for(j=0;j<3;j++){boundary[j].point=t.v[j];boundary[j].t=j;local[t.v[j]]=-1;}
+    for(h=heads[base];h>=0;h=chords[h].next)for(j=0;j<2;j++){
+      x=j ? chords[h].b : chords[h].a;if(x<m->base_np)continue;
+      a=m->points[x].sides[0];b=m->points[x].sides[1];a=a==base ? b : a;
+      for(k=0;k<3;k++)if(t.next[k]==a)break;
+      boundary[count].point=x;boundary[count++].t=k+sr_edge_parameter(m,x,t.v[k],t.v[(k+1)%3]);local[x]=-1;
+    }
+    qsort(boundary,count,sizeof(SRBoundary),sr_boundary_compare);
+    used=0;for(j=0;j<count;j++)if(local[boundary[j].point]<0){boundary[used]=boundary[j];local[boundary[j].point]=used++;}count=used;
+    nh=0;
+    for(j=0;j<count;j++){half[nh].a=j;half[nh++].b=(j+1)%count;half[nh].a=(j+1)%count;half[nh++].b=j;}
+    for(h=heads[base];h>=0;h=chords[h].next){a=local[chords[h].a];b=local[chords[h].b];half[nh].a=a;half[nh++].b=b;half[nh].a=b;half[nh++].b=a;}
+    qsort(half,nh,sizeof(SRHalfedge),sr_halfedge_compare);
+    for(j=0;j<=count;j++)offset[j]=0;
+    for(j=0;j<nh;j++){offset[half[j].a+1]++;half[j].used=0;}
+    for(j=0;j<count;j++)offset[j+1]+=offset[j];
+    for(j=0;j<nh;j++){
+      a=half[j].a;b=half[j].b;
+      for(k=offset[b];k<offset[b+1];k++)if(half[k].b==a)break;
+      half[j].next=k==offset[b] ? offset[b+1]-1 : k-1;
+    }
+    first=1;
+    for(face=0;face<nh;face++)if(!half[face].used){
+      used=0;j=face;do{polygon[used++]=boundary[half[j].a].point;half[j].used=1;j=half[j].next;}while(j!=face);
+      area=0;for(j=1;j<used-1;j++)area+=sr_area(m->points[polygon[0]],m->points[polygon[j]],m->points[polygon[j+1]],m->normals[base]);
+      if(area<=0)continue; /* The clockwise outer face. */
+      owner=t.owner;
+      if(used==3){
+        if(owner){for(k=0;k<3 && polygon[0]!=m->vertex[owner];k++){x=polygon[0];polygon[0]=polygon[1];polygon[1]=polygon[2];polygon[2]=x;}if(k==3){fprintf(stderr,"Surface compaction lost a vertex.\n");exit(1);}}
+        sr_triangle(m,polygon[0],polygon[1],polygon[2],owner);m->triangles[m->nt-1].base=base;
+        if(first){m->triangles[base]=m->triangles[--m->nt];first=0;}
+      }else{
+        double ear,bestear;int tip,left,right;
+        if(owner){fprintf(stderr,"Surface compaction lost a vertex fan.\n");exit(1);}
+        /* A minimal triangulation avoids introducing another layer of cell
+         * centers. Keep positive area in the remainder when boundary points
+         * are collinear, so no zero-area ears survive at the end. */
+        while(used>3){
+          tip=-1;bestear=0;
+          for(j=0;j<used;j++){
+            ear=sr_area(m->points[polygon[(j+used-1)%used]],m->points[polygon[j]],m->points[polygon[(j+1)%used]],m->normals[base]);
+            if(ear>bestear && ear<area*(1-1e-10)){bestear=ear;tip=j;}
+          }
+          if(tip<0){fprintf(stderr,"Surface compaction found a degenerate cell.\n");exit(1);}
+          left=polygon[(tip+used-1)%used];right=polygon[(tip+1)%used];
+          sr_triangle(m,left,polygon[tip],right,0);m->triangles[m->nt-1].base=base;
+          if(first){m->triangles[base]=m->triangles[--m->nt];first=0;}
+          memmove(polygon+tip,polygon+tip+1,(used-tip-1)*sizeof(int));used--;area-=bestear;
+        }
+        sr_triangle(m,polygon[0],polygon[1],polygon[2],0);m->triangles[m->nt-1].base=base;
+        if(first){m->triangles[base]=m->triangles[--m->nt];first=0;}
+      }
+    }
+  }
+  for(i=0;i<n;i++)if(!routes[i].plen){routes[i].start=routes[i].startbase;routes[i].end=routes[i].endbase;}
+  sr_route_walls(m,routes,n,-1);
+  free(before);free(after);free(wireprev);free(wirenext);free(routeid);free(queue);free(active);free(heads);free(local);free(cross);free(chords);free(boundary);free(half);free(polygon);free(offset);
+}
+
+/* The normal arcs lie in convex original triangles. Their endpoint order on
+ * each original edge is a complete noncrossing constraint, so spacing and
+ * shortening need only solve coupled one-dimensional problems at portals. */
+static void sr_normal_flow(SRMesh *m,SRRoute *routes,int n)
+{
+  SRCrossing *cross=sr_alloc(m->np,sizeof(SRCrossing));
+  int *wp=sr_alloc(m->np,sizeof(int)),*wn=sr_alloc(m->np,sizeof(int));
+  int *left=sr_alloc(m->np,sizeof(int)),*right=sr_alloc(m->np,sizeof(int)),*ea=sr_alloc(m->np,sizeof(int)),*eb=sr_alloc(m->np,sizeof(int));
+  double *parameter=sr_alloc(m->np,sizeof(double));
+  int i,j,k,a,b,x,y,count=0,start,end,iter;double lo,hi,t,grad,hess,dist,dot,len2,delta,weight;SRPoint p,q;SRTriangle face;
+  for(i=0;i<n;i++)for(j=1;j<routes[i].plen-1;j++){
+    x=routes[i].poly[j];wp[x]=routes[i].poly[j-1];wn[x]=routes[i].poly[j+1];
+    a=m->points[x].sides[0];b=m->points[x].sides[1];if(a>b){k=a;a=b;b=k;}
+    face=m->base_triangles[a];for(k=0;k<3;k++)if(face.next[k]==b)break;
+    ea[x]=face.v[k];eb[x]=face.v[(k+1)%3];
+    cross[count].point=x;cross[count].a=a;cross[count].b=b;
+    cross[count++].t=sr_edge_parameter(m,x,ea[x],eb[x]);
+  }
+  qsort(cross,count,sizeof(SRCrossing),sr_crossing_compare);
+  for(start=0;start<count;start=end){
+    end=start+1;while(end<count && cross[end].a==cross[start].a && cross[end].b==cross[start].b)end++;
+    for(i=start;i<end;i++){
+      x=cross[i].point;left[x]=i>start ? cross[i-1].point : -1;right[x]=i+1<end ? cross[i+1].point : -1;
+      parameter[x]=(i-start+1.0)/(end-start+1.0);
+      p=sr_lerp(m->points[ea[x]],m->points[eb[x]],parameter[x]);
+      for(k=0;k<3;k++)m->points[x].p[k]=p.p[k];
+    }
+  }
+  for(iter=0;iter<48;iter++)for(i=0;i<count;i++){
+    x=cross[iter%2 ? count-1-i : i].point;a=ea[x];b=eb[x];t=parameter[x];
+    lo=left[x]>=0 ? parameter[left[x]] : 0;hi=right[x]>=0 ? parameter[right[x]] : 1;
+    len2=0;for(k=0;k<3;k++){delta=m->points[b].p[k]-m->points[a].p[k];len2+=delta*delta;}
+    grad=hess=0;p=m->points[x];
+    for(j=0;j<2;j++){
+      y=j ? wn[x] : wp[x];q=m->points[y];dist=sr_distance(p,q);if(dist<1e-12)continue;
+      dot=0;for(k=0;k<3;k++)dot+=(p.p[k]-q.p[k])*(m->points[b].p[k]-m->points[a].p[k]);
+      grad+=dot/dist;hess+=len2/dist-dot*dot/(dist*dist*dist);
+    }
+    weight=0.003;
+    grad+=weight*(1/(hi-t)-1/(t-lo));hess+=weight*(1/((hi-t)*(hi-t))+1/((t-lo)*(t-lo)));
+    delta=-grad/hess;if(delta>0.4*(hi-t))delta=0.4*(hi-t);if(delta< -0.4*(t-lo))delta=-0.4*(t-lo);
+    parameter[x]=t+delta;p=sr_lerp(m->points[a],m->points[b],parameter[x]);
+    for(k=0;k<3;k++)m->points[x].p[k]=p.p[k];
+  }
+  free(cross);free(wp);free(wn);free(left);free(right);free(ea);free(eb);free(parameter);
+}
+
 /* Reopen the entire angular sector between the two neighboring darts. This
  * lets an edge leave a vertex in a new direction without changing its order. */
 static void sr_sector(SRMesh *m,int start,int *marked)
@@ -752,19 +971,20 @@ static void write_routed_surface(void)
   for(attempt=0;attempt<12;attempt++) {
     fprintf(stderr,"Routing genus %d surface (placement %d).\n",globalgenus,attempt+1);
     sr_mesh(&m,globalgenus,17+attempt*7919);sr_adjacency(&m);sr_smooth(&m);sr_base_normals(&m);sr_place_graph(&m);
+    if(m.compact){m.nbases=m.nt;m.base_np=m.np;m.base_triangles=sr_alloc(m.nt,sizeof(SRTriangle));memcpy(m.base_triangles,m.triangles,m.nt*sizeof(SRTriangle));}
     ok=sr_routes(&m,&routes,&n);
     if(ok && sr_valid_geometry(&m)) {
       score=0;for(i=0;i<n;i++){score+=0.004*routes[i].plen;for(j=1;j<routes[i].plen;j++)score+=sr_distance(m.points[routes[i].poly[j-1]],m.points[routes[i].poly[j]]);}
       fprintf(stderr,"Surface layout score %.3f.\n",score);
       if(score<bestscore){if(bestroutes)sr_free(&bestmesh,bestroutes,bestn);bestmesh=m;bestroutes=routes;bestn=n;bestscore=score;}
       else sr_free(&m,routes,n);
-      if(++successes==(globalgenus>=8 ? 2 : 4))break;
+      if(++successes==(m.compact ? 1 : (globalgenus>=8 ? 2 : 4)))break;
     } else sr_free(&m,routes,n);
   }
   if(!bestroutes){fprintf(stderr,"Surface routing could not find disjoint corridors. Try a smaller graph or a different rotation system. No invalid drawing was exported.\n");exit(1);}
   m=bestmesh;routes=bestroutes;n=bestn;
-  sr_relax(&m,routes,n);
-  sr_cleanup_routes(&m,routes,n);
+  if(m.compact)sr_normal_flow(&m,routes,n);
+  else {sr_relax(&m,routes,n);sr_cleanup_routes(&m,routes,n);}
   if(!sr_valid_geometry(&m)){fprintf(stderr,"Surface router: numerical degeneration during relaxation. No drawing exported.\n");sr_free(&m,routes,n);exit(1);}
   objdrawings++;
   if(objdrawings==1)snprintf(filename,sizeof(filename),"%s.obj",objprefix);
@@ -775,6 +995,7 @@ static void write_routed_surface(void)
   base=strrchr(material,'/');base=base ? base+1 : material;
   out=fopen(filename,"w");if(!out){fprintf(stderr,"Cannot write %s.\n",filename);exit(1);}
   fprintf(out,"# Disjoint surface corridors; genus %d; rotation-preserving vertex disks\nmtllib %s\no surface\nusemtl graph_surface\ns 1\n",globalgenus,base);
+  if(m.compact)fprintf(out,"# surface_layout normal_arcs\n");
   for(i=0;i<m.np;i++)fprintf(out,"v %.15g %.15g %.15g\n",m.points[i].p[0],m.points[i].p[1],m.points[i].p[2]);
   for(i=0;i<m.nt;i++)fprintf(out,"f %d %d %d\n",m.triangles[i].v[0]+1,m.triangles[i].v[1]+1,m.triangles[i].v[2]+1);
   fprintf(out,"g embedded_graph_edges\n");
