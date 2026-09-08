@@ -5,4 +5,4 @@
 from ._core import GraphGenusError, cite, embed
 
 __all__ = ["GraphGenusError", "cite", "embed"]
-__version__ = "0.1.0"
+__version__ = "0.1.3"

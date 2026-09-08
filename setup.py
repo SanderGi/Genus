@@ -116,7 +116,7 @@ class build_py_with_native_tools(build_py):
 
 setup(
     name="graph-genus",
-    version="0.1.2",
+    version="0.1.3",
     description="Python bindings for various graph genus and embedding tools",
     long_description=Path("README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
