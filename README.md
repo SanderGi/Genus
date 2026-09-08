@@ -36,6 +36,7 @@ genus, rotation_system = gg.embed(adjacency_list)
 ```
 - As an optional parameter to `embed`, you can use `algorithm="page"` (default), `algorithm="multi_genus"`, and `algorithm="none"`.       ``"page"`` is especially fast for high girth graphs and scales well in general too. ``"multi_genus"`` is included with permission from Gunnar Brinkmann, is faster for some graph families, and uses less resources, but handles at most 128 vertices and 512 undirected edges. ``"none"`` treats ``adjacency_list`` as an already chosen rotation system.
 - You can also use `output_format="rotation_system"` (default), `output_format="drawing"` for TikZ/LaTeX output of [the fundamental polygon](https://en.wikipedia.org/wiki/Fundamental_polygon), and `output_format="3D"` for OBJ output of the 3D surface with the graph drawn on it.
+- Higher-genus 3D output routes edges directly on a surface mesh and preserves the supplied rotations. See [the layout algorithm and its limits](docs/3d-layout.md).
 - PAGE additionally allows the `low_memory=True` option for very large graphs with tens of thousands of edges.
 - Use `gg.cite(algorithm, output_format)` to retrieve the relevant BibTeX entries.
 

@@ -14,6 +14,7 @@ RUN gcc -DONLY_SIMPLE_CYCLES=1 -O3 -ftree-vectorize -funroll-loops -Wall -std=c1
 COPY MultiGenus/multi_genus.c multi_genus.c
 RUN gcc -O3 -DLONG -march=native -o multi_genus multi_genus.c -lm
 COPY MultiGenus/planar_draw.c planar_draw.c
+COPY MultiGenus/surface_router.h surface_router.h
 RUN gcc -std=gnu89 -O3 -o planar_draw planar_draw.c -lm
 
 # Now we take a minimal python image and copy the compiled C binary to it

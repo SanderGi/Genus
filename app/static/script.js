@@ -289,10 +289,56 @@ function makeTextSprite(text, size) {
   return sprite;
 }
 
-function makeGraphOverlay(graphLines, graphPoints, center, radius) {
+// Retain every OBJ polyline knot. Resampling a CurvePath uniformly can skip
+// short segments at a handle or a vertex and cut through the surface.
+function surfacePolylineGeometry(points, radius) {
+  const sides = 6;
+  const positions = [];
+  const indices = [];
+  const tangent = new THREE.Vector3();
+  const previousTangent = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const binormal = new THREE.Vector3();
+  const turn = new THREE.Quaternion();
+  for (let i = 0; i < points.length; i++) {
+    tangent.subVectors(
+      points[Math.min(i + 1, points.length - 1)],
+      points[Math.max(i - 1, 0)],
+    ).normalize();
+    if (i === 0) {
+      normal.set(Math.abs(tangent.x) < 0.8 ? 1 : 0,
+        Math.abs(tangent.x) < 0.8 ? 0 : 1, 0);
+    } else {
+      turn.setFromUnitVectors(previousTangent, tangent);
+      normal.applyQuaternion(turn);
+    }
+    normal.addScaledVector(tangent, -normal.dot(tangent)).normalize();
+    binormal.crossVectors(tangent, normal).normalize();
+    for (let side = 0; side < sides; side++) {
+      const angle = 2 * Math.PI * side / sides;
+      const offset = normal.clone().multiplyScalar(radius * Math.cos(angle))
+        .addScaledVector(binormal, radius * Math.sin(angle));
+      positions.push(points[i].x + offset.x, points[i].y + offset.y,
+        points[i].z + offset.z);
+      if (i > 0) {
+        const a = (i - 1) * sides + side;
+        const b = (i - 1) * sides + (side + 1) % sides;
+        indices.push(a, b, a + sides, b, b + sides, a + sides);
+      }
+    }
+    previousTangent.copy(tangent);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
+function makeGraphOverlay(graphLines, graphPoints, center, radius, surfaceRoutes = false) {
   const group = new THREE.Group();
-  const strokeRadius = Math.max(radius * 0.0016, 0.0025);
-  const labelScale = Math.max(radius * 0.075, 0.1);
+  // Handle dimensions stay constant as genus grows; stroke width should too.
+  const strokeRadius = surfaceRoutes ? 0.005 : Math.max(radius * 0.0016, 0.0025);
+  const labelScale = surfaceRoutes ? 0.22 : Math.max(radius * 0.075, 0.1);
   const labelOffset = Math.max(radius * 0.012, strokeRadius * 3);
   const strokeMaterial = new THREE.MeshBasicMaterial({
     color: 0x111111,
@@ -320,17 +366,22 @@ function makeGraphOverlay(graphLines, graphPoints, center, radius) {
     if (points.length > 0) {
       capPoints.push(points[0], points[points.length - 1]);
     }
-    const path = new THREE.CurvePath();
-    for (let i = 0; i < points.length - 1; i++) {
-      path.add(new THREE.LineCurve3(points[i], points[i + 1]));
+    let tube;
+    if (surfaceRoutes) {
+      tube = surfacePolylineGeometry(points, strokeRadius);
+    } else {
+      const path = new THREE.CurvePath();
+      for (let i = 0; i < points.length - 1; i++) {
+        path.add(new THREE.LineCurve3(points[i], points[i + 1]));
+      }
+      tube = new THREE.TubeGeometry(
+        path,
+        Math.max(6, Math.min(2048, points.length - 1)),
+        strokeRadius,
+        5,
+        false,
+      );
     }
-    const tube = new THREE.TubeGeometry(
-      path,
-      Math.max(6, Math.min(2048, points.length - 1)),
-      strokeRadius,
-      5,
-      false,
-    );
     group.add(new THREE.Mesh(tube, strokeMaterial));
   }
 
@@ -473,6 +524,7 @@ function renderModel(model, container) {
     graphPoints,
     center,
     radius,
+    model.genus >= 2,
   );
   scene.add(graphOverlay);
 

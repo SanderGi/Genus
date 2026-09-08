@@ -26,7 +26,7 @@ multi_genus: multi_genus.c
 multi_genus_parallel: multi_genus_parallel.c
 	$(CC) -O3 -DLONG -march=native -pthread -o "$(BDIR)/multi_genus_parallel" multi_genus_parallel.c -lm
 
-planar_draw: planar_draw.c
+planar_draw: planar_draw.c surface_router.h
 	$(CC) -std=gnu89 -O3 -o "$(BDIR)/planar_draw" planar_draw.c -lm
 
 run_wine: multi_genus.exe
@@ -49,7 +49,7 @@ multi_genus_parallel.exe: multi_genus_parallel.c
 #   brew install mingw-w64
 	$(MCC) -O3 -DLONG -o "$(BDIR)/multi_genus_parallel.exe" multi_genus_parallel.c -lm
 
-planar_draw.exe: planar_draw.c
+planar_draw.exe: planar_draw.c surface_router.h
 #   brew install mingw-w64
 	$(MCC) -std=gnu89 -O3 -o "$(BDIR)/planar_draw.exe" planar_draw.c -lm
 

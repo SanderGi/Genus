@@ -101,10 +101,6 @@ def embed(
         return genus, rotation_system
     if output_format == "drawing":
         return genus, _run_planar_draw(rotation_system)
-    if genus > 1:
-        raise GraphGenusError(
-            "3D output is currently supported only for genus 0 and genus 1 embeddings."
-        )
     return genus, _run_planar_draw_obj(rotation_system)
 
 

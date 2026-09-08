@@ -45,9 +45,14 @@ class GraphGenusPackageTests(unittest.TestCase):
         self.assertIn("\\begin{tikzpicture}", gg.embed(K4, output_format="drawing")[1])
         self.assertTrue(gg.embed(K33, output_format="3D")[1].startswith("#"))  # type: ignore
 
-    def test_3d_output_guard_for_higher_genus(self):
-        with self.assertRaises(gg.GraphGenusError):
-            gg.embed(K8, output_format="3D")
+    def test_3d_output_for_higher_genus(self):
+        genus, obj = gg.embed(
+            [[v for v in range(5) if v != u] for u in range(5)],
+            algorithm="none", output_format="3D",
+        )
+        self.assertEqual(genus, 2)
+        self.assertIn("rotation-preserving vertex disks", obj)
+        self.assertEqual(sum(line.startswith("l ") for line in obj.splitlines()), 10)
 
     def test_citations(self):
         self.assertEqual(gg.cite("multi_genus", "drawing").count("@"), 3)

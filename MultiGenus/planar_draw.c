@@ -113,10 +113,13 @@ int chosenvertex=0, chosenedge[2]={0};
 int firstpage=1;
 char *objprefix=NULL;
 int objdrawings=0;
+int legacy_obj_surface=0;
 int boundary_side[N+1], boundary_cyc[N+1];
 double boundary_t[N+1];
 char allowedcut[SMALLN][SMALLN];
 #define CANBECUT(a,b) (((a)>=SMALLN) || (((b)>=SMALLN)) || allowedcut[a][b])
+
+#include "surface_router.h"
 
 int cutnext();
 
@@ -3768,7 +3771,8 @@ void usage(char str[])
   fprintf(stderr,"\t that this face is not chosen as the outer face by cf or v. Note that even then it is possible that a solution is hard to find or doesn't exist.\n");
   fprintf(stderr,"Option s makes the program use straight line segments for the boundary, so the outer face will be a polygon instead of a circle.\n");
   fprintf(stderr,"Option t makes the program interpret the input not as binary input of planarcode type, but as the ASCII version of it.\n");
-  fprintf(stderr,"Option o prefix writes prefix.obj, prefix.mtl, and prefix.ppm as a textured canonical-handle OBJ export instead of writing LaTeX to stdout.\n");
+  fprintf(stderr,"Option --legacy-surface preserves the original higher-genus mesh for saved manual coordinates.\n");
+  fprintf(stderr,"Option o prefix writes prefix.obj and prefix.mtl as an OBJ export instead of writing LaTeX to stdout. Genus >=2 uses disjoint surface routing.\n");
   exit(1);
 }
 
@@ -3826,6 +3830,7 @@ int main(int argc, char *argv[])
       else if (argv[i][0]=='s') straight=1;
       else if (argv[i][0]=='l') labels=1;
       else if (argv[i][0]=='t') text=1;
+      else if (strcmp(argv[i],"--legacy-surface")==0) legacy_obj_surface=1;
       else if (argv[i][0]=='o') { i++; if (i>=argc) usage(argv[0]); objprefix=argv[i]; }
       else if (argv[i][0]=='c')
 	{ if (argv[i][1]=='v') {i++; chosenvertex=atoi(argv[i]); }
@@ -3884,7 +3889,8 @@ for (;lesecode(code,&lauf,stdin);)
     if (genus>MAXGENUS) { fprintf(stderr,"Genus %d larger than maximum allowed genus %d. Exit.\n",genus, MAXGENUS); exit(1); }
     if (genus>MAXCOLOURGENUS) { blackwhite=1; } else blackwhite=lblackwhite; 
 
-    if (genus==0) { embed_planar(); drawings++; cleargraph(); }
+    if (genus>=2 && objprefix && !legacy_obj_surface) { write_routed_surface(); drawings++; cleargraph(); }
+    else if (genus==0) { embed_planar(); drawings++; cleargraph(); }
     else 
       {
 	numcycles=2*genus;

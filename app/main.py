@@ -532,7 +532,7 @@ def render_multicode_png(multicode):
         return crop_png((tmpdir / "embedding.png").read_bytes())
 
 
-def render_multicode_obj(multicode):
+def render_multicode_obj(multicode, legacy_surface=False):
     draw_cmd = find_executable(
         "./planar_draw",
         "../MultiGenus/planar_draw",
@@ -541,7 +541,8 @@ def render_multicode_obj(multicode):
         tmpdir = Path(tmpdir)
         prefix = tmpdir / "surface"
         draw = subprocess.run(
-            [draw_cmd, "f", "l", "o", str(prefix)],
+            [draw_cmd, "f", "l", "o", str(prefix)]
+            + (["--legacy-surface"] if legacy_surface else []),
             input=multicode,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -837,23 +838,12 @@ def stream(ws):
             multicode = None
         if multicode is None:
             ws.send("JSON:" + json.dumps(result, sort_keys=True))
-        elif output_format == "3d" and result.get("genus", 0) > 1:  # type: ignore
-            ws.send(
-                "JSON:"
-                + json.dumps(
-                    {
-                        "error": (
-                            "3D output is currently supported only for genus 0 "
-                            "and genus 1 embeddings."
-                        ),
-                        "genus": result["genus"],
-                    },
-                    sort_keys=True,
-                )
-            )
         else:
             try:
-                model = render_multicode_obj(multicode)
+                # The saved K3,3 coordinates use the original surface geometry.
+                model = render_multicode_obj(
+                    multicode, legacy_surface=output_format == "3d_raw"
+                )
             except Exception as exc:
                 ws.send("JSON:" + json.dumps({"error": str(exc)}, sort_keys=True))
             else:
