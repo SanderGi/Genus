@@ -12,9 +12,8 @@ are adjacent when their subsets are disjoint. Its genus is
 1 - h*(h-1)/2 + h*(h-1)*(h-2)*(h-3)/16.
 ```
 
-This is a standalone construction, not a PAGE search. It requires **Python
-3.10 or later**, with no third-party packages. Run without `-O` or `-OO`:
-these options disable assertions used in the checks.
+The code requires **Python 3.10 or later**, with no third-party packages. 
+Run without `-O` or `-OO` to disable assertions used in the checks.
 
 ## Verify the supplied certificates
 
@@ -28,8 +27,8 @@ python BipartiteKneser/test_certificates.py
 The first command checks all 20,480 boundary patterns, replays all seven
 exceptional-prime certificates, tests the generic construction at
 `h = 131, 139, 163, 179`, and independently traces the expanded embeddings
-for `h = 11, 19`. It also runs the original note's interval certificate as
-a supplementary check; the paper proves the interval lemma algebraically.
+for `h = 11, 19`. It also runs the interval certificate as a supplementary 
+check; the paper proves the interval lemma algebraically.
 
 The second command runs 18 regression tests, including rejection of altered
 certificates and checks of the paper's translation order and splice paths.
@@ -48,8 +47,6 @@ certificates and checks of the paper's translation order and splice paths.
 | [`results/verification.json`](results/verification.json) | Saved output of the default verification command, with source hashes. | Reproduction record |
 | [`results/regression_through_1000.json`](results/regression_through_1000.json) | Checks at all 43 admissible primes through 1000. | Supplementary regression record |
 | [`results/unit_tests.txt`](results/unit_tests.txt) | Output of the 18 regression tests. | Test record |
-| [`PROVENANCE.md`](PROVENANCE.md) | Changes from the supplied proof-note code. | Code history |
-| [`CHECKSUMS.sha256`](CHECKSUMS.sha256) | SHA-256 hashes of the distributed files. | File integrity |
 
 ## Construct a base rotation
 
@@ -155,7 +152,7 @@ python BipartiteKneser/verify_all.py --test-through 1000 \
 ```
 
 The extra prime tests are regression checks, not the proof of the infinite
-family. From this folder, `sha256sum -c CHECKSUMS.sha256` checks file integrity.
+family.
 
 ## License
 
