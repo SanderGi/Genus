@@ -1,0 +1,269 @@
+{
+  "status": "passed",
+  "source_sha256": {
+    "kneser_constructor.py": "f6b63afccca4d04549cfc4327347de00abf9ba629dbcc77fd70c954f6e77a65a",
+    "verify_bounded_permutation.py": "0d8712d1a812e54751d2a07adf21234cb40f480214f219409f67ca8ae57b89d9",
+    "verify_exceptional.py": "a761f517ba2853405d6162d03c757cad42d2dfbef07e5327ce4230b90f1d670e",
+    "verify_expanded.py": "cfe905334bfea82fea34e9a3aab2d2c9c0023e60b024bd0abe60fc7c167d956a",
+    "verify_all.py": "fcdea685bdc671d9e3eef7448627dcd9a13e00ac5cec1830f93287196520a1cd",
+    "exceptional_certificates.json": "89250011a472c9446360e71e5736abbbf4e7f406a3a3ef6b27549636e33e75a8"
+  },
+  "finite_certificate": {
+    "supplementary_interval": {
+      "states": 17,
+      "transitions": 34,
+      "max_ones_before_full": 4
+    },
+    "boundary": [
+      {
+        "case": 1,
+        "patterns": 4096,
+        "sign_choices_tested": 11076,
+        "transfer_choices_tested": 19168
+      },
+      {
+        "case": 2,
+        "patterns": 16384,
+        "sign_choices_tested": 130368,
+        "transfer_choices_tested": 83254
+      }
+    ]
+  },
+  "exceptional_primes": [
+    {
+      "h": 11,
+      "u": 3,
+      "base_cycle_length": 36,
+      "vertices": 110,
+      "edges": 1980,
+      "faces": 990,
+      "genus": 441,
+      "single_cycle": true,
+      "Q1_checked": 36,
+      "Q2_checked": 36,
+      "all_faces_length_four": true
+    },
+    {
+      "h": 19,
+      "u": 4,
+      "base_cycle_length": 136,
+      "vertices": 342,
+      "edges": 23256,
+      "faces": 11628,
+      "genus": 5644,
+      "single_cycle": true,
+      "Q1_checked": 136,
+      "Q2_checked": 136,
+      "all_faces_length_four": true
+    },
+    {
+      "h": 43,
+      "u": 9,
+      "base_cycle_length": 820,
+      "vertices": 1806,
+      "edges": 740460,
+      "faces": 370230,
+      "genus": 184213,
+      "single_cycle": true,
+      "Q1_checked": 820,
+      "Q2_checked": 820,
+      "all_faces_length_four": true,
+      "compact_record_replayed": {
+        "A": 16,
+        "j": 4,
+        "upsilon": 9,
+        "outside_mask": 2,
+        "interval_mask": 192,
+        "forward_interval_maps": [
+          "120",
+          "102"
+        ]
+      }
+    },
+    {
+      "h": 59,
+      "u": 3,
+      "base_cycle_length": 1596,
+      "vertices": 3422,
+      "edges": 2730756,
+      "faces": 1365378,
+      "genus": 680979,
+      "single_cycle": true,
+      "Q1_checked": 1596,
+      "Q2_checked": 1596,
+      "all_faces_length_four": true,
+      "compact_record_replayed": {
+        "A": 9,
+        "j": 5,
+        "upsilon": 17,
+        "outside_mask": 0,
+        "interval_mask": 8192,
+        "forward_interval_maps": [
+          "210",
+          "120"
+        ]
+      }
+    },
+    {
+      "h": 67,
+      "u": 4,
+      "base_cycle_length": 2080,
+      "vertices": 4422,
+      "edges": 4598880,
+      "faces": 2299440,
+      "genus": 1147510,
+      "single_cycle": true,
+      "Q1_checked": 2080,
+      "Q2_checked": 2080,
+      "all_faces_length_four": true,
+      "compact_record_replayed": {
+        "A": 16,
+        "j": 6,
+        "upsilon": 13,
+        "outside_mask": 2,
+        "interval_mask": 786432,
+        "forward_interval_maps": [
+          "120",
+          "210"
+        ]
+      }
+    },
+    {
+      "h": 83,
+      "u": 3,
+      "base_cycle_length": 3240,
+      "vertices": 6806,
+      "edges": 11025720,
+      "faces": 5512860,
+      "genus": 2753028,
+      "single_cycle": true,
+      "Q1_checked": 3240,
+      "Q2_checked": 3240,
+      "all_faces_length_four": true,
+      "compact_record_replayed": {
+        "A": 3,
+        "j": 8,
+        "upsilon": 17,
+        "outside_mask": 0,
+        "interval_mask": 8388608,
+        "forward_interval_maps": [
+          "210",
+          "021"
+        ]
+      }
+    },
+    {
+      "h": 107,
+      "u": 3,
+      "base_cycle_length": 5460,
+      "vertices": 11342,
+      "edges": 30963660,
+      "faces": 15481830,
+      "genus": 7735245,
+      "single_cycle": true,
+      "Q1_checked": 5460,
+      "Q2_checked": 5460,
+      "all_faces_length_four": true,
+      "compact_record_replayed": {
+        "A": 13,
+        "j": 11,
+        "upsilon": 23,
+        "outside_mask": 0,
+        "interval_mask": 206158430208,
+        "forward_interval_maps": [
+          "120",
+          "120"
+        ]
+      }
+    }
+  ],
+  "generic_regression_tests": [
+    {
+      "h": 131,
+      "u": 3,
+      "base_cycle_length": 8256,
+      "vertices": 17030,
+      "edges": 70299840,
+      "faces": 35149920,
+      "genus": 17566446,
+      "single_cycle": true,
+      "Q1_checked": 8256,
+      "Q2_checked": 8256,
+      "all_faces_length_four": true,
+      "A": 15,
+      "j": 10,
+      "upsilon": 21
+    },
+    {
+      "h": 139,
+      "u": 4,
+      "base_cycle_length": 9316,
+      "vertices": 19182,
+      "edges": 89349756,
+      "faces": 44674878,
+      "genus": 22327849,
+      "single_cycle": true,
+      "Q1_checked": 9316,
+      "Q2_checked": 9316,
+      "all_faces_length_four": true,
+      "A": 6,
+      "j": 6,
+      "upsilon": 55
+    },
+    {
+      "h": 163,
+      "u": 4,
+      "base_cycle_length": 12880,
+      "vertices": 26406,
+      "edges": 170054640,
+      "faces": 85027320,
+      "genus": 42500458,
+      "single_cycle": true,
+      "Q1_checked": 12880,
+      "Q2_checked": 12880,
+      "all_faces_length_four": true,
+      "A": 15,
+      "j": 4,
+      "upsilon": 71
+    },
+    {
+      "h": 179,
+      "u": 3,
+      "base_cycle_length": 15576,
+      "vertices": 31862,
+      "edges": 248141256,
+      "faces": 124070628,
+      "genus": 62019384,
+      "single_cycle": true,
+      "Q1_checked": 15576,
+      "Q2_checked": 15576,
+      "all_faces_length_four": true,
+      "A": 9,
+      "j": 17,
+      "upsilon": 35
+    }
+  ],
+  "expanded_rotation_tests": [
+    {
+      "h": 11,
+      "vertices": 110,
+      "edges": 1980,
+      "faces": 990,
+      "genus": 441,
+      "all_darts_traced": 3960,
+      "all_faces_length_four": true,
+      "optimal": true
+    },
+    {
+      "h": 19,
+      "vertices": 342,
+      "edges": 23256,
+      "faces": 11628,
+      "genus": 5644,
+      "all_darts_traced": 46512,
+      "all_faces_length_four": true,
+      "optimal": true
+    }
+  ],
+  "regression_test_limit": 179
+}

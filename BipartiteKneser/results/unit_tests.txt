@@ -1,0 +1,23 @@
+test_all_seven_records (__main__.CertificateTests.test_all_seven_records) ... ok
+test_bounded_checker_rejects_empty_mask_list (__main__.CertificateTests.test_bounded_checker_rejects_empty_mask_list) ... ok
+test_default_data_path_outside_working_directory (__main__.CertificateTests.test_default_data_path_outside_working_directory) ... ok
+test_expanded_verifier_rejects_bad_rotation (__main__.CertificateTests.test_expanded_verifier_rejects_bad_rotation) ... ok
+test_generic_parameter_bounds (__main__.CertificateTests.test_generic_parameter_bounds) ... ok
+test_independent_verifier_rejects_bad_order (__main__.CertificateTests.test_independent_verifier_rejects_bad_order) ... ok
+test_independent_verifier_rejects_noninteger_label (__main__.CertificateTests.test_independent_verifier_rejects_noninteger_label) ... ok
+test_invalid_input_primes (__main__.CertificateTests.test_invalid_input_primes) ... ok
+test_optimized_python_is_rejected (__main__.CertificateTests.test_optimized_python_is_rejected) ... ok
+test_reject_changed_interval_switch (__main__.CertificateTests.test_reject_changed_interval_switch) ... ok
+test_reject_changed_parameters (__main__.CertificateTests.test_reject_changed_parameters) ... ok
+test_reject_duplicate_base_label (__main__.CertificateTests.test_reject_duplicate_base_label) ... ok
+test_reject_missing_prime (__main__.CertificateTests.test_reject_missing_prime) ... ok
+test_reject_out_of_range_masks (__main__.CertificateTests.test_reject_out_of_range_masks) ... ok
+test_reject_wrong_interval_maps (__main__.CertificateTests.test_reject_wrong_interval_maps) ... ok
+test_replay_does_not_search (__main__.CertificateTests.test_replay_does_not_search) ... ok
+test_splice_endpoints_and_coverage (__main__.CertificateTests.test_splice_endpoints_and_coverage) ... ok
+test_translation_order_matches_manuscript (__main__.CertificateTests.test_translation_order_matches_manuscript) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 5.068s
+
+OK
