@@ -21,8 +21,7 @@ class GraphGenusError(RuntimeError):
     """Raised when a bundled graph genus tool cannot produce the requested output."""
 
 
-PAGE_GENUS_RE = re.compile(r"genus\s+(\d+)", re.IGNORECASE)
-PAGE_GENUS_FOUND_RE = re.compile(r"Genus found:\s*(\d+)", re.IGNORECASE)
+PAGE_SOLUTION_RE = re.compile(r"^Solution with (\d+) cycles \(genus (\d+)\).*$", re.MULTILINE)
 MULTIGENUS_RE = re.compile(r"graphs with genus\s+(\d+):", re.IGNORECASE)
 
 PAGE_BIBTEX = """@article{Metzger_2026,
@@ -62,6 +61,7 @@ def embed(
     algorithm: Algorithm = "page",
     output_format: OutputFormat = "rotation_system",
     low_memory: bool = False,
+    genus_lower_bound: int | None = None,
 ) -> tuple[int, list[list[int]] | str]:
     """Embed a graph and return its genus plus the requested artifact.
 
@@ -76,6 +76,9 @@ def embed(
     - ``output_format`` -- ``"rotation_system"`` (default), ``"drawing"`` for
       TikZ/LaTeX output from ``planar_draw``, or ``"3D"`` for OBJ output.
     - ``low_memory`` -- true to run the low memory version of the algorithm if available. Might be slow but can make running on larger graphs possible.
+    - ``genus_lower_bound`` -- optional nonnegative integer for either PAGE mode.
+      PAGE skips genera below this bound. Supply it only when you know the
+      minimum genus of this graph is at least that large.
 
     OUTPUT:
 
@@ -89,11 +92,19 @@ def embed(
     algorithm = _normalize_algorithm(algorithm)
     output_format = _normalize_output_format(output_format)
 
+    if genus_lower_bound is not None:
+        if algorithm != "page":
+            raise ValueError("genus_lower_bound requires algorithm='page'")
+        if isinstance(genus_lower_bound, bool) or not isinstance(genus_lower_bound, int):
+            raise TypeError("genus_lower_bound must be an integer")
+        if genus_lower_bound < 0:
+            raise ValueError("genus_lower_bound must be nonnegative")
+
     if algorithm == "none":
         rotation_system = graph
         genus = genus_from_rotation(rotation_system)
     elif algorithm == "page":
-        genus, rotation_system = _run_page(graph, low_memory)
+        genus, rotation_system = _run_page(graph, low_memory, genus_lower_bound)
     else:
         genus, rotation_system = _run_multi_genus(graph)
 
@@ -174,6 +185,7 @@ def _validate_adjacency_list(
         raise TypeError("adjacency_list must be a sequence of neighbor sequences")
 
     graph: list[list[int]] = []
+    incidence: list[set[int]] = []
     n = len(adjacency_list)
     for vertex, neighbors in enumerate(adjacency_list):
         if not isinstance(neighbors, Sequence):
@@ -194,10 +206,11 @@ def _validate_adjacency_list(
             seen.add(neighbor)
             converted.append(neighbor)
         graph.append(converted)
+        incidence.append(seen)
 
     for vertex, neighbors in enumerate(graph):
         for neighbor in neighbors:
-            if vertex not in graph[neighbor]:
+            if vertex not in incidence[neighbor]:
                 raise ValueError(f"edge {vertex}-{neighbor} appears only once")
     return graph
 
@@ -215,15 +228,20 @@ def _normalize_output_format(output_format: str) -> OutputFormat:
     return normalized  # type: ignore[return-value]
 
 
-def _run_page(graph: list[list[int]], low_memory: bool) -> tuple[int, list[list[int]]]:
+def _run_page(
+    graph: list[list[int]], low_memory: bool, genus_lower_bound: int | None
+) -> tuple[int, list[list[int]]]:
     max_degree = max((len(neighbors) for neighbors in graph), default=0)
-    if max_degree < 2:
-        return genus_from_rotation(graph), graph
 
     with tempfile.TemporaryDirectory() as tmp:
         adjacency_file = Path(tmp) / "graph.adj"
-        _write_page_adjacency_file(graph, adjacency_file, max_degree)
+        _write_page_adjacency_file(graph, adjacency_file)
         env = os.environ.copy()
+        # A native CLI lower bound applies only to the graph it was proved for.
+        if genus_lower_bound is None:
+            env.pop("GLB", None)
+        else:
+            env["GLB"] = str(genus_lower_bound)
         env.update(
             {
                 "STDOUT": "1",
@@ -244,7 +262,7 @@ def _run_page(graph: list[list[int]], low_memory: bool) -> tuple[int, list[list[
     stderr = proc.stderr.decode("utf-8", errors="replace")
     if proc.returncode != 0:
         raise GraphGenusError(f"PAGE exited with status {proc.returncode}:\n{stderr}")
-    return _parse_page_solution(stdout, stderr, graph)
+    return _parse_page_solution(stdout, graph)
 
 
 def _run_multi_genus(graph: list[list[int]]) -> tuple[int, list[list[int]]]:
@@ -307,48 +325,46 @@ def _run_planar_draw_obj(rotation_system: list[list[int]]) -> str:
         return obj_path.read_text(encoding="utf-8", errors="replace")
 
 
-def _write_page_adjacency_file(
-    graph: list[list[int]], path: Path, max_degree: int
-) -> None:
-    edges = sum(len(neighbors) for neighbors in graph) // 2
-    lines = [f"{len(graph)} {edges}"]
-    for neighbors in graph:
-        padded = neighbors + [65535] * (max_degree - len(neighbors))
-        lines.append(" ".join(str(neighbor) for neighbor in padded))
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+def _write_page_adjacency_file(graph: list[list[int]], path: Path) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        print(len(graph), sum(map(len, graph)) // 2, file=handle)
+        for neighbors in graph:
+            print(*neighbors, file=handle)
 
 
 def _parse_page_solution(
-    stdout: str, stderr: str, graph: list[list[int]]
+    stdout: str, graph: list[list[int]]
 ) -> tuple[int, list[list[int]]]:
-    genus_match = PAGE_GENUS_RE.search(stdout) or PAGE_GENUS_FOUND_RE.search(stdout)
-    if genus_match is None:
-        genus_match = PAGE_GENUS_RE.search(stderr)
-    if genus_match is None:
-        raise GraphGenusError("PAGE did not report a genus")
-    genus = int(genus_match.group(1))
+    header = PAGE_SOLUTION_RE.search(stdout)
+    if header is None:
+        raise GraphGenusError("PAGE did not return a face certificate")
+    face_count, genus = map(int, header.groups())
+    body = stdout[header.end():].strip()
+    if graph == [[]] and body == "0" and (face_count, genus) == (1, 0):
+        return 0, [[]]
 
     n = len(graph)
+    incidence = list(map(set, graph))
     next_neighbor: list[dict[int, int]] = [dict() for _ in graph]
-    cycle_count = 0
-
-    for line in stdout.splitlines():
-        if not re.fullmatch(r"\s*\d+(?:\s+\d+)*\s*", line):
-            continue
-        cycle = [int(value) for value in line.split()]
-        if len(cycle) < 4 or cycle[0] != cycle[-1]:
-            continue
-        cycle = cycle[:-1]
-        cycle_count += 1
+    lines = body.splitlines()
+    if len(lines) != face_count:
+        raise GraphGenusError("PAGE returned the wrong number of faces")
+    for line in lines:
+        try:
+            cycle = list(map(int, line.split()))
+        except ValueError as exc:
+            raise GraphGenusError("PAGE returned an invalid facial walk") from exc
+        if len(cycle) < 3 or cycle[0] != cycle[-1]:
+            raise GraphGenusError("PAGE returned an open or empty facial walk")
+        cycle.pop()
         for i, vertex in enumerate(cycle):
-            incoming = cycle[i - 1]
-            outgoing = cycle[(i + 1) % len(cycle)]
-            if vertex < 0 or vertex >= n or incoming < 0 or outgoing < 0:
-                raise GraphGenusError("PAGE output contains an unexpected vertex label")
+            incoming, outgoing = cycle[i - 1], cycle[(i + 1) % len(cycle)]
+            if (not 0 <= vertex < n or incoming not in incidence[vertex]
+                    or outgoing not in incidence[vertex]):
+                raise GraphGenusError("PAGE face traverses a missing edge")
+            if incoming in next_neighbor[vertex]:
+                raise GraphGenusError("PAGE used a directed edge twice")
             next_neighbor[vertex][incoming] = outgoing
-
-    if cycle_count == 0:
-        raise GraphGenusError("PAGE did not write a rotation system for this graph")
 
     rotation: list[list[int]] = []
     for vertex, neighbors in enumerate(graph):
@@ -367,10 +383,12 @@ def _parse_page_solution(
             ordered.append(current)
         if next_neighbor[vertex].get(current) != first:
             raise GraphGenusError(f"Rotation at vertex {vertex} is not cyclic")
-        if set(ordered) != set(neighbors):
+        if set(ordered) != incidence[vertex]:
             raise GraphGenusError(f"Rotation at vertex {vertex} does not match input")
         rotation.append(ordered)
 
+    if 2 + sum(map(len, graph)) // 2 != n + face_count + 2 * genus:
+        raise GraphGenusError("PAGE genus disagrees with its face certificate")
     return genus, rotation
 
 

@@ -38,6 +38,7 @@ genus, rotation_system = gg.embed(adjacency_list)
 - You can also use `output_format="rotation_system"` (default), `output_format="drawing"` for TikZ/LaTeX output of [the fundamental polygon](https://en.wikipedia.org/wiki/Fundamental_polygon), and `output_format="3D"` for OBJ output of the 3D surface with the graph drawn on it.
 - Higher-genus 3D output routes edges directly on a surface mesh and preserves the supplied rotations. See [the layout algorithm and its limits](docs/3d-layout.md).
 - PAGE additionally allows the `low_memory=True` option for very large graphs with tens of thousands of edges.
+- If you have proved a genus lower bound for the input graph, either PAGE mode can skip smaller genera. For the nonplanar K₃,₃ above, use `gg.embed(adjacency_list, genus_lower_bound=1)`. The bound applies only to that call.
 - Use `gg.cite(algorithm, output_format)` to retrieve the relevant BibTeX entries.
 
 For local development, install with `make -C PAGE all && make -C MultiGenus all && pip install -e .` then test with `python tests/test_graph_genus_package.py` (should take ~2 minutes). Build with `source build_wheels.sh`, check with `source build_wheels_test.sh`, and upload with `pipx run twine upload dist/*`.

@@ -14,10 +14,10 @@ run: page
 run_low_mem: page_low_mem
 	$(BDIR)/page_low_mem
 
-page: page.c
+page: page.c page_input.h
 	$(CC) -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -pthread -o "$(BDIR)/page" page.c
 
-page_low_mem: page_low_mem.c
+page_low_mem: page_low_mem.c page_input.h
 	$(CC) -O3 -ftree-vectorize -funroll-loops -Wall -Wextra -std=c17 -pedantic -g -o "$(BDIR)/page_low_mem" page_low_mem.c
 
 run_wine: page.exe
@@ -27,11 +27,11 @@ run_wine: page.exe
 run_low_mem_wine: page_low_mem.exe
 	WINEDEBUG=-all $(WINE) $(BDIR)/page_low_mem.exe
 
-page.exe: page.c
+page.exe: page.c page_input.h
 #   brew install mingw-w64
 	$(MCC) -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o "$(BDIR)/page.exe" page.c 
 
-page_low_mem.exe: page_low_mem.c
+page_low_mem.exe: page_low_mem.c page_input.h
 	$(MCC) -O3 -ftree-vectorize -funroll-loops -Wall -Wextra -std=c17 -pedantic -g -o "$(BDIR)/page_low_mem.exe" page_low_mem.c
 
 clean:
