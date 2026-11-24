@@ -9,19 +9,26 @@ namespace BipartiteKneser.Boundary
 /-- A positive fiber number and the two flags for negative exponent and negative coordinate. -/
 abbrev Point := Int × Bool × Bool
 
-def leftCount : Case → Nat | .one => 3 | .two => 4
+/-- Number of outside fibers below the ordinary interval. -/
+def leftCount : Case → Nat
+  | .one => 3
+  | .two => 4
 
+/-- Recover the coordinate of the outside fiber at index `i`. -/
 def outside (c : Case) (q : Int) (i : Nat) : Int :=
   if i < leftCount c then (i : Int) + 1 else q - (count c - i : Nat)
 
+/-- Coordinates of the six ordered strand endpoints based at a given fiber. -/
 def port (base : Int) (j : Nat) : Point :=
   (if j = 2 ∨ j = 5 then base + 1 else base, decide (1 ≤ j ∧ j ≤ 3), decide (3 ≤ j))
 
+/-- Interpret a numbered boundary label as a fiber and a pair of signs. -/
 def decode (c : Case) (q : Int) (x : Label c) : Point :=
   if x.val < 4 * count c then
     (outside c q (x.val / 4), x.val.testBit 1, x.val.testBit 0)
   else port (leftCount c + 1 : Nat) (x.val - 4 * count c)
 
+/-- The ordinary and exceptional values of `z_w` in Construction 4.11. -/
 def zValue (c : Case) (q w : Int) : Int := match c with
   | .one =>
     if w = 1 then q - 1 else if w = 3 then q + 3 else if w = q - 9 then -3
@@ -31,11 +38,12 @@ def zValue (c : Case) (q w : Int) : Int := match c with
     else if w = q - 5 then -1 else if w = q - 4 then -3 else if w = q - 3 then -6
     else if w = q - 2 then -(q - 3) else w + 1
 
-/-- One centered reduction modulo 2q+1; all raw boundary outputs fit its range. -/
+/-- Shift a boundary output by one modulus when it lies outside the centered range. -/
 def center (q v : Int) : Int :=
-  if q < v then v - (2*q+1) else if v < -q then v + (2*q+1) else v
+  if q < v then v - (2 * q + 1) else if v < -q then v + (2 * q + 1) else v
 
-theorem center_mod (q v : Int) : center q v % (2*q+1) = v % (2*q+1) := by
+/-- Centering preserves the residue modulo `2 * q + 1`. -/
+theorem center_mod (q v : Int) : center q v % (2 * q + 1) = v % (2 * q + 1) := by
   unfold center
   split_ifs <;> simp
 
@@ -46,11 +54,11 @@ def routePoint (c : Case) (q w : Int) (slot : Nat) : Point :=
   if w = q - 1 then (if c = .one then 1 else q - 2, e, !t)
   else
     let z := zValue c q w
-    let v := if e then -(w - 2*z) else z
+    let v := if e then -(w - 2 * z) else z
     let k := center q (if t then -v else v)
     (if k < 0 then -k else k, e ^^ t, decide (k < 0))
 
-/-- The coordinate rule before relabeling, using the two switches at the input's fiber.
+/-- The coordinate rule before relabeling, using the missing-fiber bit and the switch bit.
 At an entry both bits are ignored. -/
 def coordinateStep (c : Case) (q : Int) (missing switch : Bool) (p r : Interval.Perm)
     (x : Label c) : Point :=
@@ -59,20 +67,16 @@ def coordinateStep (c : Case) (q : Int) (missing switch : Bool) (p r : Interval.
   else
     port (q - (count c - leftCount c : Nat)) (transferIndex p r (x.val - 4 * count c))
 
-local macro "reduce_route" : tactic => `(tactic| (
-  simp +ground (disch := omega) [decode, outside, port, count, leftCount, routePoint,
-    zValue, center, ite_eq_left, ite_eq_right, decide_eq_true, decide_eq_false_iff_not] <;> omega))
-
-set_option linter.unusedSimpArgs false in
 set_option maxHeartbeats 12000000 in
 -- Discharge the 26 fibers times four slots with symbolic integer arithmetic.
 private theorem decode_route (c : Case) (q : Int) (hq : 65 ≤ q)
     (i : Fin (count c)) (j : Fin 4) :
     decode c q (Fin.ofNat _ (routeIndex c i.val j.val)) =
       routePoint c q (outside c q i.val) j.val := by
-  cases c <;> fin_cases i <;> fin_cases j <;> reduce_route
+  cases c <;> fin_cases i <;> fin_cases j <;>
+    simp +ground (disch := omega) [decode, outside, port, count, leftCount, routePoint,
+      zValue, center, ite_eq_left, ite_eq_right, decide_eq_true] <;> omega
 
-set_option linter.unusedSimpArgs false in
 private theorem decode_exit (c : Case) (q : Int) (j : Fin 6) :
     decode c q (Fin.ofNat _ (exitIndex c j.val)) =
       port (q - (count c - leftCount c : Nat)) j.val := by

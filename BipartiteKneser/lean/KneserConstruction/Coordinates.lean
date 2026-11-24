@@ -41,7 +41,7 @@ def v (m : Multipliers p q) (k : Fin q) : ZMod p :=
 
 variable (m : Multipliers p q)
 
-@[simp] theorem mult_zero : mult m 0 = 1 := m.fieldPower_zero
+theorem mult_zero : mult m 0 = 1 := m.fieldPower_zero
 @[simp] theorem mult_add (k l : Fin q) : mult m (k + l) = mult m k * mult m l :=
   m.fieldPower_add k l
 

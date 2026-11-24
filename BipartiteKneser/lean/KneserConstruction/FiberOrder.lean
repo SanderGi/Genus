@@ -9,6 +9,7 @@ open Coordinates
 
 variable {p q r : ℕ} [NeZero p] [NeZero q] [Fact p.Prime]
 
+/-- A nonzero exponent, with its orientation retained. -/
 abbrev Exponent (q : ℕ) [NeZero q] := {k : Fin q // k ≠ 0}
 
 variable (size : q = 2 * r + 1)
@@ -55,6 +56,7 @@ the unused positive representatives. -/
 noncomputable def middle (front : List (Exponent q)) (last : Exponent q) : List (Exponent q) :=
   ((present size m w).filter fun i => i ∉ (front ++ [last]).map (key size)).map (pos size)
 
+/-- Full list of oriented exponent representatives at the fiber. -/
 noncomputable def order (front : List (Exponent q)) (last : Exponent q) : List (Exponent q) :=
   front ++ middle size m w front last ++ [last]
 

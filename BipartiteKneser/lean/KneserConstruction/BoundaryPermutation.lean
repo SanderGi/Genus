@@ -5,6 +5,7 @@ import Mathlib.Data.Fintype.EquivFin
 
 namespace BipartiteKneser.Boundary
 
+/-- Route a last-pair slot or an exit port to its numbered boundary label. -/
 private def routing (c : Case) (x : Label c) : Label c := Fin.ofNat _ <|
   if x.val < 4 * count c then routeIndex c (x.val / 4) (x.val % 4)
   else exitIndex c (x.val - 4 * count c)
@@ -13,6 +14,7 @@ private theorem routing_injective (c : Case) : Function.Injective (routing c) :=
   unfold Function.Injective
   cases c <;> decide +kernel
 
+/-- The chosen bijection lands in one of the four slots of the last exponent pair. -/
 theorem lastSlot_lt (i x : Nat) (b s : Bool) : lastSlot i x b s < 4 := by
   exact (show ∀ a d : Bool, 2 * a.toNat + d.toNat < 4 from by decide) _ _
 
@@ -27,6 +29,7 @@ private theorem slot_inj (i : Nat) (b s : Bool) (j k : Fin 4)
     change lastSlot 1 j b s = lastSlot 1 k b s
     simpa only [lastSlot, hi, Nat.one_ne_zero, ↓reduceIte] using eq
 
+/-- A forward transfer lands on one of the six exit ports. -/
 theorem transferIndex_lt (p r : Interval.Perm) (x : Nat) : transferIndex p r x < 6 := by
   unfold transferIndex
   generalize Interval.image _ _ = v
@@ -42,7 +45,10 @@ private def rearrange (c : Case) (chars : Pattern c) (mask : Nat) (p r : Interva
   if h : x.val < 4 * count c then
     let i := x.val / 4
     let j := lastSlot i (x.val % 4) (chars.val.testBit i) (mask.testBit i)
-    ⟨4*i + j, by have hj : j < 4 := lastSlot_lt ..; dsimp [size, i]; omega⟩
+    ⟨4 * i + j, by
+      have hj : j < 4 := lastSlot_lt ..
+      dsimp [size, i]
+      omega⟩
   else ⟨4 * count c + transferIndex p r (x.val - 4 * count c), by
     have ht := transferIndex_lt p r (x.val - 4 * count c)
     unfold size
@@ -66,7 +72,10 @@ private theorem rearrange_injective (c : Case) (chars : Pattern c) (mask : Nat)
     rw [hi] at eq
     have hj := slot_inj (y.val / 4) (chars.val.testBit _) (mask.testBit _)
       ⟨x.val % 4, by omega⟩ ⟨y.val % 4, by omega⟩ (Nat.add_left_cancel eq)
-    exact Fin.ext (by have := congrArg Fin.val hj; dsimp at this; omega)
+    exact Fin.ext (by
+      have := congrArg Fin.val hj
+      dsimp at this
+      omega)
   · have bx := lastSlot_lt (x.val / 4) (x.val % 4)
       (chars.val.testBit (x.val / 4)) (mask.testBit (x.val / 4))
     omega
@@ -75,7 +84,10 @@ private theorem rearrange_injective (c : Case) (chars : Pattern c) (mask : Nat)
     omega
   · have hj := transfer_inj p r ⟨x.val - 4 * count c, by omega⟩
       ⟨y.val - 4 * count c, by omega⟩ (Nat.add_left_cancel eq)
-    exact Fin.ext (by have := congrArg Fin.val hj; dsimp at this; omega)
+    exact Fin.ext (by
+      have := congrArg Fin.val hj
+      dsimp at this
+      omega)
 
 private theorem step_factor (c : Case) (chars : Pattern c) (mask : Nat) (p r : Interval.Perm)
     (x : Label c) : step c chars mask p r x = routing c (rearrange c chars mask p r x) := by
@@ -87,6 +99,7 @@ private theorem step_factor (c : Case) (chars : Pattern c) (mask : Nat) (p r : I
       Nat.div_eq_of_lt hj, Nat.add_zero, Nat.mul_add_mod, Nat.mod_eq_of_lt hj]
   · simp
 
+/-- Proposition 7.2. Every choice of outside bijections and forward transfers is bijective. -/
 theorem step_bijective (c : Case) (chars : Pattern c) (mask : Nat) (p r : Interval.Perm) :
     Function.Bijective (step c chars mask p r) := by
   have inj : Function.Injective (step c chars mask p r) := by

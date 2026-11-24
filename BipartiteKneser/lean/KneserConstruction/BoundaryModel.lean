@@ -5,22 +5,33 @@ import Mathlib.Data.Fintype.Card
 /-!
 # Section 7 boundary labels
 
-The four labels of an outside fiber occur in the order (++),(+−),(−+),(−−).
+The four labels of an outside fiber occur in the order (++), (+−), (−+), (−−).
 The six entry labels follow in the order of the two triples of Proposition 6.7.
 All permutations of triples are stored in the forward direction.
 -/
 
 namespace BipartiteKneser.Boundary
 
+/-- The residue of the prime modulo three selects the outside fibers and the translation splice. -/
 inductive Case where
-  | one | two
+  /-- The prime is congruent to one modulo three. -/
+  | one
+  /-- The prime is congruent to two modulo three. -/
+  | two
   deriving DecidableEq, Repr
 
-def count : Case → Nat | .one => 12 | .two => 14
+/-- Number of fibers outside the ordinary interval. -/
+def count : Case → Nat
+  | .one => 12
+  | .two => 14
 
-def size (c : Case) := 4 * count c + 6
+/-- Number of retained labels, including the six entries. -/
+def size (c : Case) : Nat := 4 * count c + 6
 
+/-- Index of a retained vertex of the bounded permutation. -/
 abbrev Label (c : Case) := Fin (size c)
+
+/-- A bit mask with one character sign per outside fiber, in increasing fiber order. -/
 abbrev Pattern (c : Case) := Fin (2 ^ count c)
 
 instance (c : Case) : NeZero (size c) := ⟨by cases c <;> decide⟩
@@ -39,10 +50,11 @@ def lastSlot (i slot : Nat) (missing switch : Bool) : Nat :=
   let e := slot.testBit 1
   let t := slot.testBit 0
   let t' := if i = 0 then !e else t
-  let e' := if i = 0 then (if missing then e ^^ t else !t)
-            else e ^^ (!missing && t)
+  let e' :=
+    if i = 0 then (if missing then e ^^ t else !t) else e ^^ (!missing && t)
   2 * (e' ^^ switch).toNat + t'.toNat
 
+/-- Read the target label of a post-bijection slot from its fiber's packed row. -/
 def routeIndex (c : Case) (i slot : Nat) : Nat :=
   ((routes c)[i]! >>> (8 * slot)) % 256
 
@@ -50,16 +62,19 @@ def routeIndex (c : Case) (i slot : Nat) : Nat :=
 def exitIndex (c : Case) (j : Nat) : Nat :=
   (if c = .one then 12 else 16) + (#[0, 2, 6, 3, 1, 5] : Array Nat)[j]!
 
+/-- Send one of the six entries through the forward transfer for its sign. -/
 def transferIndex (p r : Interval.Perm) (j : Nat) : Nat :=
   (if j < 3 then 0 else 3) +
     (Interval.image (if j < 3 then p else r) (Fin.ofNat 3 j)).val
 
+/-- Compute the target index of an outside label or interval entry. -/
 def nextIndex (c : Case) (chars mask : Nat) (p r : Interval.Perm) (x : Nat) : Nat :=
   if x < 4 * count c then
     let i := x / 4
     routeIndex c i (lastSlot i (x % 4) (chars.testBit i) (mask.testBit i))
   else exitIndex c (transferIndex p r (x - 4 * count c))
 
+/-- The bounded permutation on numbered labels for fixed characters, switches and transfers. -/
 def step (c : Case) (chars : Pattern c) (mask : Nat) (p r : Interval.Perm)
     (x : Label c) : Label c := Fin.ofNat _ (nextIndex c chars.val mask p r x.val)
 
@@ -67,6 +82,7 @@ def step (c : Case) (chars : Pattern c) (mask : Nat) (p r : Interval.Perm)
 def positiveParity (c : Case) (chars : Pattern c) : Bool :=
   Interval.parity ((List.range (count c)).map chars.val.testBit)
 
+/-- The outside switch masks listed in Proposition 7.3, in the paper's bit order. -/
 def choices : Case → List Nat
   | .one => [0, 1, 2, 3, 4, 5, 32, 33, 34, 35, 82, 98]
   | .two => [0, 1, 3, 4, 5, 32, 33, 36, 37, 38, 64, 65, 67, 68, 69, 96, 97, 100,

@@ -17,6 +17,7 @@ def length (c : Case) (q : ℕ) := q - 1 - count c
 /-- First coordinate in the upper segment of the complement. -/
 def stop (c : Case) (q : ℕ) := start c + length c q
 
+/-- Positive coordinate of the i-th fiber outside the ordinary interval. -/
 def outsideNat (c : Case) (q i : ℕ) :=
   if i < leftCount c then i + 1 else q - (count c - i)
 
@@ -73,6 +74,7 @@ private theorem pack_bit (f : ℕ → Bool) {i n : ℕ} (hi : i < n) :
     | zero => exact Nat.testBit_bit_zero ..
     | succ i => exact (Nat.testBit_bit_succ ..).trans (ih _ (by omega))
 
+/-- Pack the missing-pair indicators at the outside fibers into the boundary mask. -/
 def pattern (c : Case) (q : ℕ) (χ : ℕ → Bool) : Pattern c :=
   pack (fun i => χ (outsideNat c q i)) (count c)
 

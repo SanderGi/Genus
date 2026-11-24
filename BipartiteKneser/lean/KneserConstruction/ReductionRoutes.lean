@@ -9,6 +9,7 @@ variable {p q : ℕ} [NeZero p] [NeZero q] [Fact p.Prime]
 variable {m : Multipliers p q} {ι : Type*} {F : Family.Complete m ι} {c : Case}
 variable {N E K : Fin q} {χ : ℕ → Bool}
 
+/-- The first affine frame corresponding to a retained boundary label. -/
 noncomputable def retained (c : Case) (m : Multipliers p q) (N E : Fin q) (x : Boundary.Label c) :=
   firstFrame c m N E (decode c q x)
 

@@ -21,6 +21,7 @@ private theorem firstHit_spec {n : Nat} [NeZero n] {f : Fin n → Fin n}
     | zero => simpa using hx
     | succ j => exact (iterate_succ_apply f j x) ▸ hlt j (by omega)
 
+/-- A first return after exactly `n` steps gives forward reachability between all `n` labels. -/
 theorem oneCycle_of_firstHit {n : Nat} [NeZero n] {f : Fin n → Fin n}
     (ok : firstHit f (n - 1) (f 0) = true) : ∀ x y, ∃ k : ℕ, f^[k] x = y := by
   have hn := NeZero.pos n

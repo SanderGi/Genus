@@ -21,7 +21,8 @@ private theorem decode_shift (c : Case) (q : Int) (x : Label c) :
     split <;> simp (disch := omega) [ite_eq_left]
 
 /-- The 54 or 62 labels decode to distinct symbolic coordinates throughout the large-q range. -/
-theorem decode_injective (c : Case) (q : Int) (hq : 65 ≤ q) : Function.Injective (decode c q) := by
+theorem decode_injective (c : Case) (q : Int) (hq : 65 ≤ q) :
+    Function.Injective (decode c q) := by
   have at65 : Function.Injective (decode c 65) := by
     cases c <;> unfold Function.Injective <;> decide +kernel
   intro x y h

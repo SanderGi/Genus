@@ -4,6 +4,7 @@ import KneserConstruction.BoundaryData
 
 namespace BipartiteKneser.Boundary
 
+/-- Every formal sign pattern belongs to one of the checked certificate blocks. -/
 theorem check_all (c : Case) (chars : Pattern c) : ∃ v, check c chars v = true := by
   have covered : Covered c 0 (2 ^ count c) := by
     cases c

@@ -2,7 +2,11 @@ import BipartiteKneser
 import Lean.Elab.Command
 import Lean.Util.CollectAxioms
 
-/-! # Axiom audit and negative control for the face equations -/
+/-! # Declaration linting, axiom audit, and a negative control for the face equations -/
+
+#lint in BipartiteKneser
+#lint in KneserConstruction
+#lint in KneserWitnessData
 
 open BipartiteKneser BipartiteKneser.Exceptional
 
