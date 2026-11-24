@@ -6,8 +6,13 @@
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
 
-#include <ctype.h>
-#include <errno.h>
+#include "page_input.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#endif
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -26,19 +31,8 @@ typedef uint32_t dart_t;
 typedef uint32_t face_count_t;
 
 typedef struct {
-    vertex_t n;
-    uint32_t m;
+    page_input input;
     dart_t darts;
-    degree_t max_degree;
-    degree_t* degree;
-    vertex_t* adjacency;
-    dart_t* slot_dart;
-    vertex_t* dart_from;
-    vertex_t* dart_to;
-    degree_t* dart_from_slot;
-    degree_t* dart_to_slot;
-    dart_t* reverse;
-    vertex_t start_index;
     bool bipartite;
     bool has_bridge;
     uint32_t girth;
@@ -56,12 +50,10 @@ typedef struct {
     uint32_t min_face_length;
     uint64_t calls;
     uint64_t next_report;
-    vertex_t* path_vertices;
     dart_t* path_darts;
     uint32_t* distance;
     vertex_t* bfs_queue;
-    vertex_t* face_data;
-    size_t face_data_capacity;
+    dart_t* face_data;
     size_t face_data_length;
     size_t* face_offsets;
 } search_t;
@@ -95,62 +87,29 @@ static void* checked_calloc(size_t count, size_t size, const char* label) {
     return result;
 }
 
-static size_t graph_slot(const graph_t* graph, vertex_t vertex, degree_t slot) {
-    return (size_t)vertex * graph->max_degree + slot;
+static degree_t graph_degree(const graph_t* graph, vertex_t vertex) {
+    return (degree_t)(graph->input.offset[vertex + 1] - graph->input.offset[vertex]);
 }
 
-static dart_t graph_find_dart(const graph_t* graph, vertex_t from, vertex_t to) {
-    for (degree_t slot = 0; slot < graph->degree[from]; slot++) {
-        if (graph->adjacency[graph_slot(graph, from, slot)] == to) {
-            return graph->slot_dart[graph_slot(graph, from, slot)];
-        }
-    }
-    fail_if(true, "Error: missing dart %u -> %u while restoring a face path\n",
-            from, to);
-    return NO_DART;
+static dart_t graph_slot(const graph_t* graph, vertex_t vertex, degree_t slot) {
+    return graph->input.offset[vertex] + slot;
+}
+
+static degree_t dart_slot(const graph_t* graph, dart_t dart) {
+    return (degree_t)(dart - graph->input.offset[graph->input.source[dart]]);
 }
 
 static void graph_free(graph_t* graph) {
-    free(graph->degree);
-    free(graph->adjacency);
-    free(graph->slot_dart);
-    free(graph->dart_from);
-    free(graph->dart_to);
-    free(graph->dart_from_slot);
-    free(graph->dart_to_slot);
-    free(graph->reverse);
-    memset(graph, 0, sizeof(*graph));
-}
-
-static bool graph_connected(const graph_t* graph) {
-    uint8_t* seen = checked_calloc(graph->n, sizeof(uint8_t), "connectivity flags");
-    vertex_t* queue = checked_malloc(graph->n, sizeof(vertex_t), "connectivity queue");
-    uint32_t head = 0;
-    uint32_t tail = 0;
-    seen[0] = 1;
-    queue[tail++] = 0;
-    while (head < tail) {
-        vertex_t vertex = queue[head++];
-        for (degree_t slot = 0; slot < graph->degree[vertex]; slot++) {
-            vertex_t neighbor = graph->adjacency[graph_slot(graph, vertex, slot)];
-            if (!seen[neighbor]) {
-                seen[neighbor] = 1;
-                queue[tail++] = neighbor;
-            }
-        }
-    }
-    free(seen);
-    free(queue);
-    return tail == graph->n;
+    page_free_input(&graph->input);
 }
 
 static bool graph_bipartite(const graph_t* graph) {
-    int8_t* color = checked_malloc(graph->n, sizeof(int8_t), "bipartite colors");
-    vertex_t* queue = checked_malloc(graph->n, sizeof(vertex_t), "bipartite queue");
-    for (vertex_t vertex = 0; vertex < graph->n; vertex++) {
+    int8_t* color = checked_malloc(graph->input.n, sizeof(int8_t), "bipartite colors");
+    vertex_t* queue = checked_malloc(graph->input.n, sizeof(vertex_t), "bipartite queue");
+    for (vertex_t vertex = 0; vertex < graph->input.n; vertex++) {
         color[vertex] = -1;
     }
-    for (vertex_t root = 0; root < graph->n; root++) {
+    for (vertex_t root = 0; root < graph->input.n; root++) {
         if (color[root] != -1) {
             continue;
         }
@@ -160,8 +119,8 @@ static bool graph_bipartite(const graph_t* graph) {
         queue[tail++] = root;
         while (head < tail) {
             vertex_t vertex = queue[head++];
-            for (degree_t slot = 0; slot < graph->degree[vertex]; slot++) {
-                vertex_t neighbor = graph->adjacency[graph_slot(graph, vertex, slot)];
+            for (degree_t slot = 0; slot < graph_degree(graph, vertex); slot++) {
+                vertex_t neighbor = graph->input.neighbors[graph_slot(graph, vertex, slot)];
                 if (color[neighbor] == -1) {
                     color[neighbor] = 1 - color[vertex];
                     queue[tail++] = neighbor;
@@ -178,50 +137,56 @@ static bool graph_bipartite(const graph_t* graph) {
     return true;
 }
 
-static void graph_find_bridges(const graph_t* graph, vertex_t vertex,
-                               vertex_t parent, uint32_t* clock,
-                               uint32_t* discovered, uint32_t* low,
-                               bool* has_bridge) {
-    discovered[vertex] = low[vertex] = ++*clock;
-    for (degree_t slot = 0; slot < graph->degree[vertex]; slot++) {
-        vertex_t neighbor = graph->adjacency[graph_slot(graph, vertex, slot)];
-        if (neighbor == parent) {
-            continue;
-        }
-        if (discovered[neighbor] == 0) {
-            graph_find_bridges(graph, neighbor, vertex, clock, discovered, low,
-                               has_bridge);
-            if (low[neighbor] > discovered[vertex]) {
-                *has_bridge = true;
+// Iterative low-link DFS: a long path uses heap space rather than the process stack.
+static bool graph_has_bridge(const graph_t* graph) {
+    unsigned n = graph->input.n;
+    uint32_t* discovered = checked_calloc(n, sizeof(*discovered), "bridge discovery times");
+    uint32_t* low = checked_malloc(n, sizeof(*low), "bridge low links");
+    dart_t* next = checked_malloc(n, sizeof(*next), "bridge DFS positions");
+    dart_t* parent = checked_malloc(n, sizeof(*parent), "bridge DFS parents");
+    memcpy(next, graph->input.offset, n * sizeof(*next));
+    vertex_t v = 0;
+    uint32_t clock = 1;
+    discovered[v] = low[v] = clock;
+    parent[v] = NO_DART;
+    bool bridge = false;
+    for (;;) {
+        if (next[v] < graph->input.offset[v + 1]) {
+            dart_t d = next[v]++;
+            vertex_t w = graph->input.neighbors[d];
+            if (d == parent[v]) continue;
+            if (!discovered[w]) {
+                parent[w] = graph->input.reverse[d];
+                discovered[w] = low[w] = ++clock;
+                v = w;
+            } else if (discovered[w] < low[v]) {
+                low[v] = discovered[w];
             }
-            if (low[neighbor] < low[vertex]) {
-                low[vertex] = low[neighbor];
+        } else {
+            if (parent[v] == NO_DART) break;
+            vertex_t w = graph->input.neighbors[parent[v]];
+            if (low[v] > discovered[w]) {
+                bridge = true;
+                break;
             }
-        } else if (discovered[neighbor] < low[vertex]) {
-            low[vertex] = discovered[neighbor];
+            if (low[v] < low[w]) low[w] = low[v];
+            v = w;
         }
     }
-}
-
-static bool graph_has_bridge(const graph_t* graph) {
-    uint32_t* discovered =
-        checked_calloc(graph->n, sizeof(uint32_t), "bridge discovery times");
-    uint32_t* low = checked_malloc(graph->n, sizeof(uint32_t), "bridge low links");
-    uint32_t clock = 0;
-    bool has_bridge = false;
-    graph_find_bridges(graph, 0, MAX_VERTEX, &clock, discovered, low, &has_bridge);
-    free(discovered);
+    free(parent);
+    free(next);
     free(low);
-    return has_bridge;
+    free(discovered);
+    return bridge;
 }
 
 static uint32_t graph_girth(const graph_t* graph) {
-    int32_t* distance = checked_malloc(graph->n, sizeof(int32_t), "girth distances");
-    vertex_t* parent = checked_malloc(graph->n, sizeof(vertex_t), "girth parents");
-    vertex_t* queue = checked_malloc(graph->n, sizeof(vertex_t), "girth queue");
+    int32_t* distance = checked_malloc(graph->input.n, sizeof(int32_t), "girth distances");
+    vertex_t* parent = checked_malloc(graph->input.n, sizeof(vertex_t), "girth parents");
+    vertex_t* queue = checked_malloc(graph->input.n, sizeof(vertex_t), "girth queue");
     uint32_t best = UINT32_MAX;
-    for (vertex_t root = 0; root < graph->n && best > 3; root++) {
-        for (vertex_t vertex = 0; vertex < graph->n; vertex++) {
+    for (vertex_t root = 0; root < graph->input.n && best > 3; root++) {
+        for (vertex_t vertex = 0; vertex < graph->input.n; vertex++) {
             distance[vertex] = -1;
             parent[vertex] = MAX_VERTEX;
         }
@@ -234,8 +199,8 @@ static uint32_t graph_girth(const graph_t* graph) {
             if ((uint32_t)(2 * distance[vertex] + 1) >= best) {
                 continue;
             }
-            for (degree_t slot = 0; slot < graph->degree[vertex]; slot++) {
-                vertex_t neighbor = graph->adjacency[graph_slot(graph, vertex, slot)];
+            for (degree_t slot = 0; slot < graph_degree(graph, vertex); slot++) {
+                vertex_t neighbor = graph->input.neighbors[graph_slot(graph, vertex, slot)];
                 if (distance[neighbor] == -1) {
                     distance[neighbor] = distance[vertex] + 1;
                     parent[neighbor] = vertex;
@@ -256,181 +221,30 @@ static uint32_t graph_girth(const graph_t* graph) {
     return best == UINT32_MAX ? 0 : best;
 }
 
-typedef struct {
-    uint32_t start;
-    uint32_t degree;
-} input_layout_t;
-
-static input_layout_t detect_input_layout(const char* filename,
-                                          uint32_t ignored_vertex) {
-    FILE* input = fopen(filename, "r");
-    fail_if(input == NULL, "Error opening file %s\n", filename);
-
-    unsigned vertex_count;
-    unsigned ignored_edge_count;
-    fail_if(fscanf(input, "%u %u", &vertex_count, &ignored_edge_count) != 2,
-            "Error reading graph size from %s\n", filename);
-
-    int character;
-    while ((character = fgetc(input)) != '\n' && character != EOF) {
+static graph_t graph_load(const char* filename) {
+    graph_t graph = {.input = page_read_input(filename, MAX_VERTEX - 1, UINT32_MAX / 2)};
+    const page_input* input = &graph.input;
+    graph.darts = input->offset[input->n];
+    if (input->m == input->n - 1) {
+        graph.bipartite = true;
+        graph.has_bridge = input->m != 0;
+    } else {
+        graph.bipartite = graph_bipartite(&graph);
+        graph.has_bridge = graph_has_bridge(&graph);
+        graph.girth = graph_girth(&graph);
     }
-
-    size_t line_capacity = (size_t)vertex_count * 6 + 2;
-    char* line = checked_malloc(line_capacity, sizeof(char), "input line");
-    uint32_t minimum_label = UINT32_MAX;
-    uint32_t maximum_degree = 0;
-
-    for (unsigned row = 0; row < vertex_count; row++) {
-        fail_if(fgets(line, (int)line_capacity, input) == NULL,
-                "Error reading adjacency row %u from %s\n", row, filename);
-        fail_if(strchr(line, '\n') == NULL && !feof(input),
-                "Error: adjacency row %u is too long\n", row);
-
-        uint32_t row_degree = 0;
-        char* cursor = line;
-        while (*cursor != '\0') {
-            while (isspace((unsigned char)*cursor)) {
-                cursor++;
-            }
-            if (*cursor == '\0') {
-                break;
-            }
-
-            errno = 0;
-            char* end;
-            unsigned long value = strtoul(cursor, &end, 10);
-            fail_if(errno != 0 || end == cursor || value > ignored_vertex,
-                    "Error: invalid neighbor on row %u\n", row);
-            if (value != ignored_vertex) {
-                row_degree++;
-                if (value < minimum_label) {
-                    minimum_label = (uint32_t)value;
-                }
-            }
-            cursor = end;
-        }
-
-        if (row_degree > maximum_degree) {
-            maximum_degree = row_degree;
-        }
-    }
-
-    free(line);
-    fclose(input);
-    fail_if(maximum_degree == 0 || minimum_label == UINT32_MAX,
-            "Error: graph has no adjacency entries\n");
-
-    return (input_layout_t){
-        .start = minimum_label,
-        .degree = maximum_degree,
-    };
-}
-
-static graph_t graph_load(const char* filename, degree_t max_degree,
-                          vertex_t start_index) {
-    FILE* input = fopen(filename, "r");
-    fail_if(input == NULL, "Error opening file %s\n", filename);
-    unsigned n_input;
-    unsigned m_input;
-    fail_if(fscanf(input, "%u %u", &n_input, &m_input) != 2,
-            "Error reading graph size from %s\n", filename);
-    fail_if(n_input == 0 || n_input >= MAX_VERTEX,
-            "Error: vertex count must be between 1 and %u\n", MAX_VERTEX - 1);
-    fail_if(max_degree == 0, "Error: DEG must be positive\n");
-
-    graph_t graph = {
-        .n = (vertex_t)n_input,
-        .m = m_input,
-        .max_degree = max_degree,
-        .start_index = start_index,
-    };
-    size_t slots = (size_t)graph.n * max_degree;
-    graph.degree = checked_calloc(graph.n, sizeof(degree_t), "vertex degrees");
-    graph.adjacency = checked_malloc(slots, sizeof(vertex_t), "adjacency list");
-    graph.slot_dart = checked_malloc(slots, sizeof(dart_t), "adjacency dart ids");
-    for (size_t i = 0; i < slots; i++) {
-        graph.adjacency[i] = MAX_VERTEX;
-        graph.slot_dart[i] = NO_DART;
-    }
-
-    uint64_t dart_count = 0;
-    for (vertex_t vertex = 0; vertex < graph.n; vertex++) {
-        for (degree_t input_slot = 0; input_slot < max_degree; input_slot++) {
-            unsigned raw_neighbor;
-            fail_if(fscanf(input, "%u", &raw_neighbor) != 1,
-                    "Error reading adjacency row %u from %s\n", vertex, filename);
-            if (raw_neighbor == MAX_VERTEX) {
-                continue;
-            }
-            fail_if(raw_neighbor < start_index || raw_neighbor - start_index >= graph.n,
-                    "Error: invalid neighbor %u of vertex %u\n", raw_neighbor, vertex);
-            fail_if(raw_neighbor - start_index == vertex,
-                    "Error: loops are not supported at vertex %u\n", vertex);
-            degree_t compact_slot = graph.degree[vertex]++;
-            graph.adjacency[graph_slot(&graph, vertex, compact_slot)] =
-                (vertex_t)(raw_neighbor - start_index);
-            dart_count++;
-        }
-    }
-    fclose(input);
-    fail_if(dart_count != 2ULL * graph.m,
-            "Error: adjacency list has %" PRIu64
-            " directed edges, expected %" PRIu64 "\n",
-            dart_count, 2ULL * graph.m);
-    fail_if(dart_count > UINT32_MAX, "Error: too many directed edges\n");
-    graph.darts = (dart_t)dart_count;
-    graph.dart_from = checked_malloc(graph.darts, sizeof(vertex_t), "dart sources");
-    graph.dart_to = checked_malloc(graph.darts, sizeof(vertex_t), "dart targets");
-    graph.dart_from_slot =
-        checked_malloc(graph.darts, sizeof(degree_t), "dart source slots");
-    graph.dart_to_slot =
-        checked_malloc(graph.darts, sizeof(degree_t), "dart target slots");
-    graph.reverse = checked_malloc(graph.darts, sizeof(dart_t), "reverse darts");
-
-    dart_t dart = 0;
-    for (vertex_t vertex = 0; vertex < graph.n; vertex++) {
-        for (degree_t slot = 0; slot < graph.degree[vertex]; slot++) {
-            vertex_t neighbor = graph.adjacency[graph_slot(&graph, vertex, slot)];
-            graph.slot_dart[graph_slot(&graph, vertex, slot)] = dart;
-            graph.dart_from[dart] = vertex;
-            graph.dart_to[dart] = neighbor;
-            graph.dart_from_slot[dart] = slot;
-            dart++;
-        }
-    }
-    for (dart_t edge = 0; edge < graph.darts; edge++) {
-        vertex_t from = graph.dart_from[edge];
-        vertex_t to = graph.dart_to[edge];
-        degree_t reverse_slot = MAX_VERTEX;
-        for (degree_t slot = 0; slot < graph.degree[to]; slot++) {
-            if (graph.adjacency[graph_slot(&graph, to, slot)] == from) {
-                fail_if(reverse_slot != MAX_VERTEX,
-                        "Error: parallel edges are not supported (%u, %u)\n", from, to);
-                reverse_slot = slot;
-            }
-        }
-        fail_if(reverse_slot == MAX_VERTEX,
-                "Error: adjacency list is not symmetric at %u -> %u\n", from, to);
-        graph.dart_to_slot[edge] = reverse_slot;
-        graph.reverse[edge] = graph.slot_dart[graph_slot(&graph, to, reverse_slot)];
-    }
-    fail_if(!graph_connected(&graph), "Error: PAGE requires a connected graph\n");
-    graph.bipartite = graph_bipartite(&graph);
-    graph.has_bridge = graph_has_bridge(&graph);
-    graph.girth = graph_girth(&graph);
     return graph;
 }
 
 static dart_t input_rotation_successor(const graph_t* graph, dart_t dart) {
-    vertex_t center = graph->dart_to[dart];
-    degree_t incoming = graph->dart_to_slot[dart];
-    degree_t outgoing = (degree_t)((incoming + 1) % graph->degree[center]);
-    return graph->slot_dart[graph_slot(graph, center, outgoing)];
+    vertex_t center = graph->input.neighbors[dart];
+    dart_t next = graph->input.reverse[dart] + 1;
+    return next == graph->input.offset[center + 1] ? graph->input.offset[center] : next;
 }
 
 static face_count_t input_rotation_face_count(const graph_t* graph) {
     uint8_t* seen = checked_calloc(graph->darts, sizeof(uint8_t), "face flags");
-    face_count_t faces = 0;
+    face_count_t faces = graph->darts == 0 ? 1 : 0;
     for (dart_t start = 0; start < graph->darts; start++) {
         if (seen[start]) {
             continue;
@@ -448,7 +262,7 @@ static face_count_t input_rotation_face_count(const graph_t* graph) {
 }
 
 static uint32_t genus_from_faces(const graph_t* graph, face_count_t faces) {
-    int64_t numerator = 2 - (int64_t)graph->n + graph->m - faces;
+    int64_t numerator = 2 - (int64_t)graph->input.n + graph->input.m - faces;
     fail_if(numerator < 0 || numerator % 2 != 0,
             "Error: invalid Euler characteristic for %u faces\n", faces);
     return (uint32_t)(numerator / 2);
@@ -461,15 +275,16 @@ static void write_input_rotation_solution(const graph_t* graph, uint32_t genus,
     fprintf(output_file,
             "Solution with %u cycles (genus %u) found in %" PRIu64 " iterations:\n",
             faces, genus, calls);
+    if (graph->darts == 0) fprintf(output_file, "%u\n", graph->input.start);
     for (dart_t start = 0; start < graph->darts; start++) {
         if (seen[start]) {
             continue;
         }
         dart_t current = start;
-        fprintf(output_file, "%u ", graph->dart_from[current] + graph->start_index);
+        fprintf(output_file, "%u ", graph->input.source[current] + graph->input.start);
         do {
             seen[current] = 1;
-            fprintf(output_file, "%u ", graph->dart_to[current] + graph->start_index);
+            fprintf(output_file, "%u ", graph->input.neighbors[current] + graph->input.start);
             current = input_rotation_successor(graph, current);
         } while (current != start);
         fprintf(output_file, "\n");
@@ -482,7 +297,6 @@ static void search_free(search_t* search) {
     free(search->rotation_next);
     free(search->rotation_prev);
     free(search->rotation_count);
-    free(search->path_vertices);
     free(search->path_darts);
     free(search->distance);
     free(search->bfs_queue);
@@ -492,24 +306,19 @@ static void search_free(search_t* search) {
 }
 
 static search_t search_create(graph_t* graph) {
-    size_t slots = (size_t)graph->n * graph->max_degree;
     search_t search = {
         .graph = graph,
         .used = checked_calloc(graph->darts, sizeof(uint8_t), "used darts"),
-        .rotation_next = checked_malloc(slots, sizeof(degree_t), "rotation successors"),
-        .rotation_prev = checked_malloc(slots, sizeof(degree_t), "rotation predecessors"),
-        .rotation_count = checked_calloc(graph->n, sizeof(degree_t), "rotation counts"),
-        .path_vertices =
-            checked_malloc((size_t)graph->darts + 1, sizeof(vertex_t), "face path"),
+        .rotation_next = checked_malloc(graph->darts, sizeof(degree_t), "rotation successors"),
+        .rotation_prev = checked_malloc(graph->darts, sizeof(degree_t), "rotation predecessors"),
+        .rotation_count = checked_calloc(graph->input.n, sizeof(degree_t), "rotation counts"),
         .path_darts = checked_malloc(graph->darts, sizeof(dart_t), "face path darts"),
-        .distance = checked_malloc(graph->n, sizeof(uint32_t), "face distances"),
-        .bfs_queue = checked_malloc(graph->n, sizeof(vertex_t), "face distance queue"),
-        .face_data_capacity = (size_t)graph->darts * 2 + 1,
+        .distance = checked_malloc(graph->input.n, sizeof(uint32_t), "face distances"),
+        .bfs_queue = checked_malloc(graph->input.n, sizeof(vertex_t), "face distance queue"),
+        .face_data = checked_malloc(graph->darts, sizeof(dart_t), "solution face darts"),
         .face_offsets =
             checked_malloc((size_t)graph->darts + 1, sizeof(size_t), "face offsets"),
     };
-    search.face_data =
-        checked_malloc(search.face_data_capacity, sizeof(vertex_t), "solution faces");
     return search;
 }
 
@@ -517,10 +326,10 @@ static void search_reset(search_t* search, uint32_t genus, face_count_t faces) {
     graph_t* graph = search->graph;
     memset(search->used, 0, graph->darts * sizeof(uint8_t));
     memset(search->rotation_next, 0xff,
-           (size_t)graph->n * graph->max_degree * sizeof(degree_t));
+           (size_t)graph->darts * sizeof(degree_t));
     memset(search->rotation_prev, 0xff,
-           (size_t)graph->n * graph->max_degree * sizeof(degree_t));
-    memset(search->rotation_count, 0, graph->n * sizeof(degree_t));
+           (size_t)graph->darts * sizeof(degree_t));
+    memset(search->rotation_count, 0, graph->input.n * sizeof(degree_t));
     search->remaining_darts = graph->darts;
     search->target_faces = faces;
     search->target_genus = genus;
@@ -536,39 +345,27 @@ static void search_reset(search_t* search, uint32_t genus, face_count_t faces) {
 static bool rotation_add(search_t* search, vertex_t center, degree_t incoming,
                          degree_t outgoing) {
     graph_t* graph = search->graph;
-    degree_t degree = graph->degree[center];
+    degree_t degree = graph_degree(graph, center);
     size_t incoming_index = graph_slot(graph, center, incoming);
     size_t outgoing_index = graph_slot(graph, center, outgoing);
     if (search->rotation_next[incoming_index] != MAX_VERTEX ||
-        search->rotation_prev[outgoing_index] != MAX_VERTEX ||
-        (incoming == outgoing && degree > 1)) {
+        search->rotation_prev[outgoing_index] != MAX_VERTEX) {
         return false;
     }
 
+    // Adding incoming -> outgoing closes a cycle iff the path from outgoing
+    // ends at incoming. Such a cycle must include every incidence at the vertex.
+    degree_t cursor = outgoing;
+    unsigned span = 1;
+    while (cursor != incoming) {
+        cursor = search->rotation_next[graph_slot(graph, center, cursor)];
+        if (cursor == MAX_VERTEX) break;
+        ++span;
+    }
+    if (cursor == incoming && span != degree) return false;
     search->rotation_next[incoming_index] = outgoing;
     search->rotation_prev[outgoing_index] = incoming;
     search->rotation_count[center]++;
-
-    degree_t cursor = outgoing;
-    bool closed = false;
-    for (degree_t steps = 0; steps <= degree; steps++) {
-        degree_t next = search->rotation_next[graph_slot(graph, center, cursor)];
-        if (next == MAX_VERTEX) {
-            break;
-        }
-        cursor = next;
-        if (cursor == incoming) {
-            closed = true;
-            break;
-        }
-    }
-    if ((closed && search->rotation_count[center] < degree) ||
-        (!closed && search->rotation_count[center] == degree)) {
-        search->rotation_next[incoming_index] = MAX_VERTEX;
-        search->rotation_prev[outgoing_index] = MAX_VERTEX;
-        search->rotation_count[center]--;
-        return false;
-    }
     return true;
 }
 
@@ -588,22 +385,22 @@ static void rotation_remove(search_t* search, vertex_t center, degree_t incoming
 static bool transition_add_for_darts(search_t* search, dart_t incoming,
                                      dart_t outgoing) {
     graph_t* graph = search->graph;
-    fail_if(graph->dart_to[incoming] != graph->dart_from[outgoing],
+    fail_if(graph->input.neighbors[incoming] != graph->input.source[outgoing],
             "Error: nonconsecutive darts in face path\n");
-    return rotation_add(search, graph->dart_to[incoming],
-                        graph->dart_to_slot[incoming], graph->dart_from_slot[outgoing]);
+    return rotation_add(search, graph->input.neighbors[incoming],
+                        dart_slot(graph, graph->input.reverse[incoming]), dart_slot(graph, outgoing));
 }
 
 static void transition_remove_for_darts(search_t* search, dart_t incoming,
                                         dart_t outgoing) {
     graph_t* graph = search->graph;
-    rotation_remove(search, graph->dart_to[incoming], graph->dart_to_slot[incoming],
-                    graph->dart_from_slot[outgoing]);
+    rotation_remove(search, graph->input.neighbors[incoming], dart_slot(graph, graph->input.reverse[incoming]),
+                    dart_slot(graph, outgoing));
 }
 
 static void compute_distances(search_t* search, vertex_t target) {
     graph_t* graph = search->graph;
-    for (vertex_t vertex = 0; vertex < graph->n; vertex++) {
+    for (vertex_t vertex = 0; vertex < graph->input.n; vertex++) {
         search->distance[vertex] = UINT32_MAX;
     }
     uint32_t head = 0;
@@ -612,8 +409,8 @@ static void compute_distances(search_t* search, vertex_t target) {
     search->bfs_queue[tail++] = target;
     while (head < tail) {
         vertex_t vertex = search->bfs_queue[head++];
-        for (degree_t slot = 0; slot < graph->degree[vertex]; slot++) {
-            vertex_t neighbor = graph->adjacency[graph_slot(graph, vertex, slot)];
+        for (degree_t slot = 0; slot < graph_degree(graph, vertex); slot++) {
+            vertex_t neighbor = graph->input.neighbors[graph_slot(graph, vertex, slot)];
             if (search->distance[neighbor] == UINT32_MAX) {
                 search->distance[neighbor] = search->distance[vertex] + 1;
                 search->bfs_queue[tail++] = neighbor;
@@ -627,26 +424,18 @@ static bool search_faces(search_t* search, face_count_t faces_left);
 static bool finish_face(search_t* search, uint32_t length,
                         face_count_t faces_left, dart_t start_dart) {
     size_t old_length = search->face_data_length;
-    fail_if(old_length + length + 1 > search->face_data_capacity,
-            "Error: solution face buffer overflow\n");
-    memcpy(&search->face_data[old_length], search->path_vertices,
-           (length + 1) * sizeof(vertex_t));
-    search->face_data_length += length + 1;
+    fail_if(length > search->graph->darts - old_length, "Error: solution face buffer overflow\n");
+    memcpy(search->face_data + old_length, search->path_darts, length * sizeof(dart_t));
+    search->face_data_length += length;
     face_count_t depth = search->target_faces - faces_left;
     search->face_offsets[depth] = old_length;
     search->face_offsets[depth + 1] = search->face_data_length;
     if (search_faces(search, faces_left - 1)) {
         return true;
     }
-    memcpy(search->path_vertices, &search->face_data[old_length],
-           (length + 1) * sizeof(vertex_t));
-    for (uint32_t i = 0; i < length; i++) {
-        search->path_darts[i] =
-            graph_find_dart(search->graph, search->path_vertices[i],
-                            search->path_vertices[i + 1]);
-    }
+    memcpy(search->path_darts, search->face_data + old_length, length * sizeof(dart_t));
     search->face_data_length = old_length;
-    compute_distances(search, search->graph->dart_from[start_dart]);
+    compute_distances(search, search->graph->input.source[start_dart]);
     return false;
 }
 
@@ -654,9 +443,9 @@ static bool generate_face_path(search_t* search, dart_t start_dart,
                                uint32_t target_length, uint32_t length,
                                face_count_t faces_left) {
     graph_t* graph = search->graph;
-    vertex_t start = graph->dart_from[start_dart];
-    vertex_t current = search->path_vertices[length];
+    vertex_t start = graph->input.source[start_dart];
     dart_t incoming = search->path_darts[length - 1];
+    vertex_t current = graph->input.neighbors[incoming];
 
     if (length == target_length) {
         if (current != start ||
@@ -675,13 +464,13 @@ static bool generate_face_path(search_t* search, dart_t start_dart,
     }
 
     for (int reverse_used = 1; reverse_used >= 0; reverse_used--) {
-        for (degree_t slot = 0; slot < graph->degree[current]; slot++) {
-            dart_t outgoing = graph->slot_dart[graph_slot(graph, current, slot)];
+        for (degree_t slot = 0; slot < graph_degree(graph, current); slot++) {
+            dart_t outgoing = graph_slot(graph, current, slot);
             if (search->used[outgoing] ||
-                (int)search->used[graph->reverse[outgoing]] != reverse_used) {
+                (int)search->used[graph->input.reverse[outgoing]] != reverse_used) {
                 continue;
             }
-            vertex_t next = graph->dart_to[outgoing];
+            vertex_t next = graph->input.neighbors[outgoing];
             if (length + 1 + search->distance[next] > target_length ||
                 !transition_add_for_darts(search, incoming, outgoing)) {
                 continue;
@@ -689,7 +478,6 @@ static bool generate_face_path(search_t* search, dart_t start_dart,
             search->used[outgoing] = 1;
             search->remaining_darts--;
             search->path_darts[length] = outgoing;
-            search->path_vertices[length + 1] = next;
             if (generate_face_path(search, start_dart, target_length, length + 1,
                                    faces_left)) {
                 return true;
@@ -706,9 +494,9 @@ static uint32_t count_face_paths(search_t* search, dart_t start_dart,
                                  uint32_t target_length, uint32_t length,
                                  uint32_t limit) {
     graph_t* graph = search->graph;
-    vertex_t start = graph->dart_from[start_dart];
-    vertex_t current = search->path_vertices[length];
+    vertex_t start = graph->input.source[start_dart];
     dart_t incoming = search->path_darts[length - 1];
+    vertex_t current = graph->input.neighbors[incoming];
     if (length == target_length) {
         if (current != start ||
             !transition_add_for_darts(search, incoming, start_dart)) {
@@ -725,13 +513,13 @@ static uint32_t count_face_paths(search_t* search, dart_t start_dart,
     uint32_t count = 0;
     for (int reverse_used = 1; reverse_used >= 0 && count < limit; reverse_used--) {
         for (degree_t slot = 0;
-             slot < graph->degree[current] && count < limit; slot++) {
-            dart_t outgoing = graph->slot_dart[graph_slot(graph, current, slot)];
+             slot < graph_degree(graph, current) && count < limit; slot++) {
+            dart_t outgoing = graph_slot(graph, current, slot);
             if (search->used[outgoing] ||
-                (int)search->used[graph->reverse[outgoing]] != reverse_used) {
+                (int)search->used[graph->input.reverse[outgoing]] != reverse_used) {
                 continue;
             }
-            vertex_t next = graph->dart_to[outgoing];
+            vertex_t next = graph->input.neighbors[outgoing];
             if (length + 1 + search->distance[next] > target_length ||
                 !transition_add_for_darts(search, incoming, outgoing)) {
                 continue;
@@ -739,7 +527,6 @@ static uint32_t count_face_paths(search_t* search, dart_t start_dart,
             search->used[outgoing] = 1;
             search->remaining_darts--;
             search->path_darts[length] = outgoing;
-            search->path_vertices[length + 1] = next;
             count += count_face_paths(search, start_dart, target_length, length + 1,
                                       limit - count);
             search->used[outgoing] = 0;
@@ -752,12 +539,10 @@ static uint32_t count_face_paths(search_t* search, dart_t start_dart,
 
 static uint32_t count_faces_through_dart(search_t* search, dart_t start_dart,
                                          uint32_t target_length, uint32_t limit) {
-    compute_distances(search, search->graph->dart_from[start_dart]);
+    compute_distances(search, search->graph->input.source[start_dart]);
     search->used[start_dart] = 1;
     search->remaining_darts--;
     search->path_darts[0] = start_dart;
-    search->path_vertices[0] = search->graph->dart_from[start_dart];
-    search->path_vertices[1] = search->graph->dart_to[start_dart];
     uint32_t count = count_face_paths(search, start_dart, target_length, 1, limit);
     search->used[start_dart] = 0;
     search->remaining_darts++;
@@ -766,25 +551,25 @@ static uint32_t count_faces_through_dart(search_t* search, dart_t start_dart,
 
 static bool dart_better_for_probe(const search_t* search, dart_t left, dart_t right) {
     graph_t* graph = search->graph;
-    bool left_reverse = search->used[graph->reverse[left]] != 0;
-    bool right_reverse = search->used[graph->reverse[right]] != 0;
+    bool left_reverse = search->used[graph->input.reverse[left]] != 0;
+    bool right_reverse = search->used[graph->input.reverse[right]] != 0;
     if (left_reverse != right_reverse) {
         return left_reverse > right_reverse;
     }
-    vertex_t left_from = graph->dart_from[left];
-    vertex_t left_to = graph->dart_to[left];
-    vertex_t right_from = graph->dart_from[right];
-    vertex_t right_to = graph->dart_to[right];
+    vertex_t left_from = graph->input.source[left];
+    vertex_t left_to = graph->input.neighbors[left];
+    vertex_t right_from = graph->input.source[right];
+    vertex_t right_to = graph->input.neighbors[right];
     degree_t left_remaining =
-        graph->degree[left_to] - search->rotation_count[left_to];
+        graph_degree(graph, left_to) - search->rotation_count[left_to];
     degree_t right_remaining =
-        graph->degree[right_to] - search->rotation_count[right_to];
+        graph_degree(graph, right_to) - search->rotation_count[right_to];
     if (left_remaining != right_remaining) {
         return left_remaining < right_remaining;
     }
-    degree_t left_pressure =
+    unsigned left_pressure =
         search->rotation_count[left_from] + search->rotation_count[left_to];
-    degree_t right_pressure =
+    unsigned right_pressure =
         search->rotation_count[right_from] + search->rotation_count[right_to];
     return left_pressure > right_pressure;
 }
@@ -837,8 +622,8 @@ static dart_t choose_start_dart(search_t* search, uint32_t probe_length) {
 }
 
 static bool rotations_complete(const search_t* search) {
-    for (vertex_t vertex = 0; vertex < search->graph->n; vertex++) {
-        if (search->rotation_count[vertex] != search->graph->degree[vertex]) {
+    for (vertex_t vertex = 0; vertex < search->graph->input.n; vertex++) {
+        if (search->rotation_count[vertex] != graph_degree(search->graph, vertex)) {
             return false;
         }
     }
@@ -875,12 +660,10 @@ static bool search_faces(search_t* search, face_count_t faces_left) {
         return false;
     }
 
-    compute_distances(search, search->graph->dart_from[start_dart]);
+    compute_distances(search, search->graph->input.source[start_dart]);
     search->used[start_dart] = 1;
     search->remaining_darts--;
     search->path_darts[0] = start_dart;
-    search->path_vertices[0] = search->graph->dart_from[start_dart];
-    search->path_vertices[1] = search->graph->dart_to[start_dart];
 
     for (uint32_t length = first_length; length <= max_length; length += step) {
         uint32_t remaining_after = search->remaining_darts + 1 - length;
@@ -902,9 +685,46 @@ static bool search_faces(search_t* search, face_count_t faces_left) {
     return false;
 }
 
+#ifdef _WIN32
+static DWORD WINAPI search_thread(void* context) {
+    search_t* search = context;
+    return search_faces(search, search->target_faces) ? 1 : 0;
+}
+#endif
+
 static bool solve_genus(search_t* search, uint32_t genus, face_count_t faces) {
+    // At most one active path frame per dart and one completion per face.
+    // Reserve HoG's allowance before descending, including the nested probe calls.
+    uint64_t levels = (uint64_t)search->graph->darts + faces;
+    uint64_t bytes = 4ULL * 1024 * 1024 + 512 * levels;
     search_reset(search, genus, faces);
+#ifdef _WIN32
+    // Windows fixes the reserve when creating a thread.
+    fail_if(bytes > SIZE_MAX, "Error: face search stack exceeds address space\n");
+    HANDLE thread = CreateThread(NULL, (SIZE_T)bytes, search_thread, search,
+                                 STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+    fail_if(!thread, "Error reserving face search stack (%" PRIu64 " bytes)\n", bytes);
+    DWORD result;
+    fail_if(WaitForSingleObject(thread, INFINITE) != WAIT_OBJECT_0 ||
+                !GetExitCodeThread(thread, &result) || result > 1,
+            "Error running face search thread\n");
+    CloseHandle(thread);
+    return result == 1;
+#else
+    struct rlimit limit;
+    fail_if(getrlimit(RLIMIT_STACK, &limit) != 0, "Error reading stack limit: %s\n",
+            strerror(errno));
+    if (limit.rlim_cur != RLIM_INFINITY && (uint64_t)limit.rlim_cur < bytes) {
+        fail_if((limit.rlim_max != RLIM_INFINITY && bytes > (uint64_t)limit.rlim_max) ||
+                    (uint64_t)(rlim_t)bytes != bytes,
+                "Error: face search needs a stack limit of %" PRIu64 " bytes\n", bytes);
+        limit.rlim_cur = (rlim_t)bytes;
+        fail_if(setrlimit(RLIMIT_STACK, &limit) != 0,
+                "Error raising face search stack to %" PRIu64 " bytes: %s\n", bytes,
+                strerror(errno));
+    }
     return search_faces(search, faces);
+#endif
 }
 
 static void write_lazy_solution(const search_t* search) {
@@ -912,9 +732,11 @@ static void write_lazy_solution(const search_t* search) {
             "Solution with %u cycles (genus %u) found in %" PRIu64 " iterations:\n",
             search->target_faces, search->target_genus, search->calls);
     for (face_count_t face = 0; face < search->target_faces; face++) {
+        dart_t first = search->face_data[search->face_offsets[face]];
+        fprintf(output_file, "%u ", search->graph->input.source[first] + search->graph->input.start);
         for (size_t i = search->face_offsets[face]; i < search->face_offsets[face + 1]; i++) {
             fprintf(output_file, "%u ",
-                    search->face_data[i] + search->graph->start_index);
+                    search->graph->input.neighbors[search->face_data[i]] + search->graph->input.start);
         }
         fprintf(output_file, "\n");
     }
@@ -923,17 +745,7 @@ static void write_lazy_solution(const search_t* search) {
 int main(void) {
     const char* filename = getenv("ADJ");
     fail_if(filename == NULL, "Usage: ADJ=adjacency_lists/3-8-cage.txt ./page_low_mem\n");
-    input_layout_t detected = detect_input_layout(filename, MAX_VERTEX);
-    const char* start_text = getenv("S");
-    const char* degree_text = getenv("DEG");
-    unsigned long start_value = start_text == NULL ? detected.start : strtoul(start_text, NULL, 10);
-    unsigned long degree_value = degree_text == NULL ? detected.degree : strtoul(degree_text, NULL, 10);
-    fail_if(start_value >= MAX_VERTEX || degree_value == 0 || degree_value >= MAX_VERTEX, "Error: invalid S or DEG value\n");
-    
-    uint32_t precomputed_lower_bound = 0;
-    if (getenv("GLB") != NULL) {
-        precomputed_lower_bound = (uint32_t)strtoul(getenv("GLB"), NULL, 10);
-    }
+    uint32_t precomputed_lower_bound = page_setting("GLB", 0, UINT32_MAX);
     if (getenv("QUIET") != NULL) {
         print_progress = false;
     }
@@ -941,11 +753,11 @@ int main(void) {
     if (print_progress) {
         fprintf(stderr, "Loading adjacency list...\n");
     }
-    graph_t graph = graph_load(filename, (degree_t)degree_value, (vertex_t)start_value);
+    graph_t graph = graph_load(filename);
     if (print_progress) {
         fprintf(stderr,
                 "Read %s: %u vertices, %u edges, girth %u%s.\n",
-                filename, graph.n, graph.m, graph.girth,
+                filename, graph.input.n, graph.input.m, graph.girth,
                 graph.bipartite ? ", bipartite" : "");
     }
 
@@ -954,6 +766,9 @@ int main(void) {
     face_count_t input_faces = input_rotation_face_count(&graph);
     uint32_t upper_genus = genus_from_faces(&graph, input_faces);
 
+    fail_if(precomputed_lower_bound > upper_genus,
+            "Error: genus lower bound %u exceeds input-rotation upper bound %u\n",
+            precomputed_lower_bound, upper_genus);
     if (graph.girth == 0) {
         if (print_progress) {
             fprintf(stderr, "A connected acyclic graph has genus 0.\n"
@@ -968,7 +783,7 @@ int main(void) {
     uint32_t bound_face_length = graph.has_bridge ? 2 : graph.girth;
     face_count_t face_upper_bound = graph.darts / bound_face_length;
     int64_t lower_numerator =
-        2 - (int64_t)graph.n + graph.m - face_upper_bound;
+        2 - (int64_t)graph.input.n + graph.input.m - face_upper_bound;
     uint32_t lower_genus =
         lower_numerator <= 0 ? 0 : (uint32_t)((lower_numerator + 1) / 2);
     if (precomputed_lower_bound > lower_genus) {
@@ -978,14 +793,15 @@ int main(void) {
             "Error: genus lower bound %u exceeds input-rotation upper bound %u\n",
             lower_genus, upper_genus);
 
-    search_t search = search_create(&graph);
+    search_t search = {0};
+    if (lower_genus < upper_genus) search = search_create(&graph);
     uint64_t total_calls = 0;
     if (print_progress) {
         fprintf(stderr, "Beginning lazy genus search between %u and %u.\n",
                 lower_genus, upper_genus);
     }
     for (uint32_t genus = lower_genus; genus < upper_genus; genus++) {
-        int64_t faces_value = (int64_t)graph.m - graph.n + 2 - 2 * (int64_t)genus;
+        int64_t faces_value = (int64_t)graph.input.m - graph.input.n + 2 - 2 * (int64_t)genus;
         if (faces_value <= 0 || faces_value > UINT32_MAX) {
             continue;
         }

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 import unittest
+from unittest.mock import patch
 
 import graph_genus as gg
 
@@ -28,6 +29,12 @@ class GraphGenusPackageTests(unittest.TestCase):
         self.assertEqual(genus, 1)
         self.assertEqual([sorted(neighbors) for neighbors in rotation], K33)
 
+    def test_page_minimum_with_shell_bound(self):
+        with patch.dict("os.environ", {"GLB": "1"}):
+            for low_memory in (False, True):
+                with self.subTest(low_memory=low_memory):
+                    self.assertEqual(gg.embed(K4, low_memory=low_memory)[0], 0)
+
     def test_multi_genus_embedding(self):
         genus, rotation = gg.embed(K33, algorithm="multi_genus")
         self.assertEqual(genus, 1)
@@ -39,6 +46,17 @@ class GraphGenusPackageTests(unittest.TestCase):
                 genus, rotation = gg.embed(graph, algorithm="multi_genus")
                 self.assertEqual((genus, rotation), (0, graph))
                 self.assertEqual(gg.embed(rotation, algorithm="none"), (genus, rotation))
+
+    def test_page_bridges_and_low_degrees(self):
+        # Two triangles joined by a bridge. Both darts of the bridge lie on one face.
+        bridge = [[1, 2], [0, 2], [0, 1, 3], [2, 4, 5], [3, 5], [3, 4]]
+        for low_memory in (False, True):
+            for graph in ([[]], [[1], [0]], [[1], [0, 2], [1]], bridge):
+                with self.subTest(low_memory=low_memory, graph=graph):
+                    genus, rotation = gg.embed(graph, low_memory=low_memory)
+                    self.assertEqual(genus, 0)
+                    self.assertEqual(list(map(sorted, rotation)), list(map(sorted, graph)))
+                    self.assertEqual(gg.embed(rotation, algorithm="none")[0], genus)
 
     def test_none_computes_rotation_system_genus(self):
         genus, rotation = gg.embed(
