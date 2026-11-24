@@ -35,6 +35,30 @@ check; the paper proves the interval lemma algebraically.
 The second command runs 18 regression tests, including rejection of altered
 certificates and checks of the paper's translation order and splice paths.
 
+## Run the Lean proof
+
+From the repository root, run these commands with Elan and Python 3.10+ installed.
+
+```bash
+cd BipartiteKneser
+lake build
+lake lint
+lake test
+lake env leanchecker BipartiteKneser KneserWitnessData
+```
+
+`optimalRotation_of_lt_131` proves Theorem 1.1 for every admissible prime
+below 131. Lean checks the disjoint-pair graph, the vertex-transitive
+quadrangulation, and minimality among all rotation systems. For arbitrary
+admissible primes, the library proves the genus formula given a valid affine
+quadrangulation and proves the interval-switch lemma (6.10). The generic
+construction for primes at least 131 remains to be formalized.
+
+Python supplies the seven numerical witnesses. The pinned Lean build checks
+them with the kernel and treats linter warnings as errors. The tests audit
+axiom dependencies and verify that swapping two labels breaks a face in the
+11-case. The final command replays the compiled declarations.
+
 ## Files and paper references
 
 | File | Purpose | Paper location |
