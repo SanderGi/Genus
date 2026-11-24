@@ -4,11 +4,6 @@
 -->
 
 # Practical Performance
-
-**MultiGenus timings.** The MG columns report elapsed seconds per graph, including process startup. The November 24, 2026 measurements used the bundled `.mc` files on a shared 10-core Apple M1 Pro running macOS 15.6, with the Makefile's `-O3 -DLONG -march=native` build under Apple Clang 17.0.0. Each solver ran on its own with no command-line options. For example, from `MultiGenus/`, run `./multi_genus < graphs/3-9-cage1.mc`. Brackets give `multi_genus_parallel` with `MULTI_GENUS_THREADS=10` and automatic split depth.
-
-For runs under one second, the table gives the median of five process launches. Longer runs were measured once. Each completed run had to report one graph of the tabulated genus. The three (3,10)-cage times and entries without numeric MG timings are historical.
-
 The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), computation time for the genus using SageMath (SM time), and computation time using multi_genus.c (MG time).
 \#                                              | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s) [parallel]
 ----------------------------------------------- | --- | --- | ---- | ----- | ---------- | ---------- | -------- | ----------- | -----------
@@ -102,7 +97,7 @@ The genus for various Circulant graphs generated using Mathematica follows.
 ------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
 [C10_1,2,5](../PAGE/adjacency_lists/Circulant10_1-2-5.txt)          | 10   | 25    | 1        | 0.005    | 0.005
 [C10_1,2,4,5](../PAGE/adjacency_lists/Circulant10_1-2-4-5.txt)      | 10   | 35    | 3        | 0.009    | 0.017
-[C14_1,2,3,6](../PAGE/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 56    | 4        | 0.013    | 1.284
+[C14_1,2,3,6](../PAGE/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 48    | 4        | 0.013    | 1.284
 [C15_1,5](../PAGE/adjacency_lists/Circulant15_1-5.txt)              | 15   | 30    | 1        | 0.008    | 0.007
 [C16_1,7](../PAGE/adjacency_lists/Circulant16_1-7.txt)              | 16   | 32    | 1        | 0.005    | 0.004
 [C18_1,3,9](../PAGE/adjacency_lists/Circulant18_1-3-9.txt)          | 18   | 45    | 4        | 0.579   | 0.010
