@@ -3,8 +3,12 @@
 # SPDX-License-Identifier: GPL-2.0-only
 """Focused command-line regression tests for HoG/genus."""
 
-import subprocess
+import itertools
+import os
 import resource
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -341,6 +345,124 @@ class GenusCliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr.decode())
         self.assertIn("Graph 1 has genus 1", result.stdout.decode())
+
+    def test_rotation_oracle_all_solver_modes(self):
+        # The shared Python oracle enumerates cyclic neighbor orders and counts
+        # dart orbits. It uses neither native solver nor block decomposition.
+        sys.path.insert(0, str(HERE.parent))
+        try:
+            from PAGE.test_page_python import connected, exhaustive_genus, rows_for
+        finally:
+            sys.path.pop(0)
+
+        graphs = []
+        for n in range(1, 6):
+            possible = list(itertools.combinations(range(n), 2))
+            seen = set()
+            for mask in range(1 << len(possible)):
+                edges = tuple(e for i, e in enumerate(possible) if mask & (1 << i))
+                if edges in seen or not connected(rows_for(n, edges)):
+                    continue
+                graphs.append((n, edges))
+                for labels in itertools.permutations(range(n)):
+                    seen.add(tuple(sorted(
+                        tuple(sorted((labels[u], labels[v]))) for u, v in edges
+                    )))
+        self.assertEqual(len(graphs), 31)  # All connected isomorphism classes through order five.
+
+        k33 = complete_bipartite_edges(range(3), range(3, 6))
+        # The two copies share a cut vertex in one graph and a bridge in the other.
+        # Compute both answers on the whole graph to test genus additivity independently.
+        cut = k33 | {(a + 5, b + 5) for a, b in k33}
+        bridged = k33 | {(a + 6, b + 6) for a, b in k33} | {(5, 6)}
+        subdivided = (k33 - {(0, 3)}) | {(0, 6), (6, 7), (7, 3)}
+        graphs.extend([
+            (6, k33),
+            (8, subdivided),
+            (9, subdivided | {(1, 8)}),
+            (11, cut),
+            (12, bridged),
+        ])
+        genera = [exhaustive_genus(rows_for(n, edges)) for n, edges in graphs]
+        self.assertEqual(genera[-5:], [1, 1, 1, 2, 2])
+        modes = (
+            (),
+            ("--low-mem",),
+            ("--auto-low-mem",),
+            ("--page-only",),
+            ("--page-only", "--low-mem"),
+            ("--page-only", "--auto-low-mem"),
+            ("--multi_genus-only",),
+        )
+        for encoder, flag in ((graph6, "--graph6"), (multicode, "--multicode")):
+            data = b"".join(encoder(n, edges) for n, edges in graphs)
+            for mode in modes:
+                with self.subTest(format=flag, mode=mode):
+                    result = self.run_genus(data, flag, *mode, "-j", "2", timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr.decode())
+                    records = result.stdout.decode().splitlines()
+                    self.assertEqual(len(records), len(graphs) + 1)
+                    for index, (genus, graph) in enumerate(zip(genera, graphs), 1):
+                        self.assertEqual(records[index - 1], f"Graph {index} has genus {genus}",
+                                         f"graph6={graph6(*graph).decode().strip()}")
+                    self.assertIn(f"{len(graphs)} succeeded, 0 failed", records[-1])
+
+    def test_portfolio_with_materialized_memory_failure(self):
+        # Build only in the temporary directory. A zero candidate budget forces
+        # a real worker failure without exhausting host memory or depending on a race.
+        with tempfile.TemporaryDirectory() as tmp:
+            compiler = os.environ.get("CC", "cc")
+            subprocess.run(
+                ["make", "-Bs", "genus", f"BDIR={tmp}",
+                 f"CC={compiler} -DHOG_PAGE_MAX_CYCLE_MEMORY_MB=0"],
+                cwd=HERE, check=True,
+            )
+            binary = Path(tmp) / "genus"
+            k4 = complete_edges(4)
+            # Subdividing one edge preserves K4's genus but crosses the 128-vertex
+            # MultiGenus limit. Thus the only successful worker can be low-memory PAGE.
+            path = [0, *range(4, 129), 1]
+            large = (k4 - {(0, 1)}) | set(zip(path, path[1:]))
+            small_input, large_input = graph6(4, k4), graph6(129, large)
+
+            def run(data, *args):
+                return subprocess.run(
+                    [binary, *args, "-j", "2"], input=data, capture_output=True, timeout=30,
+                )
+
+            for data in (small_input, large_input):
+                with self.subTest(check="worker failure", n=len(data)):
+                    failed = run(data, "--page-only")
+                    self.assertEqual(failed.returncode, 1)
+                    self.assertIn(b"cycle-memory safety limit", failed.stderr)
+            unsupported = run(large_input, "--multi_genus-only")
+            self.assertEqual(unsupported.returncode, 1)
+            self.assertIn(b"exceeds MultiGenus", unsupported.stderr)
+
+            # The small graph can still succeed on MultiGenus when PAGE fails.
+            fallback = run(large_input + small_input)
+            self.assertEqual(fallback.returncode, 1)
+            self.assertIn(b"Graph 1 error: PAGE failed", fallback.stderr)
+            self.assertIn(b"Graph 2 has genus 0\n", fallback.stdout)
+            self.assertIn(b"1 succeeded, 1 failed", fallback.stdout)
+            for mode in (("--auto-low-mem",), ("--page-only", "--auto-low-mem")):
+                with self.subTest(retry=mode):
+                    retried = run(large_input + small_input, *mode)
+                    self.assertEqual(retried.returncode, 0, retried.stderr.decode())
+                    self.assertEqual(retried.stdout.splitlines()[:2], [
+                        b"Graph 1 has genus 0", b"Graph 2 has genus 0",
+                    ])
+                    self.assertIn(b"2 succeeded, 0 failed", retried.stdout)
+
+    def test_canonical_graph6_order_and_padding(self):
+        # K2 in the short form. Its three-byte order spelling is noncanonical.
+        good = graph6(2, {(0, 1)})
+        self.assertEqual(self.run_genus(good).returncode, 0)
+        for data in (b"~??A" + good[1:], b"A`\n", b"", b">>graph6<<\n"):
+            with self.subTest(data=data):
+                run = self.run_genus(data)
+                self.assertNotEqual(run.returncode, 0)
+                self.assertNotIn(b"has genus", run.stdout)
 
     def test_invalid_input_and_conflicting_flags_fail(self):
         malformed = self.run_genus(b"not-graph6\n")

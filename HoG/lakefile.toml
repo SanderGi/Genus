@@ -1,0 +1,24 @@
+name = "hog"
+version = "0.1.0"
+defaultTargets = ["HoG"]
+testDriver = "CheckHoG"
+lintDriver = "batteries/runLinter"
+lintDriverArgs = ["HoG"]
+builtinLint = true
+
+[leanOptions]
+warningAsError = true
+weak.linter.mathlibStandardSet = true
+weak.linter.style.header.license = "SPDX-License-Identifier: GPL-2.0-only"
+
+[[require]]
+name = "page"
+path = "../PAGE"
+
+[[lean_lib]]
+name = "HoG"
+srcDir = "lean"
+
+[[lean_lib]]
+name = "CheckHoG"
+srcDir = "lean"
