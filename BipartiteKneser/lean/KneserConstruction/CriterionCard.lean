@@ -1,7 +1,11 @@
-import KneserConstruction.Multipliers
-import Mathlib.Data.Finset.Powerset
+module
+
+public import KneserConstruction.Multipliers
+public import Mathlib.Data.Finset.Powerset
 
 /-! # The cardinality of the connection set -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Criterion
 

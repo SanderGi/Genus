@@ -1,7 +1,9 @@
-import BipartiteKneser.Certificates
-import BipartiteKneser.Graph
-import BipartiteKneser.Faces
-import BipartiteKneser.Euler
+module
+
+public import BipartiteKneser.Certificates
+public import BipartiteKneser.Graph
+public import BipartiteKneser.Faces
+public import BipartiteKneser.Euler
 
 /-!
 # Minimum orientable genus in the rotation-system model
@@ -12,11 +14,14 @@ and takes the successor in the numbering at its head. Euler's formula assigns
 a genus to the resulting orientable cellular embedding of the connected graph.
 -/
 
+@[expose] public section
+
 set_option linter.all true
 
 namespace BipartiteKneser
 
-private def productList (xs : List α) (ys : List β) : List (α × β) :=
+/-- List all ordered pairs in the two input lists. -/
+def productList (xs : List α) (ys : List β) : List (α × β) :=
   xs.flatMap fun x => ys.map (Prod.mk x)
 
 private theorem product_length (xs : List α) (ys : List β) :
@@ -39,7 +44,8 @@ private theorem product_nodup {xs : List α} {ys : List β} (hx : xs.Nodup) (hy 
     simp
     grind
 
-private def darts (h q d : Nat) : List (BaseCycle.Dart h q d) :=
+/-- List every directed edge of the affine model. -/
+def darts (h q d : Nat) : List (BaseCycle.Dart h q d) :=
   productList [false, true]
     (productList (productList (List.finRange h) (List.finRange q)) (List.finRange d))
 
@@ -110,7 +116,8 @@ private theorem walk_girth [NeZero h] [NeZero q] [NeZero d] (hd : 1 < d)
     have := congrArg Prod.fst he
     cases p <;> contradiction
 
-private def standardOrders [NeZero d] : Orders h q d := fun p _ =>
+/-- Opposite cyclic orders in the two bipartition classes. -/
+def standardOrders [NeZero d] : Orders h q d := fun p _ =>
   if p then ⟨Neg.neg, Neg.neg, by intro i; grind, by intro i; grind⟩
   else ⟨id, id, by simp, by simp⟩
 

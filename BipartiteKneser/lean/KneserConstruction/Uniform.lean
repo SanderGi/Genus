@@ -1,8 +1,12 @@
-import KneserConstruction.PaperOrder
-import KneserConstruction.InventoryBlocks
-import KneserConstruction.FamilyConstruction
+module
+
+public import KneserConstruction.PaperOrder
+public import KneserConstruction.InventoryBlocks
+public import KneserConstruction.FamilyConstruction
 
 /-! # Existence of the input to the generic rotation construction -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family
 

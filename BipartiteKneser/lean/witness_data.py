@@ -42,7 +42,8 @@ def decode{h} : Fin {h} → Fin {h} → Frame {h} {q} :=
 
 def main():
     records = load_records()
-    print("import BipartiteKneser.Certificates")
+    print("module\n\npublic import BipartiteKneser.Certificates\n")
+    print("@[expose] public section\n")
     print("namespace BipartiteKneser.Exceptional")
     for h in EXCEPTIONAL_PRIMES:
         print(tables(records[str(h)]))

@@ -1,7 +1,11 @@
-import KneserConstruction.FamilyJoins
-import KneserConstruction.ReductionLocal
+module
+
+public import KneserConstruction.FamilyJoins
+public import KneserConstruction.ReductionLocal
 
 /-! # The K-to-N row in centered boundary coordinates -/
+
+@[expose] public section
 
 noncomputable section
 

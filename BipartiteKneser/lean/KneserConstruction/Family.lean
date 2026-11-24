@@ -1,4 +1,6 @@
-import KneserConstruction.FamilyConstruction
+module
+
+public import KneserConstruction.FamilyConstruction
 
 /-!
 # The complete admissible family of Proposition 5.7
@@ -8,6 +10,8 @@ inventory. Joining rows, translation replacements, and zero-coordinate
 replacements fill exactly the omitted blocks. Signs of the final transitions
 are free at every fiber.
 -/
+
+@[expose] public section
 
 noncomputable section
 
@@ -23,7 +27,7 @@ private theorem sum_get {α β : Type*} [AddCommMonoid β] (xs : List α) (f : �
   rw [← Fin.sum_ofFn]
   exact congrArg List.sum (List.ofFn_getElem_eq_map xs f)
 
-private theorem row_sum (switch : ℕ → Bool) (f : Quad (Frame p q) → Multiset (Frame p q)) :
+theorem row_sum (switch : ℕ → Bool) (f : Quad (Frame p q) → Multiset (Frame p q)) :
     (∑ i, f (C.row switch i)) =
     (∑ i, ((C.ordinary switch i).map f).sum) +
     ((∑ i, f (C.joins i)) + ((∑ i, f (C.translations i)) + (C.zeros.map f).sum)) := by
@@ -31,7 +35,7 @@ private theorem row_sum (switch : ℕ → Bool) (f : Quad (Frame p q) → Multis
   simp only [row, sum_get]
 
 include C in
-private theorem single_gap (k : Fin q) :
+theorem single_gap (k : Fin q) :
     (∑ i : Fin (q - 1), if decide (i.val = 0) then quartet m k (coord i) else 0) =
       quartet m k 1 := by
   let e : Fin (q - 1) := ⟨0, by have := C.q_eq; have := C.large; omega⟩
@@ -39,7 +43,7 @@ private theorem single_gap (k : Fin q) :
     exact ⟨fun h => Fin.ext h, fun h => congrArg Fin.val h⟩
   simp only [decide_eq_true_eq, he, Fintype.sum_ite_eq', coord, e, Nat.zero_add, Nat.cast_one]
 
-private theorem zero_inventory :
+theorem zero_inventory :
     let total := ∑ i : Fin C.M, Zero.block m (Zero.start i.val)
     (C.zeros.map (Quad.domBag (inverse m))).sum = total + quartet m C.params.a 1 ∧
     (C.zeros.map (Quad.ranBag (inverse m))).sum = total + quartet m C.params.b 1 := by
@@ -49,19 +53,19 @@ private theorem zero_inventory :
   omega
 
 include C in
-private theorem missing_eq_w₀ : ((missing (residueCase p) q : ℤ) : ZMod p) =
+theorem missing_eq_w₀ : ((missing (residueCase p) q : ℤ) : ZMod p) =
     (Translations.w₀ p q : ZMod p) := by
   have hq : 2 ≤ q := by have := C.q_eq; have := C.large; omega
   by_cases h : p % 3 = 1 <;> simp [residueCase, Translations.w₀, missing, h, Nat.cast_sub hq]
 
 include C in
-private theorem tableSize : InRange (residueCase p) (q : ℤ) := by
+theorem tableSize : InRange (residueCase p) (q : ℤ) := by
   have := C.q_eq
   have := C.large
   unfold residueCase
   split <;> simp only [InRange] <;> omega
 
-private theorem tally {A : Type*} [AddCommMonoid A]
+theorem tally {A : Type*} [AddCommMonoid A]
     (fibers joins translations zeros ends gap endpoint ord trans zero : A)
     (hf : fibers + ends + gap = ord) (he : ends = joins + endpoint)
     (ht : translations = trans + endpoint) (hz : zeros = zero + gap) :

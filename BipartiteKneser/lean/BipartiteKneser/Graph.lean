@@ -1,4 +1,6 @@
-import BipartiteKneser.Rotation
+module
+
+public import BipartiteKneser.Rotation
 
 /-!
 # The two-subset graph H(h,2)
@@ -6,6 +8,8 @@ import BipartiteKneser.Rotation
 An increasing pair represents its two-element subset without multiplicity.
 The chart translates the affine dart labels to exactly the neighbors in this graph.
 -/
+
+@[expose] public section
 
 set_option linter.all true
 

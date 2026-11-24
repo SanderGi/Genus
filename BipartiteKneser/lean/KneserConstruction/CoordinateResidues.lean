@@ -1,8 +1,12 @@
-import KneserConstruction.Coordinates
+module
+
+public import KneserConstruction.Coordinates
 
 /-!
 # Signed representatives for the coordinate and exponent fibers
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Coordinates
 
@@ -22,7 +26,7 @@ private theorem signedIndex_val (size : n = 2 * t + 1) (i : Fin t) (s : Bool) :
 
 /-- The nonzero residues of an odd modulus are the signed positive half-range.
 The Boolean is false on the positive half. -/
-noncomputable def signedResidueEquiv (size : n = 2 * t + 1) :
+@[no_expose] noncomputable def signedResidueEquiv (size : n = 2 * t + 1) :
     (Fin t × Bool) ≃ {x : Fin n // x ≠ 0} := by
   apply Equiv.ofBijective (signedIndex size)
   constructor

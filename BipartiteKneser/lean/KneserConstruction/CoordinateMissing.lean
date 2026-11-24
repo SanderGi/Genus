@@ -1,5 +1,7 @@
-import KneserConstruction.CoordinateSpecial
-import KneserConstruction.CoordinateResidues
+module
+
+public import KneserConstruction.CoordinateSpecial
+public import KneserConstruction.CoordinateResidues
 
 /-!
 # Missing exponent pairs and their quadratic character
@@ -7,6 +9,8 @@ import KneserConstruction.CoordinateResidues
 The Cayley transform identifies an oriented missing coordinate with a unique
 multiplier. Folding its two signs counts each missing exponent pair once.
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Coordinates
 

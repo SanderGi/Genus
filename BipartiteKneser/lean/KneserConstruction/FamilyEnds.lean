@@ -1,6 +1,10 @@
-import KneserConstruction.FamilyFiberRows
+module
+
+public import KneserConstruction.FamilyFiberRows
 
 /-! # Matching the ordinary fiber endpoints with the joining rows -/
+
+@[expose] public section
 
 noncomputable section
 

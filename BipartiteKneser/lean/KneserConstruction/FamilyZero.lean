@@ -1,6 +1,10 @@
-import KneserConstruction.FamilyZeroRows
+module
+
+public import KneserConstruction.FamilyZeroRows
 
 /-! # The complete zero-coordinate part of Construction 5.6 -/
+
+@[expose] public section
 
 noncomputable section
 

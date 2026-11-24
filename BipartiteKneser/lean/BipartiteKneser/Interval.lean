@@ -1,4 +1,6 @@
-import Std
+module
+
+public import Std
 
 /-!
 # Transfers on the three strands of each sign
@@ -8,6 +10,8 @@ The local maps act on the left, in the forward (entry-to-exit) convention.
 The finite automaton below tracks the exact set of attainable pairs. Its
 transition table is checked against the two permutations at a single fiber.
 -/
+
+@[expose] public section
 
 set_option linter.all true
 

@@ -1,7 +1,11 @@
-import KneserConstruction.OrbitRows
-import KneserConstruction.CriterionRows
+module
+
+public import KneserConstruction.OrbitRows
+public import KneserConstruction.CriterionRows
 
 /-! # Substituting actual affine frames into symbolic splice rows -/
+
+@[expose] public section
 
 noncomputable section
 

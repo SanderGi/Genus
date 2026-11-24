@@ -1,4 +1,6 @@
-import BipartiteKneser.Rotation
+module
+
+public import BipartiteKneser.Rotation
 
 /-!
 # Certificate interface for the exceptional primes (Section 8)
@@ -7,6 +9,8 @@ A witness includes a chart onto all two-subsets, a complete local rotation,
 and the quadrilateral equations. The finite checks on the base cycle imply
 the assertions about darts and vertices by the theorems in `Rotation`.
 -/
+
+@[expose] public section
 
 set_option linter.all true
 

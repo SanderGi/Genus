@@ -1,7 +1,11 @@
-import KneserConstruction.OrbitNames
-import KneserConstruction.FamilyTransRows
+module
+
+public import KneserConstruction.OrbitNames
+public import KneserConstruction.FamilyTransRows
 
 /-! # The four translation paths and exhaustion of their intermediate slots (Lemma 6.3) -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Orbit
 

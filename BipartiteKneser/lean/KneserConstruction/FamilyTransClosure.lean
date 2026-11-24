@@ -1,6 +1,10 @@
-import KneserConstruction.FamilyTransRows
+module
+
+public import KneserConstruction.FamilyTransRows
 
 /-! # Group closure for the translation replacements -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.Translations
 

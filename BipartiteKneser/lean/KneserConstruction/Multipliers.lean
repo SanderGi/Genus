@@ -106,7 +106,7 @@ theorem exists_of_prime (p q : ℕ) [Fact p.Prime] [NeZero p] [NeZero q]
 variable {p q d : ℕ} [NeZero p] [NeZero q]
 
 /-- The multiplier as a field element. -/
-noncomputable def fieldPower (m : Multipliers p q) (k : Fin q) : ZMod p :=
+@[expose] noncomputable def fieldPower (m : Multipliers p q) (k : Fin q) : ZMod p :=
   ZMod.finEquiv p (m.power k)
 
 @[simp] theorem fieldPower_zero (m : Multipliers p q) : m.fieldPower 0 = 1 := by

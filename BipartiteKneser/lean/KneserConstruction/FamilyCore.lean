@@ -1,4 +1,6 @@
-import KneserConstruction.Multipliers
+module
+
+public import KneserConstruction.Multipliers
 
 /-!
 # Rotation quadruples and their induced permutation
@@ -7,6 +9,8 @@ The row address is separate from the four slots inside a row. Completeness is a
 pair of bijections onto the actual connection set, so a later iteration proof
 can use the row equations for the permutation without performing a search.
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family
 

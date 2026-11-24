@@ -1,4 +1,6 @@
-import Std
+module
+
+public import Std
 
 /-!
 # Counting faces of a rotation system
@@ -7,6 +9,8 @@ A face partition lists the darts of each orbit in traversal order. The flattened
 list contains every dart exactly once. This suffices both for the Euler lower
 bound and for counting the faces of a quadrangulation.
 -/
+
+@[expose] public section
 
 set_option linter.all true
 

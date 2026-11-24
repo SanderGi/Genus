@@ -1,7 +1,11 @@
-import KneserConstruction.FamilyChains
-import KneserConstruction.CoordinateResidues
+module
+
+public import KneserConstruction.FamilyChains
+public import KneserConstruction.CoordinateResidues
 
 /-! # Ordering the present exponent pairs of a positive coordinate fiber -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.FiberOrder
 

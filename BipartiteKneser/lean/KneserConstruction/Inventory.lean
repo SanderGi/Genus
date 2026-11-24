@@ -1,8 +1,12 @@
-import KneserConstruction.FamilyChains
-import KneserConstruction.CoordinateResidues
-import Mathlib.Algebra.BigOperators.Fin
+module
+
+public import KneserConstruction.FamilyChains
+public import KneserConstruction.CoordinateResidues
+public import Mathlib.Algebra.BigOperators.Fin
 
 /-! # Partition of the connection set by exponent and coordinate -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.Inventory
 

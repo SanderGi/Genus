@@ -1,6 +1,8 @@
-import KneserConstruction.BoundaryFinite
-import KneserConstruction.BoundarySound
-import KneserConstruction.BoundaryLabels
+module
+
+public import KneserConstruction.BoundaryFinite
+public import KneserConstruction.BoundarySound
+public import KneserConstruction.BoundaryLabels
 
 /-!
 # The finite one-cycle witness (Section 7)
@@ -8,6 +10,8 @@ import KneserConstruction.BoundaryLabels
 Proposition 7.3, in the forward transfer convention of Corollary 6.11.
 The symbolic coordinate identification of Proposition 7.2 is `normalize_step`.
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 

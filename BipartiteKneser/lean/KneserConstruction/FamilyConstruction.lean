@@ -1,10 +1,14 @@
-import KneserConstruction.FamilyEnds
-import KneserConstruction.FamilyZero
-import KneserConstruction.FamilyTranslations
-import KneserConstruction.CoordinateSpecial
-import KneserConstruction.Parameters
+module
+
+public import KneserConstruction.FamilyEnds
+public import KneserConstruction.FamilyZero
+public import KneserConstruction.FamilyTranslations
+public import KneserConstruction.CoordinateSpecial
+public import KneserConstruction.Parameters
 
 /-! # Row indices and quadruples for the complete generic construction -/
+
+@[expose] public section
 
 noncomputable section
 

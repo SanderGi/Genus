@@ -1,10 +1,14 @@
-import BipartiteKneser.SmallPrimes
-import KneserConstruction.AdmissiblePrimes
-import KneserConstruction.Criterion
-import KneserConstruction.Orbit
-import KneserConstruction.Uniform
+module
+
+public import BipartiteKneser.SmallPrimes
+public import KneserConstruction.AdmissiblePrimes
+public import KneserConstruction.Criterion
+public import KneserConstruction.Orbit
+public import KneserConstruction.Uniform
 
 /-! # Theorem 1.1 of *The Genus of Bipartite Kneser Graphs* -/
+
+@[expose] public section
 
 namespace BipartiteKneser
 

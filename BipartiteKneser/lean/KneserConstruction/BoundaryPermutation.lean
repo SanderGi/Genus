@@ -1,7 +1,11 @@
-import KneserConstruction.BoundaryModel
-import Mathlib.Data.Fintype.EquivFin
+module
+
+public import KneserConstruction.BoundaryModel
+public import Mathlib.Data.Fintype.EquivFin
 
 /-! Every choice of the local bijections gives a permutation (Proposition 7.2). -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 
@@ -97,7 +101,7 @@ private theorem step_factor (c : Case) (chars : Pattern c) (mask : Nat) (p r : I
       (chars.val.testBit (x.val / 4)) (mask.testBit (x.val / 4))
     simp (disch := omega) only [ite_eq_left, Nat.mul_add_div (by decide : 0 < 4),
       Nat.div_eq_of_lt hj, Nat.add_zero, Nat.mul_add_mod, Nat.mod_eq_of_lt hj]
-  · simp
+  · simp (disch := omega) [ite_eq_right]
 
 /-- Proposition 7.2. Every choice of outside bijections and forward transfers is bijective. -/
 theorem step_bijective (c : Case) (chars : Pattern c) (mask : Nat) (p r : Interval.Perm) :

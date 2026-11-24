@@ -1,7 +1,11 @@
-import KneserConstruction.FamilyChains
-import KneserConstruction.CriterionRows
+module
+
+public import KneserConstruction.FamilyChains
+public import KneserConstruction.CriterionRows
 
 /-! # The rows attaching the zero-coordinate subgroup -/
+
+@[expose] public section
 
 noncomputable section
 

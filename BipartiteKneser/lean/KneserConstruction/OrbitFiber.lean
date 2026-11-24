@@ -1,8 +1,12 @@
-import KneserConstruction.OrbitRows
-import KneserConstruction.FamilyFiberRows
-import KneserConstruction.ReductionLocal
+module
+
+public import KneserConstruction.OrbitRows
+public import KneserConstruction.FamilyFiberRows
+public import KneserConstruction.ReductionLocal
 
 /-! # Reading the first-to-last fiber map in the boundary convention -/
+
+@[expose] public section
 
 noncomputable section
 

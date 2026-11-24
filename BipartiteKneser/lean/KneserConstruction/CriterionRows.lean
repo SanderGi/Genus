@@ -1,7 +1,11 @@
-import KneserConstruction.FamilyCore
+module
+
+public import KneserConstruction.FamilyCore
 import Mathlib.Tactic.Group
 
 /-! # The group equations for the four orientations of a row -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Criterion
 open Family

@@ -1,4 +1,6 @@
-import KneserWitnessData
+module
+
+public import KneserWitnessData
 
 /-!
 # Exceptional primes
@@ -7,6 +9,8 @@ Proposition 8.1 of *The Genus of Bipartite Kneser Graphs*. The generated
 module supplies numeric tables. Only their checked mathematical properties
 are used to establish the existence theorems below.
 -/
+
+@[expose] public section
 
 set_option linter.all true
 

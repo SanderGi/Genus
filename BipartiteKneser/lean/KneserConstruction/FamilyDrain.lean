@@ -1,9 +1,13 @@
-import KneserConstruction.Family
-import KneserConstruction.OrbitJoin
-import KneserConstruction.OrbitLayout
-import KneserConstruction.OrbitZero
+module
+
+public import KneserConstruction.Family
+public import KneserConstruction.OrbitJoin
+public import KneserConstruction.OrbitLayout
+public import KneserConstruction.OrbitZero
 
 /-! # Every connection label drains to a retained first-frame port -/
+
+@[expose] public section
 
 noncomputable section
 

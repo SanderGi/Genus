@@ -1,8 +1,12 @@
-import KneserConstruction.OrbitSplice
-import KneserConstruction.FamilyChains
+module
+
+public import KneserConstruction.OrbitSplice
+public import KneserConstruction.FamilyChains
 import Mathlib.Tactic.FinCases
 
 /-! # Reading all four orbit assignments from a complete family -/
+
+@[expose] public section
 
 noncomputable section
 

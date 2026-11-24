@@ -1,8 +1,12 @@
-import KneserConstruction.Inventory
-import KneserConstruction.FamilyTransRows
-import KneserConstruction.FamilyZeroRows
+module
+
+public import KneserConstruction.Inventory
+public import KneserConstruction.FamilyTransRows
+public import KneserConstruction.FamilyZeroRows
 
 /-! # The translation and zero-coordinate summands of the connection set -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.Inventory
 

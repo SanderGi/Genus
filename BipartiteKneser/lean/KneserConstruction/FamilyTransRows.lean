@@ -1,7 +1,11 @@
-import KneserConstruction.FamilyTransOrder
-import KneserConstruction.Coordinates
+module
+
+public import KneserConstruction.FamilyTransOrder
+public import KneserConstruction.Coordinates
 
 /-! # Coordinates of translation rows and their signed slot equations -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.Translations
 

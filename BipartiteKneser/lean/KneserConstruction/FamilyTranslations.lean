@@ -1,8 +1,12 @@
-import KneserConstruction.FamilyTransClosure
-import KneserConstruction.FamilyTransCoverage
-import KneserConstruction.FamilyChains
+module
+
+public import KneserConstruction.FamilyTransClosure
+public import KneserConstruction.FamilyTransCoverage
+public import KneserConstruction.FamilyChains
 
 /-! # Inventories of the closed translation block (Constructions 4.14 and 5.2) -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.Translations
 

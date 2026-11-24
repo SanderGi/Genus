@@ -45,7 +45,9 @@ lake exe cache get
 lake build
 lake lint
 lake test
-lake env leanchecker BipartiteKneser KneserConstruction KneserWitnessData
+lake env leanexport BipartiteKneser -- BipartiteKneser.optimalRotation_of_prime \
+    BipartiteKneser.exists_optimalRotation_gt > .lake/build/genus.ndjson
+lake env leanchecker --from-export .lake/build/genus.ndjson
 ```
 
 `BipartiteKneser.optimalRotation_of_prime` proves Theorem 1.1 for **every**
@@ -58,8 +60,8 @@ The kernel checks the seven small-prime witnesses and the uniform construction
 for `h ≥ 131`, including all 20,480 boundary patterns. The build treats Lean
 warnings as errors. The tests run mathlib’s declaration linters, check the public
 theorem type, audit its axioms against `propext`, `Classical.choice`, and
-`Quot.sound`, and reject an altered rotation. The final command replays the
-compiled project declarations.
+`Quot.sound`, and reject an altered rotation. The last two commands export both
+theorems with their dependencies and replay them in a fresh Lean kernel.
 
 ## Files and paper references
 

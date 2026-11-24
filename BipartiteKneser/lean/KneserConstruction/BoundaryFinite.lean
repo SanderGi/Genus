@@ -1,6 +1,10 @@
-import KneserConstruction.BoundaryData
+module
+
+public import KneserConstruction.BoundaryData
 
 /-! The two intervals of checked character masks cover all formal patterns. -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 

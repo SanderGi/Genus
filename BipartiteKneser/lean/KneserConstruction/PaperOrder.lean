@@ -1,9 +1,13 @@
-import KneserConstruction.FiberOrder
-import KneserConstruction.FamilyFiberRows
-import KneserConstruction.CoordinateEndpoints
-import KneserConstruction.Parameters
+module
+
+public import KneserConstruction.FiberOrder
+public import KneserConstruction.FamilyFiberRows
+public import KneserConstruction.CoordinateEndpoints
+public import KneserConstruction.Parameters
 
 /-! # The prescribed exponent order in each nonzero coordinate fiber -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.FiberOrder
 

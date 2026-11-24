@@ -1,9 +1,13 @@
-import KneserConstruction.CriterionCard
-import KneserConstruction.CriterionCycle
-import KneserConstruction.CriterionRows
-import BipartiteKneser.Certificates
+module
+
+public import KneserConstruction.CriterionCard
+public import KneserConstruction.CriterionCycle
+public import KneserConstruction.CriterionRows
+public import BipartiteKneser.Certificates
 
 /-! # Section 3. A complete admissible family with one orbit gives a quadrangulation -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Criterion
 

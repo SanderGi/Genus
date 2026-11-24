@@ -1,4 +1,6 @@
-import Std
+module
+
+public import Std
 
 /-!
 # Euler bound for H(h,2)
@@ -8,6 +10,8 @@ edges. For the bipartite graph in the paper, all face lengths are at least four.
 This module proves the numerical implication of these two counts and Euler's
 equation, including the equality criterion. All calculations use integers.
 -/
+
+@[expose] public section
 
 set_option linter.all true
 

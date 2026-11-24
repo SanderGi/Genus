@@ -1,4 +1,6 @@
-import KneserConstruction.Multipliers
+module
+
+public import KneserConstruction.Multipliers
 import Mathlib.Tactic.FieldSimp
 import Mathlib.Tactic.LinearCombination
 import Mathlib.Tactic.Ring
@@ -10,6 +12,8 @@ The first coordinate is calculated in the prime field. The resulting frame
 uses the existing `Fin` representation, so the formulas apply to `compose`
 and `separated` directly.
 -/
+
+@[expose] public section
 
 noncomputable section
 

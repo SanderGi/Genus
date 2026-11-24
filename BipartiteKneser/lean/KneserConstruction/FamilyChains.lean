@@ -1,5 +1,7 @@
-import KneserConstruction.FamilyLedger
-import KneserConstruction.Coordinates
+module
+
+public import KneserConstruction.FamilyLedger
+public import KneserConstruction.Coordinates
 
 /-!
 # Successor rows inside coordinate fibers
@@ -9,6 +11,8 @@ oriented exponents. The target of each transition may be sign-switched.
 The two inventory identities leave precisely the last domain and first range
 blocks unused, including for a path consisting of a single exponent.
 -/
+
+@[expose] public section
 
 noncomputable section
 

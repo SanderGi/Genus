@@ -1,4 +1,6 @@
-import KneserConstruction.FamilyCore
+module
+
+public import KneserConstruction.FamilyCore
 
 /-!
 # Counting assignments when replacing quadruples
@@ -6,6 +8,8 @@ import KneserConstruction.FamilyCore
 The inventories are multisets, so equality records the multiplicity of each
 dart even when two written expressions denote the same affine frame.
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family
 
@@ -49,12 +53,13 @@ variable {p q : ℕ} [NeZero p] [NeZero q]
 def inventory (m : Multipliers p q) : Multiset (Frame p q) :=
   ((Finset.univ : Finset (Label m)).val.map Subtype.val)
 
-private theorem map_univ_eq_sum [Fintype ι] (f : ι → α) :
+theorem map_univ_eq_sum [Fintype ι] (f : ι → α) :
     Finset.univ.val.map f = ∑ i, ({f i} : Multiset α) := by
   rw [← Finset.sum_multiset_singleton (Finset.univ : Finset ι)]
   exact (map_sum (Multiset.mapAddMonoidHom f) _ _)
 
-private noncomputable def equivOfInventory (m : Multipliers p q) [Fintype ι]
+/-- A single occurrence of each separated label gives an equivalence with the row slots. -/
+noncomputable def equivOfInventory (m : Multipliers p q) [Fintype ι]
     (f : ι → Frame p q) (hf : (∑ i, ({f i} : Multiset _)) = inventory m) :
     ι ≃ Label m := by
   classical

@@ -1,6 +1,8 @@
-import BipartiteKneser.Interval
-import Mathlib.Dynamics.PeriodicPts.Defs
-import Mathlib.Data.Fintype.Card
+module
+
+public import BipartiteKneser.Interval
+public import Mathlib.Dynamics.PeriodicPts.Defs
+public import Mathlib.Data.Fintype.Card
 
 /-!
 # Section 7 boundary labels
@@ -9,6 +11,8 @@ The four labels of an outside fiber occur in the order (++), (+−), (−+), (�
 The six entry labels follow in the order of the two triples of Proposition 6.7.
 All permutations of triples are stored in the forward direction.
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 

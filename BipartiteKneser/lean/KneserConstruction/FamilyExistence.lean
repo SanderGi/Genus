@@ -1,7 +1,11 @@
-import KneserConstruction.Family
-import KneserConstruction.Uniform
+module
+
+public import KneserConstruction.Family
+public import KneserConstruction.Uniform
 
 /-! # Proposition 5.7 for every prime in the generic range -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family
 

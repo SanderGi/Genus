@@ -1,7 +1,11 @@
-import KneserConstruction.ReductionLocal
-import KneserConstruction.ReductionIndices
+module
+
+public import KneserConstruction.ReductionLocal
+public import KneserConstruction.ReductionIndices
 
 /-! # The symbolic three-strand paths across the ordinary interval -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Reduction
 

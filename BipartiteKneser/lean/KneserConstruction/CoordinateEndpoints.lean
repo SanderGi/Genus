@@ -1,6 +1,10 @@
-import KneserConstruction.CoordinateMissing
+module
+
+public import KneserConstruction.CoordinateMissing
 
 /-! # Endpoints of the coordinate-fiber chains -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Coordinates
 

@@ -1,9 +1,13 @@
-import KneserConstruction.ReductionRoutes
-import KneserConstruction.Boundary
-import KneserConstruction.CoordinateMissing
-import KneserConstruction.Family
+module
+
+public import KneserConstruction.ReductionRoutes
+public import KneserConstruction.Boundary
+public import KneserConstruction.CoordinateMissing
+public import KneserConstruction.Family
 
 /-! # Sections 6–7. Global reduction to the 54- or 62-element boundary -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Reduction
 

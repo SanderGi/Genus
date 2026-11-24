@@ -1,9 +1,13 @@
-import KneserConstruction.OrbitLayout
-import KneserConstruction.OrbitZero
-import KneserConstruction.OrbitJoin
-import KneserConstruction.Family
+module
+
+public import KneserConstruction.OrbitLayout
+public import KneserConstruction.OrbitZero
+public import KneserConstruction.OrbitJoin
+public import KneserConstruction.Family
 
 /-! # First omission for the four concrete row families (Proposition 6.5) -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Orbit
 

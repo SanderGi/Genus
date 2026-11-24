@@ -1,8 +1,12 @@
-import KneserConstruction.BoundaryPermutation
+module
+
+public import KneserConstruction.BoundaryPermutation
 import Mathlib.Tactic.FinCases
 import Mathlib.Tactic.NormNum
 
 /-! # Symbolic normalization of the boundary labels (Proposition 7.2, Appendix A.6) -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 

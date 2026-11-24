@@ -1,7 +1,11 @@
-import KneserConstruction.FamilyTransRows
-import KneserConstruction.CoordinateResidues
+module
+
+public import KneserConstruction.FamilyTransRows
+public import KneserConstruction.CoordinateResidues
 
 /-! # Exact coverage of the exponent-zero slice by the signed translation slots -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.Translations
 
@@ -70,7 +74,7 @@ private theorem residue_ok {n : ℕ} (lo : 2 ≤ n) (hi : n + 1 < p) :
     omega
 
 /-- Enumeration of precisely the separated translation frames, in the local slot convention. -/
-noncomputable def translationEquiv (hp : p = 4 * r + 3) :
+@[no_expose] noncomputable def translationEquiv (hp : p = 4 * r + 3) :
     (Fin r × Slot) ≃ {x : Label m // x.val.2 = 0} := by
   let f (x : Fin r × Slot) : {z : Label m // z.val.2 = 0} :=
     ⟨⟨T ((residue p x.1 x.2 : ℕ) : ZMod p),

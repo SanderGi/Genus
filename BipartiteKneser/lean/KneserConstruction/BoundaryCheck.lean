@@ -1,6 +1,10 @@
-import KneserConstruction.BoundaryModel
+module
+
+public import KneserConstruction.BoundaryModel
 
 /-! The Section 7 certificate checker and its bounded quantifier. -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 
@@ -19,7 +23,7 @@ def firstHit {n : Nat} [NeZero n] (f : Fin n → Fin n) : Nat → Fin n → Bool
   | k + 1, x => x != 0 && firstHit f k (f x)
 
 /-- Match the current numeral before the next step to keep kernel reductions small. -/
-private def walk (f : Nat → Nat) : Nat → Nat → Bool
+def walk (f : Nat → Nat) : Nat → Nat → Bool
   | 0, x => x == 0
   | _ + 1, 0 => false
   | k + 1, x + 1 => walk f k (f (x + 1))
@@ -60,7 +64,7 @@ theorem check_sound {c : Case} {chars : Pattern c} {v : Nat} (h : check c chars 
     and_assoc] using h
 
 /-- Force reduction of the packed proposal before following its orbit in the kernel. -/
-private def strictCheck (c : Case) (chars : Pattern c) (v : Nat) : Bool :=
+def strictCheck (c : Case) (chars : Pattern c) (v : Nat) : Bool :=
   match v with
   | 0 => check c chars 0
   | k + 1 => check c chars (k + 1)

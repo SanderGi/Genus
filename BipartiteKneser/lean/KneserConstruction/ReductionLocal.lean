@@ -1,7 +1,11 @@
-import KneserConstruction.BoundaryCoordinates
-import KneserConstruction.OrbitRows
+module
+
+public import KneserConstruction.BoundaryCoordinates
+public import KneserConstruction.OrbitRows
 
 /-! # Local paths used by the global orbit reduction -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Reduction
 

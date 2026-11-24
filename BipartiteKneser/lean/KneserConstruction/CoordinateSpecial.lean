@@ -1,5 +1,7 @@
-import KneserConstruction.Coordinates
-import Mathlib.NumberTheory.LegendreSymbol.QuadraticReciprocity
+module
+
+public import KneserConstruction.Coordinates
+public import Mathlib.NumberTheory.LegendreSymbol.QuadraticReciprocity
 
 /-!
 # Distinguished exponent pairs
@@ -7,6 +9,8 @@ import Mathlib.NumberTheory.LegendreSymbol.QuadraticReciprocity
 Existence of the three discrete logarithms is proved for every prime in the
 paper's residue class, including both branches modulo three.
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Coordinates
 

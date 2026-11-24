@@ -1,8 +1,12 @@
-import KneserConstruction.OrbitFiber
-import KneserConstruction.FamilyConstruction
-import KneserConstruction.OrbitTranslation
+module
+
+public import KneserConstruction.OrbitFiber
+public import KneserConstruction.FamilyConstruction
+public import KneserConstruction.OrbitTranslation
 
 /-! # Relabeling the positive fibers and the translation ports -/
+
+@[expose] public section
 
 noncomputable section
 

@@ -1,7 +1,11 @@
-import KneserConstruction.OrbitNames
-import KneserConstruction.FamilyZero
+module
+
+public import KneserConstruction.OrbitNames
+public import KneserConstruction.FamilyZero
 
 /-! # Lifting the zero-coordinate splice to the actual generic quadruples -/
+
+@[expose] public section
 
 noncomputable section
 

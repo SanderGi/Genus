@@ -1,6 +1,10 @@
-import KneserConstruction.ReductionInterval
+module
+
+public import KneserConstruction.ReductionInterval
 
 /-! # Lifting the compressed boundary edges and draining every omitted state -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Reduction
 open Boundary Orbit

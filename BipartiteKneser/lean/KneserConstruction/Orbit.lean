@@ -1,12 +1,16 @@
-import KneserConstruction.FamilyDrain
-import KneserConstruction.OrbitReturns
-import KneserConstruction.Reduction
+module
+
+public import KneserConstruction.FamilyDrain
+public import KneserConstruction.OrbitReturns
+public import KneserConstruction.Reduction
 
 /-! # From generic quadruples and a boundary witness to one local rotation cycle
 
 The family is assembled anew for the switches extracted from the interval witness.
 Every retained edge lifts along the actual assignments of its quadruples, and every
 connection label occurs in a row whose source reaches a retained vertex. -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Orbit
 

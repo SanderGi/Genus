@@ -1,8 +1,12 @@
-import KneserConstruction.OrbitCore
-import BipartiteKneser.Interval
+module
+
+public import KneserConstruction.OrbitCore
+public import BipartiteKneser.Interval
 import Mathlib.Tactic.FinCases
 
 /-! # Expanding the six transfers across the ordinary interval -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Orbit
 

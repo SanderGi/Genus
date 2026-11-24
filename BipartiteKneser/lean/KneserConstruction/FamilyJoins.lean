@@ -1,6 +1,8 @@
-import BipartiteKneser.FiberJoins
-import KneserConstruction.FamilyLedger
-import KneserConstruction.Coordinates
+module
+
+public import BipartiteKneser.FiberJoins
+public import KneserConstruction.FamilyLedger
+public import KneserConstruction.Coordinates
 
 /-!
 # The K-to-N joining rows
@@ -10,6 +12,8 @@ The inverse lookup in the integer table proves a bijection from these columns
 to the signed non-missing fibers. Summing over that bijection counts every
 required N inverse pair with multiplicity one.
 -/
+
+@[expose] public section
 
 noncomputable section
 
@@ -53,7 +57,7 @@ private theorem signed_decode {c : Case} {q : ℕ} (t : ℤ) (ht : Required c q 
 def number {q : ℕ} (i : Fin (q - 2)) : ℤ := i.val + 1
 
 /-- The two columns of all joining rows enumerate exactly the signed N targets. -/
-def columns (c : Case) (q : ℕ) (size : InRange c q) :
+@[no_expose] def columns (c : Case) (q : ℕ) (size : InRange c q) :
     (Fin (q - 2) × Bool) ≃ (Present c q × Bool) where
   toFun i := decode (target c q (number i.1) i.2)
     (source_target c size (by dsimp [number]; omega) (by have := i.1.isLt; dsimp [number]; omega)

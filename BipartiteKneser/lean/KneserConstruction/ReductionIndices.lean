@@ -1,8 +1,12 @@
-import KneserConstruction.BoundaryCoordinates
-import KneserConstruction.OrbitInterval
-import Mathlib.Data.Nat.Bits
+module
+
+public import KneserConstruction.BoundaryCoordinates
+public import KneserConstruction.OrbitInterval
+public import Mathlib.Data.Nat.Bits
 
 /-! # The interval and its complement in the positive coordinate range -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Reduction
 
@@ -60,7 +64,8 @@ theorem switches_inside (c : Case) (q mask : ℕ) (s : ℕ → Bool) {k : ℕ}
     (hk : k < length c q) :
     switches c q mask s (start c + k) = s k := by simp [switches, stop, hk]
 
-private def pack (f : ℕ → Bool) : (n : ℕ) → Fin (2 ^ n)
+/-- Pack the first n values of a Boolean function into the low bits of a numeral. -/
+def pack (f : ℕ → Bool) : (n : ℕ) → Fin (2 ^ n)
   | 0 => 0
   | n + 1 => ⟨Nat.bit (f 0) (pack (fun k => f (k + 1)) n).val,
       Nat.bit_lt_two_pow_succ_iff.mpr (Fin.isLt _)⟩

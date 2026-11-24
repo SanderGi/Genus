@@ -1,8 +1,12 @@
-import KneserConstruction.FamilyCore
-import Mathlib.GroupTheory.Perm.List
-import Mathlib.Data.List.FinRange
+module
+
+public import KneserConstruction.FamilyCore
+public import Mathlib.GroupTheory.Perm.List
+public import Mathlib.Data.List.FinRange
 
 /-! # The translation cycle and the signed slot permutations of Construction 5.2 -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Family.Translations
 

@@ -1,7 +1,11 @@
-import BipartiteKneser.Exceptional
-import BipartiteKneser.Genus
+module
+
+public import BipartiteKneser.Exceptional
+public import BipartiteKneser.Genus
 
 /-! # The minimum genus and optimal rotations for the exceptional primes -/
+
+@[expose] public section
 
 set_option linter.all true
 

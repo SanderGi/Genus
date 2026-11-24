@@ -1,7 +1,11 @@
-import KneserConstruction.FamilyChains
-import KneserConstruction.FamilyJoins
+module
+
+public import KneserConstruction.FamilyChains
+public import KneserConstruction.FamilyJoins
 
 /-! # Fiber rows after removing the transition at the attachment -/
+
+@[expose] public section
 
 noncomputable section
 

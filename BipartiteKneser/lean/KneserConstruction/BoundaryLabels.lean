@@ -1,6 +1,10 @@
-import KneserConstruction.BoundaryCoordinates
+module
+
+public import KneserConstruction.BoundaryCoordinates
 
 /-! Large-q boundary labels are pairwise distinct. -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 

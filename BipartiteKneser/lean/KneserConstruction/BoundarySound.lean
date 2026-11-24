@@ -1,7 +1,11 @@
-import KneserConstruction.BoundaryCheck
-import Mathlib.Data.Fintype.EquivFin
+module
+
+public import KneserConstruction.BoundaryCheck
+public import Mathlib.Data.Fintype.EquivFin
 
 /-! A first return at the cardinality of a finite set visits all its elements. -/
+
+@[expose] public section
 
 namespace BipartiteKneser.Boundary
 
@@ -24,7 +28,7 @@ private theorem firstHit_spec {n : Nat} [NeZero n] {f : Fin n → Fin n}
 /-- A first return after exactly `n` steps gives forward reachability between all `n` labels. -/
 theorem oneCycle_of_firstHit {n : Nat} [NeZero n] {f : Fin n → Fin n}
     (ok : firstHit f (n - 1) (f 0) = true) : ∀ x y, ∃ k : ℕ, f^[k] x = y := by
-  have hn := NeZero.pos n
+  have hn := Nat.pos_of_ne_zero (NeZero.ne n)
   have ns : n - 1 + 1 = n := by omega
   obtain ⟨he, hlt⟩ := firstHit_spec _ _ ok
   have per : IsPeriodicPt f n 0 := by

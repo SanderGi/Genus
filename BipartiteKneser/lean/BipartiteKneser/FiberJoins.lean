@@ -1,4 +1,6 @@
-import Std
+module
+
+public import Std
 
 /-!
 # Joining the K and N fibers
@@ -7,6 +9,8 @@ The two columns of Construction 4.11 are expressed in the signed
 representatives from −q to q of residues modulo 2q+1. The inverse map
 identifies the unique source and column for each required N coordinate.
 -/
+
+@[expose] public section
 
 set_option linter.all true
 
