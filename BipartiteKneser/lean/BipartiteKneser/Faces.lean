@@ -8,6 +8,8 @@ list contains every dart exactly once. This suffices both for the Euler lower
 bound and for counting the faces of a quadrangulation.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser
 
 /-- The facial map takes every dart to the next in a nonempty cyclic list. -/

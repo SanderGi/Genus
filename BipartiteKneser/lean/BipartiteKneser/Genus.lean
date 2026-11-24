@@ -12,6 +12,8 @@ and takes the successor in the numbering at its head. Euler's formula assigns
 a genus to the resulting orientable cellular embedding of the connected graph.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser
 
 private def productList (xs : List α) (ys : List β) : List (α × β) :=

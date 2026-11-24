@@ -8,6 +8,8 @@ and the quadrilateral equations. The finite checks on the base cycle imply
 the assertions about darts and vertices by the theorems in `Rotation`.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser
 
 /-- Read a fixed-width unsigned entry from a packed table, least significant first. -/

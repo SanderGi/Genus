@@ -37,29 +37,28 @@ certificates and checks of the paper's translation order and splice paths.
 
 ## Run the Lean proof
 
-From the repository root, run these commands with Elan and Python 3.10+ installed.
+With Elan and Python 3.10+ installed, run from the repository root:
 
 ```bash
 cd BipartiteKneser
+lake exe cache get
 lake build
 lake lint
 lake test
-lake env leanchecker BipartiteKneser KneserWitnessData
+lake env leanchecker BipartiteKneser KneserConstruction KneserWitnessData
 ```
 
-`optimalRotation_of_lt_131` proves Theorem 1.1 for every admissible prime
-below 131. Lean checks the disjoint-pair graph, the vertex-transitive
-quadrangulation, and minimality among all rotation systems. For arbitrary
-admissible primes, the library proves the genus formula given a valid affine
-quadrangulation and proves the interval-switch lemma (6.10). The generic
-construction for primes at least 131 remains to be formalized.
+`BipartiteKneser.optimalRotation_of_prime` proves Theorem 1.1 for **every**
+prime `h > 3` with `h % 8 = 3`. In the orientable rotation-system model it
+constructs a vertex-transitive quadrangulation of the disjoint-pair graph
+`H(h,2)` and proves that its genus, given above, is minimal among all cyclic
+neighbor orders. `exists_optimalRotation_gt` gives such a prime above any bound.
 
-Python supplies the seven numerical witnesses. The pinned Lean build checks
-them with the kernel and treats linter warnings as errors. The tests audit
-axiom dependencies and verify that swapping two labels breaks a face in the
-11-case. The final command replays the compiled declarations. All five additional
-checkers bundled with Lean 4.36.0 also accepted the exported small-prime theorem,
-interval lemma, and Euler bound.
+The kernel checks the seven small-prime witnesses and the uniform construction
+for `h ≥ 131`, including all 20,480 boundary patterns. The build treats Lean
+warnings as errors. The tests check the public theorem type, audit its axioms
+against Lean’s standard three, and reject an altered rotation. The final
+command independently replays the compiled project declarations.
 
 ## Files and paper references
 

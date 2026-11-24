@@ -8,6 +8,8 @@ module supplies numeric tables. Only their checked mathematical properties
 are used to establish the existence theorems below.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser.Exceptional
 
 set_option maxRecDepth 8192

@@ -9,6 +9,8 @@ This module proves the numerical implication of these two counts and Euler's
 equation, including the equality criterion. All calculations use integers.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser
 
 /-- The genus in Theorem 1.1, with subtraction in the integers. -/

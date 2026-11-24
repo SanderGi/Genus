@@ -9,6 +9,8 @@ The finite automaton below tracks the exact set of attainable pairs. Its
 transition table is checked against the two permutations at a single fiber.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser.Interval
 
 /-- Permutations of three positions, numbered by lexicographic order of their images. -/

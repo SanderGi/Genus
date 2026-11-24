@@ -7,6 +7,8 @@ An increasing pair represents its two-element subset without multiplicity.
 The chart translates the affine dart labels to exactly the neighbors in this graph.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser
 
 /-- Two distinct points in increasing order. -/

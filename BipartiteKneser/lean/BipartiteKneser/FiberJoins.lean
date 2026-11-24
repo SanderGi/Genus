@@ -8,6 +8,8 @@ representatives from −q to q of residues modulo 2q+1. The inverse map
 identifies the unique source and column for each required N coordinate.
 -/
 
+set_option linter.all true
+
 namespace BipartiteKneser.FiberJoins
 
 /-- The two choices of N, distinguished by the residue of the prime modulo three. -/

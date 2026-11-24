@@ -27,7 +27,7 @@ lean_lib KneserWitnessData where
 
 @[default_target]
 lean_lib BipartiteKneser where
-  leanOptions := #[⟨`linter.all, true⟩]
+  leanOptions := #[⟨`weak.linter.mathlibStandardSet, true⟩]
   srcDir := "lean"
 
 @[test_driver]

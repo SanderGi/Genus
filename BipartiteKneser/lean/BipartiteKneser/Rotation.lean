@@ -13,6 +13,8 @@ the same base cycle, as in the paper's expanded rotation convention.
 
 @[expose] public section
 
+set_option linter.all true
+
 namespace BipartiteKneser
 
 /-- Affine frame (translation, exponent) over the residues modulo h and q. -/

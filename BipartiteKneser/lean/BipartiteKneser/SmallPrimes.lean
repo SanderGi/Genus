@@ -3,6 +3,8 @@ import BipartiteKneser.Genus
 
 /-! # The minimum genus and optimal rotations for the exceptional primes -/
 
+set_option linter.all true
+
 namespace BipartiteKneser
 
 /-- Primality expressed by trial divisors strictly between 1 and h. -/
