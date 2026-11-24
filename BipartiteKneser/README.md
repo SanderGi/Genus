@@ -57,7 +57,9 @@ construction for primes at least 131 remains to be formalized.
 Python supplies the seven numerical witnesses. The pinned Lean build checks
 them with the kernel and treats linter warnings as errors. The tests audit
 axiom dependencies and verify that swapping two labels breaks a face in the
-11-case. The final command replays the compiled declarations.
+11-case. The final command replays the compiled declarations. All five additional
+checkers bundled with Lean 4.36.0 also accepted the exported small-prime theorem,
+interval lemma, and Euler bound.
 
 ## Files and paper references
 
