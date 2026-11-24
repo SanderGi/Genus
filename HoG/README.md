@@ -46,7 +46,7 @@ Kneser graphs. `./genus --page-only --low-mem` runs it directly, while
 `./genus --low-mem` races it against MultiGenus when MultiGenus supports the
 input. The low-memory engine is currently single-threaded, so `-j` does not
 change its search; `--low-mem` and `--multi_genus-only` are mutually exclusive.
-Unlike materialized PAGE, the lazy engine handles bridge facial walks directly.
+The lazy engine handles bridge facial walks directly. The materialized worker solves bridged inputs block by block.
 For searches with many faces, it raises the process's soft stack limit as needed
 without exceeding the operating system's hard limit. On linux, you can configure 
 the hard limit using `ulimit -s`. On MacOS, you'll want to compile the program 
@@ -76,6 +76,22 @@ your operating system to limit the number of CPU cores:
 This will take roughly twice as long as running with two cores (or just choosing the right algorithm with one core).
 
 Run the test suite with `make test`.
+
+## Lean proof
+
+For every supported connected simple graph, HoG returns the minimum genus over all orientable rotation systems. The proof covers the tree shortcut, genus additivity at cut vertices, both PAGE searches, MultiGenus, and the first successful worker in any completion order, including a low-memory retry. The executable Lean decomposition checks its vertex relabelings and splits. [Main theorems](lean/HoG/Solver.lean) · [Input and record evaluation](lean/HoG/Records.lean)
+
+From `HoG/` with elan installed, build and check the proofs, then run the verified solver on the graph6 encoding of K₅.
+
+```sh
+lake exe cache get
+lake build
+lake test
+lake lint
+printf '%s\n' 'D~{' | lake env lean --run lean/RunHoG.lean --page-only --low-mem
+```
+
+The example prints `Graph 1 has genus 1`. The runner also accepts `--multicode` and `--multi_genus-only`. The Lean test checks theorem types, axiom dependencies and declaration lint. Run `python3 test_cli.py` to exercise the standalone C binary, including its process race and memory-limit fallback.
 
 ## Performance Benchmarks
 
