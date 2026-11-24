@@ -1,5 +1,7 @@
 # Bipartite Kneser graph embeddings
 
+[![arXiv](https://img.shields.io/badge/arXiv-2610.03159-b31b1b.svg)](https://arxiv.org/abs/2610.03159)
+
 Code and certificates for *The Genus of Bipartite Kneser Graphs* by Alexander
 Metzger and Austin Ulrigg.
 
@@ -153,6 +155,22 @@ python BipartiteKneser/verify_all.py --test-through 1000 \
 
 The extra prime tests are regression checks, not the proof of the infinite
 family.
+
+## Citation
+
+If you use the code or results, please cite our paper:
+
+```bibtex
+@misc{ulrigg2026genusbipartiteknesergraphs,
+      title={The Genus of Bipartite Kneser Graphs}, 
+      author={Austin Ulrigg and Alexander Metzger},
+      year={2026},
+      eprint={2610.03159},
+      archivePrefix={arXiv},
+      primaryClass={math.CO},
+      url={https://arxiv.org/abs/2610.03159}, 
+}
+```
 
 ## License
 
