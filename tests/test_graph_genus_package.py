@@ -33,6 +33,13 @@ class GraphGenusPackageTests(unittest.TestCase):
         self.assertEqual(genus, 1)
         self.assertEqual([sorted(neighbors) for neighbors in rotation], K33)
 
+    def test_small_multi_genus_embeddings(self):
+        for graph in ([[]], [[1], [0]]):
+            with self.subTest(graph=graph):
+                genus, rotation = gg.embed(graph, algorithm="multi_genus")
+                self.assertEqual((genus, rotation), (0, graph))
+                self.assertEqual(gg.embed(rotation, algorithm="none"), (genus, rotation))
+
     def test_none_computes_rotation_system_genus(self):
         genus, rotation = gg.embed(
             [[1, 2, 3], [0, 3, 2], [0, 1, 3], [0, 2, 1]],

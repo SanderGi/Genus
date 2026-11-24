@@ -149,7 +149,8 @@ def genus_from_rotation(rotation_system: Sequence[Sequence[int]]) -> int:
             )
 
     visited: set[tuple[int, int]] = set()
-    faces = 0
+    # The isolated vertex has one face and no dart from which to trace it.
+    faces = int(n == 1)
     for dart in directed_edges:
         if dart in visited:
             continue
@@ -380,8 +381,10 @@ def _graph_to_multicode(graph: list[list[int]], *, upper_triangle_only: bool) ->
         )
     out = BytesIO()
     out.write(bytes([len(graph)]))
-    for vertex, neighbors in enumerate(graph):
-        for neighbor in neighbors:
+    # Simple multicode omits the final (necessarily empty) upper-triangle row.
+    row_count = len(graph) - 1 if upper_triangle_only else len(graph)
+    for vertex in range(row_count):
+        for neighbor in graph[vertex]:
             if not upper_triangle_only or neighbor > vertex:
                 out.write(bytes([neighbor + 1]))
         out.write(b"\0")
