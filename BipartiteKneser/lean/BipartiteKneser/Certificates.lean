@@ -25,7 +25,7 @@ def unpack {h q d : Nat} [NeZero h] [NeZero q] [NeZero d]
   index s := Fin.ofNat d (entry indices bits (s.1.val * q + s.2.val))
 
 /-- Decode an increasing two-subset using the signed discrete logarithm of its difference. -/
-def decodePair {h q : Nat} [NeZero h] [NeZero q]
+def decodePair {h q : Nat} [NeZero q]
     (bits logs : Nat) (a b : Fin h) : Frame h q :=
   let code := entry logs bits (b - a).val
   (if code < q then a else b, Fin.ofNat q code)
