@@ -35,6 +35,35 @@ check; the paper proves the interval lemma algebraically.
 The second command runs 18 regression tests, including rejection of altered
 certificates and checks of the paper's translation order and splice paths.
 
+## Run the Lean proof
+
+With Elan and Python 3.10+ installed, run from the repository root:
+
+```bash
+cd BipartiteKneser
+lake exe cache get
+lake build
+lake lint
+lake test
+lake env leanexport BipartiteKneser -- BipartiteKneser.optimalRotation_of_prime \
+    BipartiteKneser.exists_optimalRotation_gt > .lake/build/genus.ndjson
+lake env leanchecker --from-export .lake/build/genus.ndjson
+```
+
+`BipartiteKneser.optimalRotation_of_prime` proves Theorem 1.1 for **every**
+prime `h > 3` with `h % 8 = 3`. In the orientable rotation-system model it
+constructs a vertex-transitive quadrangulation of the disjoint-pair graph
+`H(h,2)` and proves that its genus, given above, is minimal among all cyclic
+neighbor orders. `exists_optimalRotation_gt` gives such a prime above any bound.
+
+The kernel checks the seven small-prime witnesses and the uniform construction
+for `h ≥ 131`, including all 20,480 boundary patterns. The build treats Lean
+warnings as errors, and `lake lint` runs the Batteries declaration linter used by
+mathlib. The tests check the public theorem type, audit its axioms against
+`propext`, `Classical.choice`, and `Quot.sound`, and reject an altered rotation.
+The last two commands export both theorems with their dependencies and replay
+them in a fresh Lean kernel.
+
 ## Files and paper references
 
 | File | Purpose | Paper location |
