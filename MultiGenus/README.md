@@ -58,6 +58,22 @@ To use the version included in this repository, use `make run ADJ=graphs/k3-3.mc
 
 You can read more about the multi code binary graph format on [House of Graphs](https://houseofgraphs.org/help) under supported graph formats.
 
+## Verified genus search in Lean
+
+For every finite, nonempty, connected simple graph, `MultiGenus.solve_correct` proves that the executable search returns a cyclic order of the neighbors at each vertex and the least orientable genus realized by any such rotation. Its face cycles satisfy `V - E + F = 2 - 2g`, with one face for the isolated vertex. The library also proves the reciprocal face-length bound, the effect of inserting an edge, the minimum-genus reductions, and completeness of partitioning the search among workers. [Main theorem](lean/MultiGenus/Solver.lean)
+
+With [elan](https://lean-lang.org/install/) installed, run these commands from `MultiGenus/`:
+
+```sh
+lake exe cache get
+lake build
+lake test
+lake lint
+lake env lean --run lean/RunMultiGenus.lean graphs/k3-3.mc
+```
+
+The last command prints genus 1 and a zero-based rotation as JSON. `lake test` checks the theorem's signature, its axiom dependencies, small examples, and declaration lint. To compare the Lean result with both C programs and independently trace the faces in their output, run `python3 tests/test_lean_c.py`. The native regression suite runs with `python3 tests/test_c_solvers.py`.
+
 ## License
 This project is licensed under the terms of the **GNU General Public License v2.0** (GPLv2). 
 See the [LICENSE](../LICENSE) file for the full text.

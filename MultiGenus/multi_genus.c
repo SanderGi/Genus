@@ -101,10 +101,15 @@ genus again.
  */
 #include <ctype.h>
 #include <limits.h>
-#include <math.h>
-#include <memory.h>
+#include <errno.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 #define leer 255
 
@@ -159,7 +164,7 @@ LONGTYPE rememberfaces[d_kanten];
 // when edge number k is inserted between right1 and right2, the face on the
 // left of right1 (before adding the edge) is stored in rememberfaces[2k] and
 // that on the left of right2 in  rememberfaces[2k+1]
-int globalnv, globalne, write = 0, filter = -1, filter2 = -1, filterl = -1,
+int globalnv, globalne, write_embedding = 0, filter = -1, filter2 = -1, filterl = -1,
                         all = 0, edgelimit = 0;
 int filterlarge = 0, compute_lower_bound = 1, do_bfs = 1;
 unsigned long long written = 0UL;
@@ -178,15 +183,17 @@ int reconstruct[knoten + 1][4], number_reconstruct;
 */
 
 int bfsnummer[knoten + 1], invbfsnummer[knoten + 1];
-int good_approx[100] = {0};
+/* Euler's formula with at least one face gives g <= (E - V + 1) / 2. */
+#define MAX_GENUS (d_kanten / 4)
+static unsigned long long good_approx[MAX_GENUS + 1];
 
 #define bit(i) (((LONGTYPE)1) << ((i) - 1))
 #define DELBIT(a, i) ((a) &= (~bit(i)))
 #define SETBIT(a, i) ((a) |= (bit(i)))
 #define IS_SET(a, i) ((a) & (bit(i)))
 
-#define ULBIT(i) ((1UL) << ((i) - 1))
-#define FFSL(x) (__builtin_ffsl(x))
+#define ULBIT(i) ((1ULL) << ((i) - 1))
+#define FFSL(x) (__builtin_ffsll(x))
 
 #define LESS_THAN_2BIT(a) (((a) & ((a) - (LONGTYPE)1)) == ((LONGTYPE)0))
 #define ATLEAST2BIT(a) ((a) & ((a) - (LONGTYPE)1))
@@ -426,118 +433,83 @@ void einfugen(GRAPH graph, ADJAZENZ adj, int v, int w)
   adj[w]++;
 }
 
-void decodiere(unsigned char *code, GRAPH graph, ADJAZENZ adj, int codelaenge)
+/* A complete single-byte record has one order byte, n-1 row terminators
+   and one byte per undirected edge. */
+#define MULTICODE_CAPACITY (knoten + d_kanten / 2)
 
-{
-  int i, j, knotenzahl;
-
-  /*for(i=0;i<codelaenge;i++) printf(" %d ",code[i]); printf("\n");*/
-
-  globalnv = graph[0][0] = knotenzahl = code[0];
-  globalne = codelaenge - globalnv;
-
-  if (globalnv > knoten) {
-    fprintf(stderr,
-            "Change constant knoten to at least %d and change LONGTYPE,\n",
-            globalnv);
-    fprintf(stderr,
-            "but this is only possible if there is a datatype you can use for "
-            "LONGTYPE!\n");
-    exit(1);
-  }
-
-  if ((2 * globalne) > d_kanten) {
-    fprintf(stderr, "Change constant d_kanten to at least %d,\n", 2 * globalne);
-    fprintf(stderr, "but are you sure it is feasible to embed this graph?\n");
-    exit(1);
-  }
-
-  for (i = 1; i <= knotenzahl; i++) {
-    adj[i] = 0;
-    // for (j=0; j<knoten; j++) graph[i][j]=leer;
-  }
-  // for (j=1; j<knoten; j++) graph[0][j]=0;
-
-  j = 1;
-
-  for (i = 1; i < codelaenge; i++) {
-    if (code[i] == 0)
-      j++;
-    else
-      einfugen(graph, adj, j, code[i]);
-  }
+static void input_error(const char *message) {
+  fprintf(stderr, "Multicode input: %s\n", message);
+  exit(EXIT_FAILURE);
 }
 
-/****************************LESE_MULTICODE************************/
+static int stream_byte(FILE *input) {
+  int byte = getc(input);
+  if (byte == EOF && ferror(input)) input_error("read error");
+  return byte;
+}
 
-int lese_multicode(unsigned char **code, int *codelaenge, FILE *fil)
+static int required_byte(FILE *input, const char *context) {
+  int byte = stream_byte(input);
+  if (byte == EOF) input_error(context);
+  return byte;
+}
 
-/* Liest den code und gibt EOF zurueck, wenn das Ende der Datei erreicht
-   ist, 1 sonst. Der Speicher fuer den code wird alloziert, falls noetig,
-   was entschieden wird anhand der lokalen Variablen maxknotenzahl */
-{
-  static int maxknotenzahl = -1;
-  int codel, gepuffert = 0;
-  int vertexnumber, a, b, nuller;
-  unsigned char ucharpuffer;
-
-  if ((vertexnumber = getc(fil)) == EOF) return EOF;
-  if (vertexnumber == 0) {
-    fprintf(stderr, "Umschaltung auf short noch nicht implementiert.\n");
-    exit(0);
+/* A header begins with ">>m", which cannot begin a graph of order 62:
+   the neighbor 'm' would be out of range. Preserve both lookahead bytes
+   when the first '>' is the order of a graph. */
+static int read_graph(FILE *input, unsigned char code[MULTICODE_CAPACITY],
+                      GRAPH graph, ADJAZENZ adj) {
+  int order, prefix[2], prefix_count = 0;
+  for (;;) {
+    order = stream_byte(input);
+    if (order == EOF) return 0;
+    if (order != '>') break;
+    prefix[0] = required_byte(input, "incomplete header or order-62 graph");
+    prefix[1] = required_byte(input, "incomplete header or order-62 graph");
+    if (prefix[0] != '>' || prefix[1] != 'm') {
+      prefix_count = 2;
+      break;
+    }
+    while (required_byte(input, "incomplete header") != '<') {}
+    if (required_byte(input, "incomplete header") != '<')
+      input_error("expected closing << in header");
   }
-  nuller = 0;
-  codel = 1;
-  if (vertexnumber == '>') /* koennte ein header sein -- oder 'ne 62, also
-                              ausreichend fuer unsigned char */
-  {
-    gepuffert = 1;
-    a = getc(fil);
-    if (a == 0) nuller++;
-    b = getc(fil);
-    if (b == 0) nuller++;
-    /* jetzt wurden 3 Zeichen gelesen */
-    if ((a == '>') && (b == 'm')) /*garantiert header*/
-    {
-      gepuffert = 0;
-      while ((ucharpuffer = getc(fil)) != '<');
-      /* noch zweimal: */ ucharpuffer = getc(fil);
-      if (ucharpuffer != '<') {
-        fprintf(stderr, "Problems with header -- single '<'\n");
-        exit(1);
+
+  if (order == 0) input_error("only single-byte multicode is supported");
+  if (order > knoten) input_error("vertex count exceeds this build's limit");
+
+  int length = 1, edge_count = 0, prefix_pos = 0;
+  code[0] = (unsigned char)order;
+  for (int row = 1; row < order; row++) {
+    LONGTYPE seen = 0;
+    for (;;) {
+      int v = prefix_pos < prefix_count ? prefix[prefix_pos++]
+                                        : required_byte(input, "incomplete graph record");
+      if (v != 0) {
+        if (v <= row || v > order)
+          input_error("neighbor must be above the row vertex and within the graph");
+        if (IS_SET(seen, v)) input_error("duplicate neighbor in a row");
+        SETBIT(seen, v);
+        if (++edge_count > d_kanten / 2) input_error("edge count exceeds this build's limit");
       }
-      if ((vertexnumber = getc(fil)) == EOF) return EOF;
-      /* kein graph drin */
+      code[length++] = (unsigned char)v;
+      if (v == 0) break;
     }
-    /* else kein header */
   }
 
-  if (vertexnumber > maxknotenzahl) {
-    if (*code) free(*code);
-    *code = (unsigned char *)malloc(
-        (vertexnumber * (vertexnumber - 1) / 2 + vertexnumber) *
-        sizeof(unsigned char));
-    if (code == NULL) {
-      fprintf(stderr, "Do not get memory for code\n");
-      exit(0);
-    }
-    maxknotenzahl = vertexnumber;
+  /* Unique, strictly upper-triangle incidences give degree <= order-1
+     at both endpoints. Only now populate the solver's adjacency arrays. */
+  globalnv = graph[0][0] = order;
+  globalne = edge_count;
+  memset(adj, 0, sizeof(ADJAZENZ));
+  int row = 1;
+  for (int i = 1; i < length; i++) {
+    if (code[i] == 0)
+      row++;
+    else
+      einfugen(graph, adj, row, code[i]);
   }
-
-  (*code)[0] = vertexnumber;
-  if (gepuffert) {
-    codel = 3;
-    (*code)[1] = a;
-    (*code)[2] = b;
-  }
-
-  while (nuller < vertexnumber - 1) {
-    if (((*code)[codel] = getc(fil)) == 0) nuller++;
-    codel++;
-  }
-
-  *codelaenge = codel;
-  return 1;
+  return length;
 }
 
 /****************************add_edge***************************/
@@ -1123,9 +1095,13 @@ void unsubdivide(int new, int old1, int old2) {
   e1->name = e1->invers->ursprung = old2;
   e1 = e1->invers;
 
-  e1->prev = e2->prev;
-  e1->next = e2->next;
-  e1->prev->next = e1->next->prev = e1;
+  if (e2->next == e2) {
+    e1->prev = e1->next = e1;
+  } else {
+    e1->prev = e2->prev;
+    e1->next = e2->next;
+    e1->prev->next = e1->next->prev = e1;
+  }
 
   return;
 }
@@ -1195,9 +1171,7 @@ void code()
   int i;
   KANTE *run, *end;
 
-  // first reconstruct the original map. Reductions are only used in cases when
-  // only one graph is written, so it is not necessary to undo the
-  // reconstruction
+  // Reconstruct the original map for output, then restore the search state.
   for (i = number_reconstruct; i;) {
     i--;
     if (reconstruct[i][0] == 0)
@@ -1381,7 +1355,7 @@ void rec_genus_max(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell,
 
   if (ell == 0) {
     *found = 1;
-    if ((write) || (genus == filter) || (genus == filter2)) code();
+    if (write_embedding || (genus == filter) || (genus == filter2)) code();
     return;
   }
 
@@ -1392,7 +1366,7 @@ void rec_genus_max(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell,
   /* When maxgenus is reached we only check for edges that cannot be embedded:
    */
 
-  if ((last->faceleft == last->invers->faceleft))
+  if (last->faceleft == last->invers->faceleft)
     i = MIN0(last - edgelist + 2);
   else
     i = 0;
@@ -1467,7 +1441,7 @@ void rec_genus(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell, int genus,
   if (ell == 0) {
     if (max_genus == genus) {
       *found = 1;
-      if ((write) || (genus == filter) || (genus == filter2)) code();
+      if (write_embedding || (genus == filter) || (genus == filter2)) code();
     }
     return;
   }
@@ -1490,7 +1464,7 @@ void rec_genus(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell, int genus,
 
   if (ell < edgelimit)  // that is: "close" to the leaves
   {
-    if ((last->faceleft == last->invers->faceleft))
+    if (last->faceleft == last->invers->faceleft)
       i = MIN0(last - edgelist + 2);
     else
       i = 0;
@@ -1615,7 +1589,7 @@ void pre_rec_genus(KANTE edgelist[], LONGTYPE bit_edgelist[], int ell,
   if (ell == 0) {
     if (max_genus == genus) {
       *found = 1;
-      if ((write) || (genus == filter) || (genus == filter2)) code();
+      if (write_embedding || (genus == filter) || (genus == filter2)) code();
     }
     return;
   }
@@ -1790,14 +1764,22 @@ void stupidtestfractions(GRAPH graph, ADJAZENZ adj) {
 
 /****************compute_fractions**************************/
 
-double compute_fractions(GRAPH graph, ADJAZENZ adj)
+/* Round each reciprocal upward. At most d_kanten terms are accumulated.
+   The scale is divisible by common small face lengths. */
+#define FACE_SCALE 3603600000000LL
+
+static long long face_weight(int length) {
+  return (FACE_SCALE + length - 1) / length;
+}
+
+static long long scaled_face_bound(GRAPH graph, ADJAZENZ adj)
 // computes an upper bound for the number of faces via fractions 1/k for edges
 // which require a face of length at least k
 {
   int knotenzahl, i, j, k, start, end, buffer;
-  double facebound1, facebound2;
-  int lengtharray[d_kanten], sizes[d_kanten], max, ll;
-  int sizes_aroundvertex[knoten + 1][d_kanten], max_a[knoten + 1];
+  long long facebound1, facebound2;
+  int lengtharray[d_kanten], sizes[d_kanten + 1], max, ll;
+  int sizes_aroundvertex[knoten + 1][d_kanten + 1], max_a[knoten + 1];
 
   knotenzahl = graph[0][0];
   for (i = 1; i <= knotenzahl; i++) {
@@ -1835,21 +1817,19 @@ double compute_fractions(GRAPH graph, ADJAZENZ adj)
           sizes[buffer] += 2;
       }
 
-  // fprintf(stderr,"sum= %lf\n", sum);
-
   for (j = 2, ll = 0; j <= max; j++) {
     for (k = 0; k < sizes[j]; k++, ll++) {
       lengtharray[ll] = j;
     }
   }
 
-  // now overwrite the maximum size from the back -- at least max edges must lie
-  // in a face of maximum size at least max
+  // At least max darts lie in a face of length >= max. Raising the
+  // largest entries gives the most conservative assignment.
 
-  for (j = 1; j < max; j++) lengtharray[ll - j] = max;
+  for (j = 1; j <= max; j++) lengtharray[ll - j] = max;
 
-  for (j = 0, facebound1 = 0.0; j < ll; j++)
-    facebound1 += 1.0 / ((double)lengtharray[j]);
+  for (j = 0, facebound1 = 0; j < ll; j++)
+    facebound1 += face_weight(lengtharray[j]);
 
   // Now a criterion using the angles around the vertices:
   // Assume that not all edges at a vertex k have the same bound for the face
@@ -1861,19 +1841,17 @@ double compute_fractions(GRAPH graph, ADJAZENZ adj)
   // series of bounds for the angle if we replace one minimal lower bound with a
   // maximal lower bound -- see proof paper!
 
-  facebound2 = 0.0;
+  facebound2 = 0;
   for (start = 1; start <= knotenzahl; start++)
     if (adj[start]) {
-      for (j = 2; (sizes_aroundvertex[start][j] == 0); j++);  // searches min
+      for (j = 2; sizes_aroundvertex[start][j] == 0; j++) {}
       if (j == max_a[start])
-        facebound2 += ((double)sizes_aroundvertex[start][j]) / ((double)j);
+        facebound2 += sizes_aroundvertex[start][j] * face_weight(j);
       else {
-        facebound2 += ((double)(sizes_aroundvertex[start][j] - 1)) /
-                      ((double)j);  // one less for the smallest
+        facebound2 += (sizes_aroundvertex[start][j] - 1) * face_weight(j);
         for (j++; j < max_a[start]; j++)
-          facebound2 += ((double)sizes_aroundvertex[start][j]) / ((double)j);
-        facebound2 += ((double)(sizes_aroundvertex[start][j] + 1)) /
-                      ((double)j);  // one more for the largest
+          facebound2 += sizes_aroundvertex[start][j] * face_weight(j);
+        facebound2 += (sizes_aroundvertex[start][j] + 1) * face_weight(j);
       }
     }
 
@@ -1899,7 +1877,6 @@ int get_genus(GRAPH graph, ADJAZENZ adj) {
   int ell, found, min_genus, restvertices, restedges;
   LONGTYPE bit_edgelist[d_kanten];
   KANTE *edgelist;
-  double x_sum, buffer;
 
   number_reconstruct = 0;
 
@@ -1924,7 +1901,7 @@ int get_genus(GRAPH graph, ADJAZENZ adj) {
 
     if (restvertices == 2)  // reduced to a single edge, so the graph is plane
     {
-      if ((write) || (filter == 0) || (filter2 == 0)) {
+      if (write_embedding || (filter == 0) || (filter2 == 0)) {
         get_initial_embedding(newgraph, newadj, &genus);
         code();
       }
@@ -1942,33 +1919,23 @@ int get_genus(GRAPH graph, ADJAZENZ adj) {
     make_edgelist(graph, adj, edgelist, bit_edgelist, &ell);
   }
 
-  if ((restedges - (3 * restvertices) + 6) <= 0)
-    min_genus = 0;
-  else if ((restedges - (3 * restvertices)) %
-           6)  // \ceil bound by Euler formula
-    min_genus = ((restedges - (3 * restvertices) + 6) / 6) + 1;
-  else
-    min_genus = ((restedges - (3 * restvertices) + 6) / 6);
+  // Even a one-face embedding has genus at most half the cycle rank.
+  if (filter > (restedges - restvertices + 1) / 2) return -1;
+  // Triangular faces give g >= ceil((E - 3V + 6) / 6).
+  min_genus = MIN0((restedges - 3 * restvertices + 6 + 5) / 6);
 
   if ((filter2 >= 0) && (min_genus > filter2)) return -1;
   if ((filterl >= 0) && (min_genus > filterl)) return -1;
   if ((filter >= 0) && (min_genus > filter)) return -1;
 
   if (compute_lower_bound) {
-    if (do_reduce2) {
-      x_sum = compute_fractions(newgraph, newadj);
-    } else {
-      x_sum = compute_fractions(graph, adj);
-    }
-    buffer = 1.0 + (((double)restedges) - ((double)restvertices) - x_sum) / 2.0;
-    buffer = ceil(buffer - 0.0000001);
-
-    if (buffer > (double)min_genus) {  // fprintf(stderr,"(1) min_genus:
-                                       // %d->%d\n",min_genus, (int)buffer);
-      min_genus = buffer;
-    }
+    long long bound = do_reduce2 ? scaled_face_bound(newgraph, newadj)
+                                 : scaled_face_bound(graph, adj);
+    // F is integral, so F <= floor(bound / FACE_SCALE).
+    int max_faces = (int)(bound / FACE_SCALE);
+    int lower = (3 + restedges - restvertices - max_faces) / 2;
+    if (lower > min_genus) min_genus = lower;
   }
-  //  fprintf(stderr,"min genus=%d\n",min_genus);
 
   if (filter >= 0) {
     found = 0;
@@ -1995,14 +1962,14 @@ int get_genus(GRAPH graph, ADJAZENZ adj) {
   return max_genus - 1;
 }
 
-void usage(char name[]) {
+static void usage(const char *name, int status) {
   fprintf(stderr,
-          "Input is read from stdin and must be be a connected graph with at "
-          "least two vertices in multicode.\n");
+          "Input: simple connected graphs in single-byte multicode (up to "
+          "%d vertices and %d edges).\n", knoten, d_kanten / 2);
   fprintf(stderr,
-          "Usage: \t %s [lx] [nb] [ni] [b] [w]  [wa] [fx] [fax] [F] [o] [L]\n",
+          "Usage: \t %s [lx] [nb] [w] [wa] [fx] [fmx] [fax] [F] [o] [L]\n",
           name);
-  fprintf(stderr, "\t with x a number (e.g. l2) the meaning is:\n");
+  fprintf(stderr, "\t x is a decimal integer from 0 to %d (e.g. l2).\n", INT_MAX);
   fprintf(stderr,
           "lx: \t use x as an upper limit for the genus -- don't compute a "
           "genus larger than x.\n");
@@ -2039,11 +2006,24 @@ void usage(char name[]) {
           "decide when codes\n");
   fprintf(stderr, "\t for a new graph are output.\n");
   fprintf(stderr, "No two of lx, fx, fax, fmx can be used simultaneously.\n");
-  exit(0);
+  fprintf(stderr, "Embeddings are orientable cellular rotations. All-output "
+                  "modes fix one orientation when a vertex has degree >= 3.\n");
+  exit(status);
+}
+
+static int genus_option(const char *digits, const char *name) {
+  char *end;
+  errno = 0;
+  long value = strtol(digits, &end, 10);
+  if (!isdigit((unsigned char)*digits) || *end || errno == ERANGE ||
+      value > INT_MAX)
+    usage(name, EXIT_FAILURE);
+  return (int)value;
 }
 
 int smallgenus(int nv) {
-  if (write || (filter == 0) || (filter2 == 0)) {
+  if (filter > 0) return -1;
+  if (write_embedding || (filter == 0) || (filter2 == 0)) {
     if (nv == 1) {
       putchar(1);
       putchar(0);
@@ -2124,6 +2104,7 @@ int bfsnum(GRAPH gr, ADJAZENZ adj, GRAPH newgr, ADJAZENZ newadj)
     return 0;
   }
 
+  if (!do_bfs) return 1;
   newgr[0][0] = gr[0][0];
   for (i = 1; i <= gr[0][0]; i++) {
     top = invbfsnummer[i];
@@ -2138,19 +2119,18 @@ int bfsnum(GRAPH gr, ADJAZENZ adj, GRAPH newgr, ADJAZENZ newadj)
 
 /**************MAIN****************************/
 
-int main(argc, argv)
-
-int argc;
-char *argv[];
-
-{
+int main(int argc, char *argv[]) {
   GRAPH graph, newgraph;
   ADJAZENZ adj, newadj;
-  int zaehlen;
-  unsigned char *code = NULL;
+  unsigned char code[MULTICODE_CAPACITY];
   int i, codelaenge, write_separator = 0;
-  int genus, larger = 0;
-  int list[100] = {0};
+  int genus, limits = 0, outputs = 0;
+  unsigned long long larger = 0, list[MAX_GENUS + 1] = {0};
+
+#ifdef _WIN32
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+#endif
 
   if (sizeof(unsigned long long) != 8) {
     fprintf(stderr, "Expected 64 bit for unsigned long long -- exit!\n");
@@ -2158,55 +2138,42 @@ char *argv[];
   }
 
   for (i = 1; i < argc; i++) {
-    if (argv[i][0] == 'l') {
-      if (isdigit(argv[i][1]))
-        filterl = atoi(argv[i] + 1);
-      else
-        usage(argv[0]);
-    } else if (argv[i][0] == 'n') {
-      if (argv[i][1] == 'b')
-        compute_lower_bound = 0;
-      else
-        usage(argv[0]);
-    } else if (argv[i][0] == 'o') {
+    const char *arg = argv[i];
+    if (!strcmp(arg, "h") || !strcmp(arg, "?") || !strcmp(arg, "--help")) {
+      usage(argv[0], EXIT_SUCCESS);
+    } else if (arg[0] == 'l') {
+      filterl = genus_option(arg + 1, argv[0]);
+      limits++;
+    } else if (!strcmp(arg, "nb")) {
+      compute_lower_bound = 0;
+    } else if (!strcmp(arg, "o")) {
       do_bfs = 0;
-    } else if (argv[i][0] == 'L') {
+    } else if (!strcmp(arg, "L")) {
       write_separator = 1;
-    } else if (argv[i][0] == 'w') {
-      write = 1;
-      if (argv[i][1] == 'a') {
+    } else if (!strcmp(arg, "w") || !strcmp(arg, "wa")) {
+      write_embedding = 1;
+      all = arg[1] == 'a';
+      reduce2 = !all;
+      outputs++;
+    } else if (arg[0] == 'f') {
+      if (arg[1] == 'm') {
+        filter2 = genus_option(arg + 2, argv[0]);
+      } else {
+        all = arg[1] == 'a';
+        filter = genus_option(arg + (all ? 2 : 1), argv[0]);
         reduce2 = 0;
-        all = 1;
       }
-    }
-    // one could implement the reduction also for the "all" option, but that is
-    // not yet done
-    else if (argv[i][0] == 'f') {
-      if (argv[i][1] == 'a') {
-        reduce2 = 0;
-        all = 1;
-        filter = atoi(argv[i] + 2);
-      } else if (argv[i][1] == 'm') {
-        filter2 = atoi(argv[i] + 2);
-      } else if (isdigit(argv[i][1])) {
-        reduce2 = 0;
-        filter = atoi(argv[i] + 1);
-      }
-      // for this option 1-vertices can be reduced, 2-vertices not completely
-      // (removal of edges is a problem)
-      else {
-        usage(argv[0]);
-      }
-    } else if (argv[i][0] == 'F') {
+      limits++;
+      outputs++;
+    } else if (!strcmp(arg, "F")) {
       filterlarge = 1;
+      outputs++;
     } else {
-      usage(argv[0]);
+      usage(argv[0], EXIT_FAILURE);
     }
   }
-
-  if ((filter > 0) + (filter2 > 0) + (filterl > 0) > 1) usage(argv[0]);
-  if (filterlarge && (filterl < 0)) usage(argv[0]);
-  if (filterlarge && (write || (filter > 0) || (filter2 > 0))) usage(argv[0]);
+  if (limits > 1 || outputs > 1 || (filterlarge && filterl < 0))
+    usage(argv[0], EXIT_FAILURE);
 
   if (reduce2) {
     for (i = 0; i < 2 * knoten; i++) {
@@ -2215,59 +2182,34 @@ char *argv[];
     }
   }
 
-  zaehlen = 0;
-
-  while (lese_multicode(&code, &codelaenge, stdin) != EOF) {
-    zaehlen++;
+  while ((codelaenge = read_graph(stdin, code, graph, adj)) != 0) {
     if (write_separator) putchar(255);
-    // fprintf(stderr,"zaehlen=%d\n",zaehlen);
-    decodiere(code, graph, adj, codelaenge);
-    // fprintf(stderr,"Graph Nr. %d\n",zaehlen); schreibegraph(graph,adj);
+    if (!bfsnum(graph, adj, newgraph, newadj)) continue;
     if (globalnv < 3)
       genus = smallgenus(globalnv);
-    else {
-      if (do_bfs) {
-        if (bfsnum(graph, adj, newgraph, newadj)) {
-          genus = get_genus(newgraph, newadj);
-          if (genus >= 0)
-            list[genus]++;
-          else {
-            larger++;
-            if (filterlarge)
-              fwrite(code, sizeof(unsigned char), codelaenge, stdout);
-          }
-        }
-      } else {
-        genus = get_genus(graph, adj);
-        if (genus >= 0)
-          list[genus]++;
-        else {
-          larger++;
-          if (filterlarge)
-            fwrite(code, sizeof(unsigned char), codelaenge, stdout);
-        }
-      }
+    else if (do_bfs)
+      genus = get_genus(newgraph, newadj);
+    else
+      genus = get_genus(graph, adj);
+
+    if (genus >= 0) {
+      list[genus]++;
+    } else {
+      larger++;
+      if (filterlarge) fwrite(code, sizeof(unsigned char), codelaenge, stdout);
     }
   }
 
-  if ((filter < 0) && (filter2 < 0) && (filterl < 0))
-    for (i = 0; i < 100; i++)
-      if (list[i]) fprintf(stderr, "graphs with genus %d: %d\n", i, list[i]);
-
-  if (filter2 >= 0) {
-    for (i = 0; i <= filter2; i++)
-      if (list[i]) fprintf(stderr, "graphs with genus %d: %d\n", i, list[i]);
-    fprintf(stderr, "With genus larger than %d: %d\n", filter2, larger);
-  }
-
-  if (filterl >= 0) {
-    for (i = 0; i <= filterl; i++)
-      if (list[i]) fprintf(stderr, "graphs with genus %d: %d\n", i, list[i]);
-    fprintf(stderr, "With genus larger than %d: %d\n", filterl, larger);
+  if (filter < 0) {
+    for (i = 0; i <= MAX_GENUS; i++)
+      if (list[i]) fprintf(stderr, "graphs with genus %d: %llu\n", i, list[i]);
+    int limit = filter2 >= 0 ? filter2 : filterl;
+    if (limit >= 0)
+      fprintf(stderr, "With genus larger than %d: %llu\n", limit, larger);
   }
 
   if ((filter < 0) && (filter2 < 0) && (filterl < 0) && compute_lower_bound) {
-    for (i = 1; i < 100; i++)
+    for (i = 1; i <= MAX_GENUS; i++)
       if (list[i])
         fprintf(stderr,
                 "Among the graphs with genus %d the lower bound was sharp for "
@@ -2275,8 +2217,8 @@ char *argv[];
                 i, (((double)good_approx[i]) * 100.0) / ((double)list[i]));
   }
 
-  if (write || (filter >= 0) || (filter2 >= 0))
-    fprintf(stderr, "Wrote %lu embeddings.\n", written);
+  if (write_embedding || (filter >= 0) || (filter2 >= 0))
+    fprintf(stderr, "Wrote %llu embeddings.\n", written);
 
   return (0);
 }

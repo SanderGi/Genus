@@ -7,37 +7,37 @@
 The genus for various cage graphs using the adjacency lists from [win.tue.nl](https://www.win.tue.nl/~aeb/graphs/cages/cages.html). Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), computation time for the genus using SageMath (SM time), and computation time using multi_genus.c (MG time).
 \#                                              | k   | g   | v    | e     | \|G\|      | genus      | time (s) | SM time (s) | MG time (s) [parallel]
 ----------------------------------------------- | --- | --- | ---- | ----- | ---------- | ---------- | -------- | ----------- | -----------
-[1/1](../PAGE/adjacency_lists/3-3-cage.txt)     | 3   | 3   | 4    | 6     | 24         | 0          | 0.004    | 0.004       | 0.006 [0.020]
-[1/1](../PAGE/adjacency_lists/3-4-cage.txt)     | 3   | 4   | 6    | 9     | 72         | 1          | 0.003    | 0.039       | 0.006 [0.020]
-[1/1](../PAGE/adjacency_lists/3-5-cage.txt)     | 3   | 5   | 10   | 15    | 120        | 1          | 0.005    | 0.027       | 0.006 [0.020]
-[1/1](../PAGE/adjacency_lists/3-6-cage.txt)     | 3   | 6   | 14   | 21    | 336        | 1          | 0.005    | 0.010       | 0.006 [0.020]
-[1/1](../PAGE/adjacency_lists/3-7-cage.txt)     | 3   | 7   | 24   | 36    | 32         | 2          | 0.005    | 1.737       | 0.006 [0.020]
-[1/1](../PAGE/adjacency_lists/3-8-cage.txt)     | 3   | 8   | 30   | 45    | 1440       | 4          | 0.016    | 118.958     | 0.012 [0.024]
-[1/18](../PAGE/adjacency_lists/3-9-cage1.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.222    | days        | 29.084 [4.208]
-[2/18](../PAGE/adjacency_lists/3-9-cage2.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.018    | days        | 30.909 [4.449]
-[3/18](../PAGE/adjacency_lists/3-9-cage3.txt)   | 3   | 9   | 58   | 87    | 24         | 7          | 1.851    | days        | 25.993 [3.857]
-[4/18](../PAGE/adjacency_lists/3-9-cage4.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.301    | days        | 54.396 [7.515]
-[5/18](../PAGE/adjacency_lists/3-9-cage5.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.380    | days        | 67.89 [9.688]
-[6/18](../PAGE/adjacency_lists/3-9-cage6.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 0.330    | days        | 45.310 [6.491]
-[7/18](../PAGE/adjacency_lists/3-9-cage7.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.639    | days        | 37.257 [5.390]
-[8/18](../PAGE/adjacency_lists/3-9-cage8.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.024    | days        | 42.843 [6.028]
-[9/18](../PAGE/adjacency_lists/3-9-cage9.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.903    | days        | 34.437 [4.961]
-[10/18](../PAGE/adjacency_lists/3-9-cage10.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.215    | days        | 86.54 [10.821]
-[11/18](../PAGE/adjacency_lists/3-9-cage11.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.204    | days        | 54.990 [7.341]
-[12/18](../PAGE/adjacency_lists/3-9-cage12.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 1.273    | days        | 51.589 [7.747]
-[13/18](../PAGE/adjacency_lists/3-9-cage13.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.839    | days        | 32.340 [4.527]
-[14/18](../PAGE/adjacency_lists/3-9-cage14.txt) | 3   | 9   | 58   | 87    | 12         | 7          | 1.056    | days        | 30.824 [4.394]
-[15/18](../PAGE/adjacency_lists/3-9-cage15.txt) | 3   | 9   | 58   | 87    | 8          | 7          | 0.530    | days        | 44.888 [6.431]
-[16/18](../PAGE/adjacency_lists/3-9-cage16.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.208    | days        | 57.890 [7.589]
-[17/18](../PAGE/adjacency_lists/3-9-cage17.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.879    | days        | 140.50 [18.710]
-[18/18](../PAGE/adjacency_lists/3-9-cage18.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.849    | days        | 47.737 [47.862]
+[1/1](../PAGE/adjacency_lists/3-3-cage.txt)     | 3   | 3   | 4    | 6     | 24         | 0          | 0.004    | 0.004       | 0.006 [0.005]
+[1/1](../PAGE/adjacency_lists/3-4-cage.txt)     | 3   | 4   | 6    | 9     | 72         | 1          | 0.003    | 0.039       | 0.003 [0.005]
+[1/1](../PAGE/adjacency_lists/3-5-cage.txt)     | 3   | 5   | 10   | 15    | 120        | 1          | 0.005    | 0.027       | 0.004 [0.006]
+[1/1](../PAGE/adjacency_lists/3-6-cage.txt)     | 3   | 6   | 14   | 21    | 336        | 1          | 0.005    | 0.010       | 0.006 [0.003]
+[1/1](../PAGE/adjacency_lists/3-7-cage.txt)     | 3   | 7   | 24   | 36    | 32         | 2          | 0.005    | 1.737       | 0.004 [0.008]
+[1/1](../PAGE/adjacency_lists/3-8-cage.txt)     | 3   | 8   | 30   | 45    | 1440       | 4          | 0.016    | 118.958     | 0.009 [0.014]
+[1/18](../PAGE/adjacency_lists/3-9-cage1.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.222    | days        | 49.726 [10.385]
+[2/18](../PAGE/adjacency_lists/3-9-cage2.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.018    | days        | 42.102 [9.455]
+[3/18](../PAGE/adjacency_lists/3-9-cage3.txt)   | 3   | 9   | 58   | 87    | 24         | 7          | 1.851    | days        | 41.356 [7.867]
+[4/18](../PAGE/adjacency_lists/3-9-cage4.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.301    | days        | 60.336 [13.178]
+[5/18](../PAGE/adjacency_lists/3-9-cage5.txt)   | 3   | 9   | 58   | 87    | 4          | 7          | 0.380    | days        | 74.458 [16.829]
+[6/18](../PAGE/adjacency_lists/3-9-cage6.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 0.330    | days        | 57.626 [12.385]
+[7/18](../PAGE/adjacency_lists/3-9-cage7.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.639    | days        | 52.461 [11.742]
+[8/18](../PAGE/adjacency_lists/3-9-cage8.txt)   | 3   | 9   | 58   | 87    | 2          | 7          | 1.024    | days        | 54.217 [10.868]
+[9/18](../PAGE/adjacency_lists/3-9-cage9.txt)   | 3   | 9   | 58   | 87    | 1          | 7          | 0.903    | days        | 46.917 [10.357]
+[10/18](../PAGE/adjacency_lists/3-9-cage10.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.215    | days        | 94.055 [17.671]
+[11/18](../PAGE/adjacency_lists/3-9-cage11.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.204    | days        | 58.557 [12.813]
+[12/18](../PAGE/adjacency_lists/3-9-cage12.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 1.273    | days        | 61.310 [13.430]
+[13/18](../PAGE/adjacency_lists/3-9-cage13.txt) | 3   | 9   | 58   | 87    | 1          | 7          | 0.839    | days        | 41.251 [9.671]
+[14/18](../PAGE/adjacency_lists/3-9-cage14.txt) | 3   | 9   | 58   | 87    | 12         | 7          | 1.056    | days        | 46.973 [8.961]
+[15/18](../PAGE/adjacency_lists/3-9-cage15.txt) | 3   | 9   | 58   | 87    | 8          | 7          | 0.530    | days        | 56.838 [13.238]
+[16/18](../PAGE/adjacency_lists/3-9-cage16.txt) | 3   | 9   | 58   | 87    | 2          | 7          | 0.208    | days        | 60.905 [13.157]
+[17/18](../PAGE/adjacency_lists/3-9-cage17.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.879    | days        | 156.856 [32.369]
+[18/18](../PAGE/adjacency_lists/3-9-cage18.txt) | 3   | 9   | 58   | 87    | 6          | 7          | 0.849    | days        | 59.126 [63.273]
 [1/3](../PAGE/adjacency_lists/3-10-cage1.txt)   | 3   | 10  | 70   | 105   | 120        | 9          | 0.138    | DNF         | 9354.14
 [2/3](../PAGE/adjacency_lists/3-10-cage2.txt)   | 3   | 10  | 70   | 105   | 24         | 9          | 0.694    | DNF         | 9556.13
 [3/3](../PAGE/adjacency_lists/3-10-cage3.txt)   | 3   | 10  | 70   | 105   | 80         | 9          | 0.418    | DNF         | 10680.89
 [1/1](../PAGE/adjacency_lists/3-11-cage.txt)    | 3   | 11  | 112  | 168   | 64         | [15, 17]   | days     | DNF         | days
 [1/1](../PAGE/adjacency_lists/3-12-cage.txt)    | 3   | 12  | 126  | 189   | 12096      | 17         | 0.427    | DNF         | days
-[1/1](../PAGE/adjacency_lists/4-5-cage.txt)     | 4   | 5   | 19   | 38    | 24         | 4          | 0.064    | days        | 0.019
-[1/1](../PAGE/adjacency_lists/4-6-cage.txt)     | 4   | 6   | 26   | 52    | 11232      | 6          | 0.016    | DNF         | 0.013
+[1/1](../PAGE/adjacency_lists/4-5-cage.txt)     | 4   | 5   | 19   | 38    | 24         | 4          | 0.064    | days        | 0.018
+[1/1](../PAGE/adjacency_lists/4-6-cage.txt)     | 4   | 6   | 26   | 52    | 11232      | 6          | 0.016    | DNF         | 0.011
 [1/?](../PAGE/adjacency_lists/4-7-cage1.txt)    | 4   | 7   | 67   | 134   | 4          | [16, 21]   | days     | DNF         | days
 [1/1](../PAGE/adjacency_lists/4-8-cage.txt)     | 4   | 8   | 80   | 160   | 51840      | [21, 27]   | days     | DNF         | days
 [1/?](../PAGE/adjacency_lists/4-12-cage1.txt)   | 4   | 12  | 728  | 1456  | 8491392    | [244, 363] | DNF      | DNF         | too big for bit operations
@@ -59,34 +59,34 @@ The genus for various complete graphs generated using the `CompleteGraph` functi
 \#                                     | k   | g   | v    | e     | \|G\|              | genus    | time (s) | SM time (s) | MG time (s)
 -------------------------------------- | --- | --- | ---- | ----- | ------------------ | -------- | -------- | ----------- | -----------
 [k2](../PAGE/adjacency_lists/k2.txt)   | 1   | Inf | 2    | 1     | 2                  | 0        | ---      | 0.004       | ---
-[k3](../PAGE/adjacency_lists/k3.txt)   | 2   | 3   | 3    | 3     | 6                  | 0        | 0.004    | 0.004       | 0.008
+[k3](../PAGE/adjacency_lists/k3.txt)   | 2   | 3   | 3    | 3     | 6                  | 0        | 0.004    | 0.004       | 0.009
 [k4](../PAGE/adjacency_lists/k4.txt)   | 3   | 3   | 4    | 6     | 24                 | 0        | 0.004    | 0.003       | 0.008
-[k5](../PAGE/adjacency_lists/k5.txt)   | 4   | 3   | 5    | 10    | 120                | 1        | 0.004    | 0.005       | 0.008
-[k6](../PAGE/adjacency_lists/k6.txt)   | 5   | 3   | 6    | 15    | 720                | 1        | 0.004    | 0.023       | 0.008
-[k7](../PAGE/adjacency_lists/k7.txt)   | 6   | 3   | 7    | 21    | 5040               | 1        | 0.004    | days        | 0.009
-[k8](../PAGE/adjacency_lists/k8.txt)   | 7   | 3   | 8    | 28    | 40320              | 2        | 0.004    | DNF         | 0.008
-[k9](../PAGE/adjacency_lists/k9.txt)   | 8   | 3   | 9    | 36    | 362880             | 3        | 0.004    | DNF         | 0.008
+[k5](../PAGE/adjacency_lists/k5.txt)   | 4   | 3   | 5    | 10    | 120                | 1        | 0.004    | 0.005       | 0.006
+[k6](../PAGE/adjacency_lists/k6.txt)   | 5   | 3   | 6    | 15    | 720                | 1        | 0.004    | 0.023       | 0.004
+[k7](../PAGE/adjacency_lists/k7.txt)   | 6   | 3   | 7    | 21    | 5040               | 1        | 0.004    | days        | 0.006
+[k8](../PAGE/adjacency_lists/k8.txt)   | 7   | 3   | 8    | 28    | 40320              | 2        | 0.004    | DNF         | 0.006
+[k9](../PAGE/adjacency_lists/k9.txt)   | 8   | 3   | 9    | 36    | 362880             | 3        | 0.004    | DNF         | 0.010
 
 The genus for various complete bipartite graphs generated using the `CompleteBipartiteGraph` function in SageMath follows. Number (\# links to adjacency list), valency (k), girth (g), vertices (v), edges (e), size of the automorphism group (\|G\|), genus, computation time for the genus (time), and computation time for the genus using SageMath (SM time).
 \#                                       | k   | g   | v    | e     | \|G\|        | genus    | time (s) | SM time (s) | MG time (s)
 ---------------------------------------- | --- | --- | ---- | ----- | ------------ | -------- | -------- | ----------- | -----------
-[k3-3](../PAGE/adjacency_lists/k3-3.txt) | 3   | 4   | 6    | 9     | 72           | 1        | 0.004    | 0.047       | 0.006
-[k4-4](../PAGE/adjacency_lists/k4-4.txt) | 4   | 4   | 8    | 16    | 1152         | 1        | 0.004    | 0.010       | 0.010
-[k5-5](../PAGE/adjacency_lists/k5-5.txt) | 5   | 4   | 10   | 25    | 28800        | 3        | 0.008    | DNF         | 0.008
-[k6-6](../PAGE/adjacency_lists/k6-6.txt) | 6   | 4   | 12   | 36    | 1036800      | 4        | 0.005    | DNF         | 0.009
+[k3-3](../PAGE/adjacency_lists/k3-3.txt) | 3   | 4   | 6    | 9     | 72           | 1        | 0.004    | 0.047       | 0.007
+[k4-4](../PAGE/adjacency_lists/k4-4.txt) | 4   | 4   | 8    | 16    | 1152         | 1        | 0.004    | 0.010       | 0.005
+[k5-5](../PAGE/adjacency_lists/k5-5.txt) | 5   | 4   | 10   | 25    | 28800        | 3        | 0.008    | DNF         | 0.010
+[k6-6](../PAGE/adjacency_lists/k6-6.txt) | 6   | 4   | 12   | 36    | 1036800      | 4        | 0.005    | DNF         | 0.007
 
 The genus for various complete n-partite graphs generated using the `CompleteMultipartiteGraph` function in SageMath follows.
 \#                                                                             | v    | e     | genus    | time (s) | MG time (s)
 ------------------------------------------------------------------------------ | ---- | ----- | -------- | -------- | -----------
-[k2-2](../PAGE/adjacency_lists/k2-2.txt)                                       | 4    | 4     | 0        | 0.004    | 0.008
-[k2-2-2](../PAGE/adjacency_lists/k2-2-2.txt)                                   | 6    | 12    | 0        | 0.004    | 0.009
-[k2-2-2-2](../PAGE/adjacency_lists/k2-2-2-2.txt)                               | 8    | 24    | 1        | 0.004    | 0.009
-[k2-2-2-2-2](../PAGE/adjacency_lists/k2-2-2-2-2.txt)                           | 10   | 40    | 3        | 0.006    | 0.009
+[k2-2](../PAGE/adjacency_lists/k2-2.txt)                                       | 4    | 4     | 0        | 0.004    | 0.006
+[k2-2-2](../PAGE/adjacency_lists/k2-2-2.txt)                                   | 6    | 12    | 0        | 0.004    | 0.003
+[k2-2-2-2](../PAGE/adjacency_lists/k2-2-2-2.txt)                               | 8    | 24    | 1        | 0.004    | 0.006
+[k2-2-2-2-2](../PAGE/adjacency_lists/k2-2-2-2-2.txt)                           | 10   | 40    | 3        | 0.006    | 0.004
 
 The genus for various Johnson graphs generated using Mathematica follows.
 \#                                                                             | v    | e     | genus      | time (s) | MG time (s)
 ------------------------------------------------------------------------------ | ---- | ----- | ---------- | -------- | -----------
-[Johnson (5, 2)](../PAGE/adjacency_lists/Johnson5-2.txt)                       | 10   | 30    | 2          | 0.004    | 0.009
+[Johnson (5, 2)](../PAGE/adjacency_lists/Johnson5-2.txt)                       | 10   | 30    | 2          | 0.004    | 0.005
 [Johnson (6, 2)](../PAGE/adjacency_lists/Johnson6-2.txt)                       | 15   | 60    | 5          | 23.101   | hours
 [Johnson (6, 3)](../PAGE/adjacency_lists/Johnson6-3.txt)                       | 20   | 90    | 7          | 19.374   | hours
 [Johnson (8, 4)](../PAGE/adjacency_lists/Johnson8-4.txt)                       | 70   | 560   | [60,238]   | days     | too big for bit operations
@@ -95,26 +95,26 @@ The genus for various Johnson graphs generated using Mathematica follows.
 The genus for various Circulant graphs generated using Mathematica follows.
 \#                                                                  | v    | e     | genus    | time (s) | MG time (s)
 ------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
-[C10_1,2,5](../PAGE/adjacency_lists/Circulant10_1-2-5.txt)          | 10   | 25    | 1        | 0.005    | 0.007
-[C10_1,2,4,5](../PAGE/adjacency_lists/Circulant10_1-2-4-5.txt)      | 10   | 35    | 3        | 0.009    | 0.023
-[C14_1,2,3,6](../PAGE/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 48    | 4        | 0.013    | 0.896
-[C15_1,5](../PAGE/adjacency_lists/Circulant15_1-5.txt)              | 15   | 30    | 1        | 0.008    | 0.006
-[C16_1,7](../PAGE/adjacency_lists/Circulant16_1-7.txt)              | 16   | 32    | 1        | 0.005    | 0.014
-[C18_1,3,9](../PAGE/adjacency_lists/Circulant18_1-3-9.txt)          | 18   | 45    | 4        | 0.579   | 0.021
-[C20_1,3,5](../PAGE/adjacency_lists/Circulant20_1-3-5.txt)          | 20   | 60    | 6        | 0.010    | 13.698
-[C20_1,6,9](../PAGE/adjacency_lists/Circulant20_1-6-9.txt)          | 20   | 60    | 6        | 0.009    | 20.637
-[C21_1,4,5](../PAGE/adjacency_lists/Circulant21_1-4-5.txt)          | 21   | 63    | 1        | 0.011    | 0.008
+[C10_1,2,5](../PAGE/adjacency_lists/Circulant10_1-2-5.txt)          | 10   | 25    | 1        | 0.005    | 0.005
+[C10_1,2,4,5](../PAGE/adjacency_lists/Circulant10_1-2-4-5.txt)      | 10   | 35    | 3        | 0.009    | 0.017
+[C14_1,2,3,6](../PAGE/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 56    | 4        | 0.013    | 1.284
+[C15_1,5](../PAGE/adjacency_lists/Circulant15_1-5.txt)              | 15   | 30    | 1        | 0.008    | 0.007
+[C16_1,7](../PAGE/adjacency_lists/Circulant16_1-7.txt)              | 16   | 32    | 1        | 0.005    | 0.004
+[C18_1,3,9](../PAGE/adjacency_lists/Circulant18_1-3-9.txt)          | 18   | 45    | 4        | 0.579   | 0.010
+[C20_1,3,5](../PAGE/adjacency_lists/Circulant20_1-3-5.txt)          | 20   | 60    | 6        | 0.010    | 21.578
+[C20_1,6,9](../PAGE/adjacency_lists/Circulant20_1-6-9.txt)          | 20   | 60    | 6        | 0.009    | 31.607
+[C21_1,4,5](../PAGE/adjacency_lists/Circulant21_1-4-5.txt)          | 21   | 63    | 1        | 0.011    | 0.009
 [C26_1,3,9](../PAGE/adjacency_lists/Circulant26_1-3-9.txt)          | 26   | 78    | [8, 27]  | hours    | hours
 [C30_1,9,11](../PAGE/adjacency_lists/Circulant30_1-9-11.txt)        | 30   | 90    | [9, 31]  | hours    | hours
 [C30_1,4,11,14](../PAGE/adjacency_lists/Circulant30_1-4-11-14.txt)  | 30   | 120   | [16, 20] | hours    | hours
-[C31_1,5,6](../PAGE/adjacency_lists/Circulant31_1-5-6.txt)          | 31   | 93    | 1        | 0.021    | 0.006
+[C31_1,5,6](../PAGE/adjacency_lists/Circulant31_1-5-6.txt)          | 31   | 93    | 1        | 0.021    | 0.010
 [C20_*](../PAGE/adjacency_lists/Circulant20_1-3-5-7-9-10.txt)       | 20   | 110   | [10, 17] | hours    | hours
 
 The genus for various Cyclotomic graphs generated using Mathematica follows.
 \#                                                                  | v    | e     | genus    | time (s) | MG time (s)
 ------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
-[16](../PAGE/adjacency_lists/Cyclotomic16.txt)                      | 16   | 40    | 4        | 0.117    | 0.042
-[19](../PAGE/adjacency_lists/Cyclotomic19.txt)                      | 19   | 57    | 1        | 0.009    | 0.010
+[16](../PAGE/adjacency_lists/Cyclotomic16.txt)                      | 16   | 40    | 4        | 0.117    | 0.029
+[19](../PAGE/adjacency_lists/Cyclotomic19.txt)                      | 19   | 57    | 1        | 0.009    | 0.007
 [31](../PAGE/adjacency_lists/Cyclotomic31.txt)                      | 31   | 155   | [12,58]  | hours    | hours
 [61](../PAGE/adjacency_lists/Cyclotomic61.txt)                      | 61   | 610   | [73,265] | days     | too big for bit operations
 [67](../PAGE/adjacency_lists/Cyclotomic67.txt)                      | 67   | 737   | [91,325] | days     | too big for bit operations
@@ -122,7 +122,7 @@ The genus for various Cyclotomic graphs generated using Mathematica follows.
 The genus for various DifferenceSetIncidence graphs generated using Mathematica follows.
 \#                                                                             | v    | e     | genus    | time (s) | MG time (s)
 ------------------------------------------------------------------------------ | ---- | ----- | -------- | -------- | -----------
-[11,5,2](../PAGE/adjacency_lists/DifferenceSetIncidence11-5-2.txt)             | 22   | 55    | 5        | 0.914    | 1.770
+[11,5,2](../PAGE/adjacency_lists/DifferenceSetIncidence11-5-2.txt)             | 22   | 55    | 5        | 0.914    | 2.726
 [40,13,4](../PAGE/adjacency_lists/DifferenceSetIncidence40-13-4.txt)           | 80   | 520   | [91,214] | hours    | too big for bit operations
 
 The genus for various Bipartite Kneser graphs generated using Mathematica follows.
@@ -156,7 +156,7 @@ The genus for various Bipartite Kneser graphs generated using Mathematica follow
 The genus for various miscellaneous graphs generated using Mathematica follows.
 \#                                                                             | v    | e     | genus    | time (s) | MG time (s)
 ------------------------------------------------------------------------------ | ---- | ----- | -------- | -------- | -----------
-[Klein Bottle](../PAGE/adjacency_lists/KleinBottleTriangulation9-1.txt)        | 9    | 27    | 2        | 0.005    | 0.006
-[TRC](../PAGE/adjacency_lists/TriangleReplacedCoxeterGraph.txt)                | 84   | 126   | 3        | hours    | 0.006
+[Klein Bottle](../PAGE/adjacency_lists/KleinBottleTriangulation9-1.txt)        | 9    | 27    | 2        | 0.005    | 0.007
+[TRC](../PAGE/adjacency_lists/TriangleReplacedCoxeterGraph.txt)                | 84   | 126   | 3        | hours    | 0.035
 [Fan (3, 6)](../PAGE/adjacency_lists/Fan3-6.txt)                               | 9    | 23    | 1        | 0.004    | 0.006
-[Co-Herschel](../PAGE/adjacency_lists/coHerschel.txt)                          | 11   | 37    | 2        | 0.004    | 0.006
+[Co-Herschel](../PAGE/adjacency_lists/coHerschel.txt)                          | 11   | 37    | 2        | 0.004    | 0.008
