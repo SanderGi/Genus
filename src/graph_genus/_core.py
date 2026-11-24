@@ -61,6 +61,7 @@ def embed(
     algorithm: Algorithm = "page",
     output_format: OutputFormat = "rotation_system",
     low_memory: bool = False,
+    genus_lower_bound: int | None = None,
 ) -> tuple[int, list[list[int]] | str]:
     """Embed a graph and return its genus plus the requested artifact.
 
@@ -75,6 +76,9 @@ def embed(
     - ``output_format`` -- ``"rotation_system"`` (default), ``"drawing"`` for
       TikZ/LaTeX output from ``planar_draw``, or ``"3D"`` for OBJ output.
     - ``low_memory`` -- true to run the low memory version of the algorithm if available. Might be slow but can make running on larger graphs possible.
+    - ``genus_lower_bound`` -- optional nonnegative integer for either PAGE mode.
+      PAGE skips genera below this bound. Supply it only when you know the
+      minimum genus of this graph is at least that large.
 
     OUTPUT:
 
@@ -88,11 +92,19 @@ def embed(
     algorithm = _normalize_algorithm(algorithm)
     output_format = _normalize_output_format(output_format)
 
+    if genus_lower_bound is not None:
+        if algorithm != "page":
+            raise ValueError("genus_lower_bound requires algorithm='page'")
+        if isinstance(genus_lower_bound, bool) or not isinstance(genus_lower_bound, int):
+            raise TypeError("genus_lower_bound must be an integer")
+        if genus_lower_bound < 0:
+            raise ValueError("genus_lower_bound must be nonnegative")
+
     if algorithm == "none":
         rotation_system = graph
         genus = genus_from_rotation(rotation_system)
     elif algorithm == "page":
-        genus, rotation_system = _run_page(graph, low_memory)
+        genus, rotation_system = _run_page(graph, low_memory, genus_lower_bound)
     else:
         genus, rotation_system = _run_multi_genus(graph)
 
@@ -216,7 +228,9 @@ def _normalize_output_format(output_format: str) -> OutputFormat:
     return normalized  # type: ignore[return-value]
 
 
-def _run_page(graph: list[list[int]], low_memory: bool) -> tuple[int, list[list[int]]]:
+def _run_page(
+    graph: list[list[int]], low_memory: bool, genus_lower_bound: int | None
+) -> tuple[int, list[list[int]]]:
     max_degree = max((len(neighbors) for neighbors in graph), default=0)
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -224,7 +238,10 @@ def _run_page(graph: list[list[int]], low_memory: bool) -> tuple[int, list[list[
         _write_page_adjacency_file(graph, adjacency_file)
         env = os.environ.copy()
         # A native CLI lower bound applies only to the graph it was proved for.
-        env.pop("GLB", None)
+        if genus_lower_bound is None:
+            env.pop("GLB", None)
+        else:
+            env["GLB"] = str(genus_lower_bound)
         env.update(
             {
                 "STDOUT": "1",

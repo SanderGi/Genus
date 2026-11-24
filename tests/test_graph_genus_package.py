@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Alexander Metzger
 # SPDX-License-Identifier: GPL-2.0-only
 
+import os
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -34,6 +36,31 @@ class GraphGenusPackageTests(unittest.TestCase):
             for low_memory in (False, True):
                 with self.subTest(low_memory=low_memory):
                     self.assertEqual(gg.embed(K4, low_memory=low_memory)[0], 0)
+
+    def test_page_bound_is_per_call(self):
+        with patch.dict(os.environ, {"GLB": "99"}):
+            for low_memory in (False, True):
+                for graph, bound, expected in ((K33, 1, 1), (K4, 0, 0), (K4, None, 0)):
+                    with self.subTest(low_memory=low_memory, bound=bound):
+                        with patch("subprocess.run", wraps=subprocess.run) as run:
+                            genus, rotation = gg.embed(
+                                graph, low_memory=low_memory, genus_lower_bound=bound
+                            )
+                        self.assertEqual(genus, expected)
+                        self.assertEqual(gg.embed(rotation, algorithm="none")[0], expected)
+                        env = run.call_args.kwargs["env"]
+                        self.assertEqual(env.get("GLB"), None if bound is None else str(bound))
+                        self.assertEqual(os.environ["GLB"], "99")
+
+    def test_invalid_genus_lower_bound(self):
+        for bound in (True, 1.5, "1"):
+            with self.subTest(bound=bound), self.assertRaises(TypeError):
+                gg.embed(K33, genus_lower_bound=bound)
+        with self.assertRaisesRegex(ValueError, "nonnegative"):
+            gg.embed(K33, genus_lower_bound=-1)
+        for algorithm in ("multi_genus", "none"):
+            with self.subTest(algorithm=algorithm), self.assertRaisesRegex(ValueError, "page"):
+                gg.embed(K33, algorithm=algorithm, genus_lower_bound=0)
 
     def test_multi_genus_embedding(self):
         genus, rotation = gg.embed(K33, algorithm="multi_genus")
