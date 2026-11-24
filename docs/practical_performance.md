@@ -97,7 +97,7 @@ The genus for various Circulant graphs generated using Mathematica follows.
 ------------------------------------------------------------------- | ---- | ----- | -------- | -------- | -----------
 [C10_1,2,5](../PAGE/adjacency_lists/Circulant10_1-2-5.txt)          | 10   | 25    | 1        | 0.005    | 0.005
 [C10_1,2,4,5](../PAGE/adjacency_lists/Circulant10_1-2-4-5.txt)      | 10   | 35    | 3        | 0.009    | 0.017
-[C14_1,2,3,6](../PAGE/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 48    | 4        | 0.013    | 1.284
+[C14_1,2,3,6](../PAGE/adjacency_lists/Circulant14_1-2-3-6.txt)      | 14   | 56    | 4        | 0.013    | 1.284
 [C15_1,5](../PAGE/adjacency_lists/Circulant15_1-5.txt)              | 15   | 30    | 1        | 0.008    | 0.007
 [C16_1,7](../PAGE/adjacency_lists/Circulant16_1-7.txt)              | 16   | 32    | 1        | 0.005    | 0.004
 [C18_1,3,9](../PAGE/adjacency_lists/Circulant18_1-3-9.txt)          | 18   | 45    | 4        | 0.579   | 0.010
