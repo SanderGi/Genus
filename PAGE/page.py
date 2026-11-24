@@ -355,17 +355,25 @@ def find_embedding(
     if upper == 0:
         return 0, seed, list(range(len(seed))), 0
 
-    # In a connected simple graph containing a cycle, a 2-dart face would
-    # require a degree-one vertex at both endpoints; a 3-dart face is a triangle.
-    neighbors = [set(row) for row in graph.adjacency]
-    has_triangle = any(
-        neighbors[u] & neighbors[v] for u, v in graph.directed_edges if u < v
-    )
-    shortest = 3 if has_triangle else 4
+    # Only K2 can have a two-dart face. Enumerate lengths until the first
+    # candidate, allowing forced turns at leaves. Each face needs at least
+    # this many of the 2E darts, so F <= 2E // shortest.
     darts = graph.directed_edge_count
-    lower = max(0, (euler - darts // shortest + 1) // 2)
-    generated = shortest - 1
-    cycles = []
+    shortest = 3
+    while True:
+        lower = max(0, (euler - darts // shortest + 1) // 2)
+        if lower >= upper:
+            return upper, seed, list(range(len(seed))), 0
+        cycles = generate_cycles(graph, shortest)
+        if cycles:
+            if not quiet:
+                print(
+                    f"Found {len(cycles)} shortest walks of length {shortest}.",
+                    file=sys.stderr,
+                )
+            break
+        shortest += 1
+    generated = shortest
     calls = 0
     for genus in range(lower, upper):
         target = euler - 2 * genus

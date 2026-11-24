@@ -142,6 +142,24 @@ class PagePythonTests(unittest.TestCase):
             with self.subTest(n=len(rows)):
                 self.solve(rows, 1)
 
+    def test_shortest_walk_bounds_face_target(self):
+        path = Path(__file__).with_name("adjacency_lists") / "3-7-cage.txt"
+        graph = page.load_graph(str(path), 3, 0)
+        solve_cover = page.solve_cover
+
+        def bounded_search(graph, cycles, target, jobs):
+            # 72 darts and girth seven allow at most ten faces. Fail before
+            # searching if a weaker bound admits the impossible genus 0 or 1.
+            self.assertLessEqual(target, 10)
+            return solve_cover(graph, cycles, target, jobs)
+
+        with patch.object(page, "solve_cover", bounded_search):
+            genus, cycles, chosen, _ = page.find_embedding(graph, quiet=True)
+        self.assertEqual(genus, 2)
+        check_witness(
+            self, graph.adjacency, [cycles[i].vertices for i in chosen], genus
+        )
+
     def test_failed_lower_genus_and_bridged_nonplanar_core(self):
         # The seed has genus two. One genus-zero attempt must fail before
         # PAGE finds a genus-one cover with a turn at the pendant vertex.
