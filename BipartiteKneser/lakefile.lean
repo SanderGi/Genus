@@ -3,6 +3,9 @@ open Lake DSL
 
 package «bipartite-kneser» where
   version := v!"0.1.0"
+  lintDriver := "batteries/runLinter"
+  lintDriverArgs := #["BipartiteKneser", "KneserConstruction.MainTheorem",
+    "KneserConstruction.FamilyExistence", "KneserWitnessData"]
   builtinLint := true
   leanOptions := #[⟨`warningAsError, true⟩]
 
