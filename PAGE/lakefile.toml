@@ -1,0 +1,24 @@
+name = "page"
+version = "0.1.0"
+defaultTargets = ["Page"]
+testDriver = "CheckPage"
+lintDriver = "batteries/runLinter"
+lintDriverArgs = ["Page"]
+builtinLint = true
+
+[leanOptions]
+warningAsError = true
+weak.linter.mathlibStandardSet = true
+weak.linter.style.header.license = "SPDX-License-Identifier: GPL-2.0-only"
+
+[[require]]
+name = "multi-genus"
+path = "../MultiGenus"
+
+[[lean_lib]]
+name = "Page"
+srcDir = "lean"
+
+[[lean_lib]]
+name = "CheckPage"
+srcDir = "lean"

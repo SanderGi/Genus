@@ -28,9 +28,28 @@ To run the C program for any graph, `cd PAGE` and run `S="0" DEG="3" ADJ="adjace
 
 For graphs whose candidate-cycle tables exceed that budget, run `S="0" DEG="3" ADJ="adjacency_lists/3-8-cage.txt" make run_low_mem`. `page_low_mem.c` has the same environment-variable input and `page.out` certificate format, but generates only the facial walks through the currently selected uncovered dart and discards them after each branch. Its memory use is linear in the graph and output embedding rather than in the number of graph cycles. This is especially effective for large dense/near-quadrangular graphs; the materialized implementation usually remains faster when its candidate tables fit comfortably in memory.
 
+Both C programs accept unpadded rows and rows padded with 65535. The optional `GLB` setting takes a lower bound already established for the input graph. Omit it to compute the minimum from the graph alone.
+
 To run the `.py` scripts, you'll need [Python 3](https://www.python.org/downloads/) for the scripts that show `#!/usr/bin/env python3` at the top and [SageMath](https://doc.sagemath.org/html/en/installation/index.html) for the scripts that show `#!/usr/bin/env sage` at the top. For example,
 - run the simplified python PAGE implementation using `S=0 DEG=3 ADJ=adjacency_lists/k3-3.txt python3 page.py`
 - and run verifications on the output faces using `sage verify_faces.py`
+
+## Verified PAGE searches in Lean
+
+`Page.materialized_correct` and `Page.lowMemory_correct` prove that each search returns the minimum orientable genus of every nonempty connected simple graph, together with facial walks that reconstruct a legal rotation. The materialized search builds tables of candidate walks by length. The low-memory search generates walks through an uncovered directed edge as needed. Both allow a face to visit a vertex more than once and to traverse a bridge in both directions. [Solver and theorem statements](lean/Page/Solver.lean)
+
+With elan installed, run these commands from `PAGE/`:
+
+```sh
+lake exe cache get
+lake build
+lake test
+lake lint
+lake env lean --run lean/RunPage.lean materialized adjacency_lists/k3-3.txt
+lake env lean --run lean/RunPage.lean low-memory adjacency_lists/k3-3.txt
+```
+
+Both examples print genus 1 and a face certificate. `lake test` checks the public theorem types, their axiom dependencies, and examples of accepted and rejected certificates. Run `python3 test_page_variants.py` to compare both Lean and both C searches against exhaustive rotation enumeration. Run `python3 test_page_python.py` to check the simplified Python implementation.
 
 ## Citation
 ```bibtex
