@@ -4,7 +4,9 @@ open Lake DSL
 package «bipartite-kneser» where
   version := v!"0.1.0"
   builtinLint := true
-  leanOptions := #[⟨`warningAsError, true⟩, ⟨`linter.all, true⟩]
+  leanOptions := #[⟨`warningAsError, true⟩]
+
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.36.0"
 
 /-- Regenerate data when the certificate, constructor, or encoder changes. -/
 target witnesses pkg : System.FilePath := do
@@ -25,8 +27,13 @@ lean_lib KneserWitnessData where
 
 @[default_target]
 lean_lib BipartiteKneser where
+  leanOptions := #[⟨`linter.all, true⟩]
   srcDir := "lean"
 
 @[test_driver]
 lean_lib CheckProof where
   srcDir := "lean"
+
+lean_lib KneserConstruction where
+  srcDir := "lean"
+  leanOptions := #[⟨`linter.mathlibStandardSet, true⟩]

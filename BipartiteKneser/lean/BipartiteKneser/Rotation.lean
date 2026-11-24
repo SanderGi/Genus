@@ -1,4 +1,6 @@
-import Std
+module
+
+public import Std
 
 /-!
 # Facial walks in affine coordinates
@@ -8,6 +10,8 @@ Both parts use outward labels: the head of dart (g,i) has frame g * sᵢ.
 Reversing a dart inverts its label. The B rotation runs backwards through
 the same base cycle, as in the paper's expanded rotation convention.
 -/
+
+@[expose] public section
 
 namespace BipartiteKneser
 
