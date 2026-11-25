@@ -6,8 +6,8 @@ FROM gcc AS builder
 
 WORKDIR /app
 
-# Copy the C code and compile it
-COPY PAGE/page.c page.c
+# Copy the PAGE sources and compile both variants
+COPY PAGE/page.c PAGE/page_input.h ./
 RUN gcc -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o page page.c
 RUN gcc -DONLY_SIMPLE_CYCLES=1 -O3 -ftree-vectorize -funroll-loops -Wall -std=c17 -pedantic -g -o pageSC page.c
 
